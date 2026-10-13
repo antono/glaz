@@ -1,4 +1,4 @@
--- Menu module: battery level. ASCII only, see PROTOCOL.md.
+-- Menu module: battery level. ASCII only, see docs/PROTOCOL.md.
 local _M = {}
 
 _M.label = 'Battery'

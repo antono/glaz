@@ -20,7 +20,7 @@ for f in frame_app.lua modules/*.lua; do
 done
 
 # Non-ASCII breaks upload_file(): it chunks by characters but enforces the MTU
-# limit in bytes. See PROTOCOL.md.
+# limit in bytes. See docs/PROTOCOL.md.
 for f in frame_app.lua modules/*.lua; do
   if LC_ALL=C grep -qP '[^\x00-\x7F]' "$f" 2>/dev/null; then
     echo "NON-ASCII   $f  (will break upload)"

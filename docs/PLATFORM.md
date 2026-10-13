@@ -218,14 +218,59 @@ From `docs/fpga-architecture.md`. Byte-addressed registers over SPI:
 | `0x41` | `PLL_STATUS` | **no** |
 | `0xDB` | `GET_CHIP_ID` | **no** — returns `0x81` when alive |
 
-**The interesting gap is the vector engine.** The FPGA renders cubic Bézier
-curves — start point, end point, two control points, with zeroed control points
-giving straight lines — and the Lua API has no entry point for it at all. Lua
-can draw text and blit sprites; it cannot draw a line. `frame.fpga_write(0x13, ...)`
-is the only way to reach it without rebuilding firmware.
+**The vector engine is documented but not built.** `fpga-architecture.md`
+describes `GRAPHICS_DRAW_VECTOR` in full, and `graphics.sv` declares
+
+```systemverilog
+parameter GRAPHICS_DRAW_VECTOR = 'h13;
+```
+
+— and then never references it again. Only `ASSIGN_COLOR`, `DRAW_SPRITE` and
+`BUFFER_SHOW` are decoded, and `modules/graphics/` contains a `sprite_engine.sv`
+with no vector counterpart. Writing to `0x13` draws nothing.
+
+So the display cannot draw a line at all, at any level, without new RTL. Text
+and sprites are the whole repertoire. Treat the opcode as reserved for a
+feature that was specified ahead of implementation.
 
 `GET_CHIP_ID` (`0xDB` → `0x81`) is the safe way to confirm register access works
 before trying anything that draws.
+
+#### Driving the vector engine — does not work, kept for reference
+
+`frame.fpga_write(address, data)` takes an address `0x00..0xFF` and a raw byte
+string, and hands it straight to `spi_write`. Register `0x13` wants:
+
+```
+x_start[15:0] y_start[15:0] x_end[15:0] y_end[15:0]
+ctrl1_x[15:0] ctrl1_y[15:0] ctrl2_x[15:0] ctrl2_y[15:0] color[7:0]
+```
+
+Two details are not in the RTL document and have to come from the firmware
+source (`lua_libraries/display.c`, where `draw_sprite` builds the same kind of
+payload):
+
+- **Big-endian.** It writes `x >> 8` then `x`.
+- **Coordinates are 0-based.** `x_position--` is commented "remove Lua 1 based
+  offset before sending", so the 1-based coordinates of `frame.display.text`
+  are a Lua-level convention, not what the hardware uses.
+
+Control points are relative to the start and end points respectively; zero them
+for a straight line. Colour is a palette index `0..15`.
+
+```lua
+frame.fpga_write(0x13, string.pack('>I2I2I2I2I2I2I2I2B',
+                                   80, 60, 560, 60, 0, 0, 0, 0, 1))
+frame.display.show()
+```
+
+[`utils/test_vector.py`](../utils/test_vector.py) builds exactly this. It is
+expected to draw **nothing**, because the RTL does not decode `0x13` — see
+above. It is kept as the ready-made probe for the day the engine lands, and as
+a way to disprove the reading of the RTL.
+
+The byte-order and 0-based findings above still stand and apply to any register
+payload, including sprites.
 
 Other facts worth knowing from the same document:
 
@@ -238,6 +283,105 @@ Other facts worth knowing from the same document:
 - Two **512 KB** frame buffers, double-buffered; `GRAPHICS_BUFFER_SHOW` swaps
   them. This is why `show()` leaves a clean buffer behind — it is a swap, not a
   blit.
+
+---
+
+## Ground truth: the API as the firmware registers it
+
+The published docs have been wrong twice already (`display.clear` removed,
+`set_exposure` renamed), so the authoritative list is the firmware source.
+Checked out alongside this project:
+
+```
+../frame-codebase                 firmware + FPGA RTL -- the source of truth
+../frame-docs                     source pages of docs.brilliant.xyz
+../frame-sdk-python               official Python SDK
+../frame-utilities-for-python     helper utilities
+../frame-production               factory/production tooling
+../frame-brilliant-sdk            all Brilliant SDKs, monorepo
+../frame-ble-python               the BLE layer this project uses
+../frame-msg-python               the message layer this project uses
+../frame-examples-python          worked examples
+```
+
+Every library is registered unconditionally in
+`source/application/luaport.c`, and the whole surface comes from
+`source/application/lua_libraries/*.c`:
+
+| Table | Functions |
+| --- | --- |
+| `frame` | `update` `sleep` `stay_awake` `battery_level` `fpga_read` `fpga_write` |
+| `frame` | `HARDWARE_VERSION` `FIRMWARE_VERSION` `GIT_TAG` |
+| `frame.bluetooth` | `is_connected` `address` `max_length` `send` `receive_callback` |
+| `frame.display` | `assign_color` `assign_color_ycbcr` `bitmap` `text` `show` `power_save` `set_brightness` `write_register` |
+| `frame.camera` | `capture` `image_ready` `read` `read_raw` `auto` `power_save` `set_shutter` `set_gain` `set_white_balance` `write_register` `read_register` |
+| `frame.microphone` | `start` `stop` `read` |
+| `frame.imu` | `direction` `raw` `tap_callback` |
+| `frame.time` | `utc` `zone` `date` |
+| `frame.led` | `set_color` |
+| `frame.compression` | `decompress` `process_function` |
+| `frame.file` | `open` `remove` `rename` `listdir` `mkdir` |
+
+### What is missing from the documentation
+
+- **`frame.led.set_color(r, g, b)`** — three channels, each `0..100`, driven by
+  PWM. Absent from the docs entirely. The pins are named `FRAME_LITE_LED_*`, so
+  whether a given unit has the LED fitted is a hardware question, but the
+  function is registered on every build.
+- **`frame.bluetooth.is_connected()`** — this project already relies on it to
+  avoid deep-sleeping while a host is attached.
+- **`frame.display.write_register`**, **`frame.camera.read_register` /
+  `write_register`** — direct register access beside the normal API.
+- **`frame.camera.auto`** returns much more than the docs suggest: `shutter`,
+  `analog_gain`, `red_gain`, `green_gain`, `blue_gain`, and brightness as
+  `spot`, `matrix`, `center_weighted_average` and `scene`, plus `error`.
+- `frame.file.listdir` entries carry `name`, `size` and `type`.
+- **`frame.display.clear` genuinely does not exist** — confirmed in source, not
+  just by introspection.
+
+### Startup, as the firmware performs it
+
+```c
+luaL_dostring(L, "frame.stay_awake(false); require('main')");
+```
+
+So `main.lua` is `require`d, not run as a file, and `stay_awake` is explicitly
+turned off first. Uploading the app as `main.lua` is the supported path, not a
+trick.
+
+### ⚠️ Unpairing reformats the filesystem
+
+```c
+lua_open_file_library(L, !is_paired);   // the parameter is called `reformat`
+```
+
+```c
+if (reformat || file_mount_error) { lfs_format(...); }
+```
+
+**Resetting the glasses with the pinhole button does not merely drop the BLE
+bond — it wipes flash**, taking `main.lua` and every module with it. Anything
+uploaded has to be uploaded again afterwards. The docs describe the pinhole
+reset purely as an unpairing step and say nothing about data loss.
+
+### Adding a function to the Lua engine
+
+Four mechanical steps, no framework involved:
+
+1. Write `source/application/lua_libraries/mine.c` exposing
+   `void lua_open_mine_library(lua_State *L)`. Copy `led.c` — at 90 lines
+   including the licence header it is the smallest complete example: it grabs
+   the global `frame` table, makes a new table, `lua_pushcfunction` +
+   `lua_setfield` per function, then `lua_setfield` the table onto `frame`.
+2. Declare it in `lua_libraries/frame_lua_libraries.h`.
+3. Call it from `lua_open_*_library` block in `source/application/luaport.c`.
+4. Add `lua_libraries/mine.c` to the explicit source list in
+   `source/application/Makefile` — the list is not a wildcard.
+
+Argument checking is plain `luaL_checkinteger` / `luaL_checklstring` with
+`luaL_error` for ranges, exactly as the existing libraries do.
+
+Then `make release` and DFU the resulting `.zip`.
 
 ---
 
@@ -273,17 +417,36 @@ advertises as `Frame Update` and times out after five minutes.
 power-cycle away from clean. *(This follows from the boot-time SPI upload; the
 docs state no such guarantee explicitly.)*
 
-### What genuinely carries risk
+### Custom firmware does NOT require opening the glasses
 
-Changing the RTL means rebuilding the whole nRF52 application (the bitstream
-lives inside it) and flashing it. The codebase builds with
-`make release && make erase-jlink && make flash-jlink`, and **a J-Link debugger
-is required**.
+The hardware manual's line about "destructive disassembly" to reach the SWD
+port describes debugging and bootloader work. It does **not** apply to
+replacing the application, because the signed over-the-air path is open:
 
-That is the dangerous path, for a reason specific to this device:
+```make
+nrfutil pkg generate \
+    --hw-version 52 --application-version 0 \
+    --application $(BUILD)/application.hex \
+    --sd-req 0x0123 \
+    --key-file source/bootloader/dfu_private_key.pem \
+    $(BUILD)/frame-firmware-$(BUILD_VERSION).zip
+```
 
-> Custom firmware requires "destructive disassembly" to access the physical ARM
-> SWD debug port on the back PCB.
+**The DFU signing key ships in the repository.** `make release` produces a
+properly signed `.zip` — the same artefact the official release notes tell
+users to flash with nRF Connect. So a custom build installs over Bluetooth:
+`frame.update()` to enter the bootloader, then DFU the `.zip`.
+
+Signing here is an integrity check, not an authenticity barrier; anybody can
+produce an image the bootloader accepts.
+
+Every dependency is vendored under `libraries/` — nRF5 SDK, nrfx, SoftDevice,
+Lua, littlefs, lz4, picolibc, CMSIS. Nothing has to be downloaded separately.
+The host side needs an `arm-none-eabi` toolchain, `nrfutil`, and `mergehex`.
+
+A J-Link is still needed for `flash-jlink`, for the bootloader, and for
+recovering a device that will not enter DFU — that last case is the one that
+needs the glasses opened.
 
 Risk ladder, least to most severe:
 

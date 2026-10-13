@@ -1,4 +1,4 @@
--- Menu module: firmware version. ASCII only, see PROTOCOL.md.
+-- Menu module: firmware version. ASCII only, see docs/PROTOCOL.md.
 local _M = {}
 
 _M.label = 'Firmware'

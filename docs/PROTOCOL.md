@@ -53,10 +53,43 @@ There are two kinds, chosen with `_M.mode`:
 **`info`** (the default) — produces one value and **clears itself after
 `INFO_TIMEOUT` (5 s)**. Implement `run()`, returning the string to show.
 
-**`app`** — keeps running until closed with a double tap. Implement `tick()`,
+**`app`** — keeps running until closed with a double tap (back), or **until
+`APP_TIMEOUT` (60 s) passes with no tap**; a single tap restarts that clock.
+Going to deep sleep also closes it. Implement `tick()`,
 which is called periodically and returns the current string; the display is
 only redrawn when the text actually changes. Optional `start()` and `stop()`
 bracket the lifetime.
+
+**Rule: a module that has left the screen has no activity left.** Whatever
+`start()` or `run()` switched on, `stop()` must switch off. `stop()` is called
+on **every** exit path, for both kinds, and all of them go through
+`stop_app()`:
+
+- the `INFO_TIMEOUT` / `APP_TIMEOUT` timeouts;
+- the menu opening over the module (a double or triple tap, or the host's
+  `MENU_SHOW`);
+- the host replacing the menu with `MENU_SET`;
+- deep sleep;
+- the host's break signal.
+
+As a safety net, after `stop()` the app also returns the shared hardware to
+idle: camera in power save, microphone stopped (`release_hardware()`). This
+also runs when `stop()` is missing or throws an error. A module must not rely
+on it; it exists so a buggy module cannot drain the battery.
+
+**Input hooks (optional, `app` modules).** A module can take input itself:
+
+- `on_roll(dir)` — a completed tilt-and-return, `1` right, `-1` left. This
+  is the only thing tilt does inside a module: move the module's own cursor.
+  Without `on_roll` tilt is ignored and the IMU is not even polled.
+- `on_tap()` — a single tap. Without it a single tap only keeps the module
+  alive.
+
+Each returns the text to show (`nil` keeps the current text) and, optionally,
+`true` as a second value meaning "done": the module is stopped and the menu
+comes back. Double and triple taps are never passed to a module, so back and
+menu always work. `modules/brightness.lua` is the example: tilt previews a
+level, a single tap keeps it, a double tap cancels.
 
 ```lua
 local _M = {}
@@ -76,7 +109,8 @@ Adding an item means adding one file and listing its name in `MODULES` at the
 top of `frame_app.lua`:
 
 ```lua
-local MODULES = { 'battery', 'uptime', 'brightness', 'firmware', 'tilt' }
+local MODULES = { 'battery', 'uptime', 'brightness', 'firmware', 'tilt',
+                  'photo' }
 ```
 
 The order of that list is the display order. The host uploads every
@@ -100,25 +134,38 @@ host-side reaction are not mutually exclusive — both run.
 Frame has no buttons and only one kind of tap event exists, so intents are
 separated by **tap count** and by **state**.
 
+Each tap count means one thing everywhere:
+
+| Taps | Meaning |
+| --- | --- |
+| **1** | select — run the item under the cursor |
+| **2** | back — one level up: module → menu → blank |
+| **3** | menu — open or hide it, from any state |
+
 ```
-                     triple tap / MENU_SHOW
-        IDLE ──────────────────────────────────> MENU
-         │  ▲                                     │  ▲
-  double │  │ double tap                   single │  │ triple tap
-     tap │  │ 5s info timeout                 tap │  │ 10s timeout
-         ▼  │                                     ▼  │
-        RUNNING <────────────────────────────── RUNNING
+              triple tap / MENU_SHOW
+        IDLE ─────────────────────────> MENU
+          ▲  <─────────────────────────  │  ▲
+          │   double tap, triple tap,    │  │ double tap,
+          │   10s timeout                │  │ triple tap,
+          │                       single │  │
+          │ 5s info / 60s app     tap    ▼  │
+          └──────────────────────────── RUNNING
+            timeout
 ```
 
-| State | Display | Taps | Tilt |
-| --- | --- | --- | --- |
-| **IDLE** | blank | double = launch default, triple = menu | not polled |
-| **MENU** | the list | single = launch, triple = hide | scrolls |
-| **RUNNING** | the module | double = close, triple = menu | — |
+| State | Display | 1 tap | 2 taps | 3 taps | Tilt |
+| --- | --- | --- | --- | --- | --- |
+| **IDLE** | blank | banner (sign of life) | — | menu | not polled |
+| **MENU** | the list | launch | hide | hide | scrolls |
+| **RUNNING** | the module | `on_tap()`, else keep `app` alive | back to menu | menu | `on_roll()` only, never leaves |
 
-The **default app** is simply whatever the cursor was last left on, so the
-common case is: double tap, read, double tap. An `info` module also clears
-itself after 5 seconds, so the second tap is usually unnecessary.
+Returning to the menu leaves the cursor on the module just closed, so it can
+be run again with a single tap.
+
+**Tilt never leaves a module.** Inside a module tilt only moves the module's
+own cursor, and only if it defines `on_roll()`. The roll baseline is sampled
+at launch, so it works from any head pose. The way out is a double tap.
 
 While IDLE the IMU is not polled at all, which saves battery.
 
@@ -194,11 +241,22 @@ Every event is exactly 2 bytes.
 | `0x14` | `MENU_CLOSE` | `[0x14, index]` | menu was hidden |
 | `0x15` | `APP_START` | `[0x15, index]` | module `index` started |
 | `0x16` | `APP_STOP` | `[0x16, index]` | module `index` stopped |
+| `0x07` | photo chunk | `[0x07, jpeg bytes...]` | part of a photo (Camera module) |
+| `0x08` | photo end | `[0x08]` | last chunk; the photo is complete |
+
+`0x07` / `0x08` are the frame_msg `camera` library's codes, not this app's:
+`modules/photo.lua` sends through its `capture_and_send()`, and the host
+reassembles with `RxPhoto` and saves to `photos/`. The library must be
+uploaded next to `data` (`upload_stdlua_libs(["data", "camera"])`).
+
+**Do not use the library's `send_autoexp_result()` or
+`send_metering_data()`**: they send `0x11` and `0x12`, the same codes as
+`MENU_SELECT` and `MENU_CURSOR`.
 
 `index` is **1-based**, as in Lua.
 
 Launching an item emits `MENU_SELECT` and then `APP_START`; `APP_STOP` follows
-when it closes, whether by double tap, by the 5 s `info` timeout, or because
+when it closes, whether by going back to the menu, by a timeout, or because
 another module was launched.
 
 Only `MENU_SELECT` is required. The rest are advisory: `MENU_CURSOR` is useful
@@ -488,6 +546,7 @@ slowed down to accommodate it.
 - **nested menus** — host answers `MENU_SELECT` with a new `MENU_SET`; the
   protocol already supports this, nothing to change
 - **submenus from modules** — let a module return a list instead of a string
-- **photo on select** — `frame.camera.capture` plus `RxPhoto` on the host
+- **camera settings** — resolution and quality picked by tilt, as in
+  Brightness; `modules/photo.lua` has them fixed (512 px, `MEDIUM`)
 - **module-defined host actions** — a module that only emits an event, leaving
   the work to whichever host happens to be connected

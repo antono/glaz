@@ -2,7 +2,7 @@
 --
 -- ASCII ONLY. frame_ble's uploader chunks by characters but checks the MTU
 -- limit in bytes, so any non-ASCII byte here breaks upload_file() with
--- "payload length is too large". See PROTOCOL.md.
+-- "payload length is too large". See docs/PROTOCOL.md.
 --
 -- Menu state lives here, not on the host. Each item is a module in modules/
 -- that declares a label and either run() or tick(). Adding an item means
@@ -16,13 +16,15 @@
 --
 -- Roll (tilt toward a shoulder, then back): right scrolls down, left scrolls
 -- up. The return to neutral is part of the gesture -- see the latch below.
+-- Inside a running module tilt only moves that module's own cursor (if it
+-- has one, see on_roll); it never leaves the module. Leaving is a double tap.
 --
 -- Taps (Frame has no buttons; count is the only way to tell intents apart):
---   single -- run the item under the cursor (MENU only)
---   double -- launch the default app, or close the running one
---   triple -- toggle the menu
--- The default app is simply whatever the cursor was last left on, so the
--- common case is: double tap, read, double tap (or let it time out).
+--   single -- select: run the item under the cursor (MENU)
+--   double -- back: from a module to the menu, from the menu to blank
+--   triple -- toggle the menu, from any state
+-- One meaning per count, everywhere. A single tap elsewhere is harmless: it
+-- flashes the banner when idle and keeps an 'app' module alive.
 --
 -- A multi-tap can only be classified once TAP_WINDOW has expired, so single
 -- and double taps are deliberately delayed by that much. Triple taps fire
@@ -43,10 +45,11 @@ local data = require('data.min')
 
 -- One module per menu item, in display order. Each must return a table with
 -- a .label and either .run() (mode 'info') or .tick() (mode 'app').
-local MODULES = { 'battery', 'uptime', 'brightness', 'firmware', 'tilt' }
+local MODULES = { 'battery', 'uptime', 'brightness', 'firmware', 'tilt',
+                  'photo' }
 
 -- Host -> Frame
-local MENU_SET  = 0x20    -- override items, one per line; see PROTOCOL.md
+local MENU_SET  = 0x20    -- override items, one per line; see docs/PROTOCOL.md
 local MENU_HIDE = 0x21    -- no payload; hide the menu
 local MENU_SHOW = 0x22    -- no payload; show the menu
 
@@ -62,7 +65,7 @@ local APP_STOP    = 0x16  -- [0x16, index] module index stopped
 -- a shoulder -- not by pitch. Roll has the wider usable swing of the two
 -- (about +-30 degrees measured, against a few for a comfortable nod), and it
 -- leaves nodding free. Yaw is not an option at all: heading is always 0.0
--- because the magnetometer's Z axis is railed. See PROTOCOL.md.
+-- because the magnetometer's Z axis is railed. See docs/PROTOCOL.md.
 -- The gesture is tilt-and-return: tilting past ROLL_THRESHOLD only *arms* a
 -- step, and the step fires when the head comes back inside DEADZONE. Holding
 -- a tilt therefore does nothing, and a step always ends with the head level.
@@ -90,11 +93,16 @@ local IMU_PERIOD      = 0.05  -- seconds between orientation samples
 -- even with a blank display, so the idle state is paced far slower.
 -- These are decoupled from IMU_PERIOD on purpose: counting loop iterations
 -- instead would make navigation slow down whenever the loop is slowed down.
-local IDLE_PERIOD     = 0.05  -- blank screen, only waiting for a tap
+local IDLE_PERIOD     = 0.15  -- blank screen, only waiting for a tap
 local ACTIVE_PERIOD   = 0.01  -- menu up or a module running
 local APP_TICK_PERIOD = 0.25  -- refresh rate of an 'app' module
 local MENU_TIMEOUT    = 10    -- seconds of inactivity before auto-hiding
 local INFO_TIMEOUT    = 5     -- seconds an 'info' module stays on screen
+-- An 'app' module keeps the display lit and the loop at ACTIVE_PERIOD for as
+-- long as it runs, so one left open drains the battery. A single tap counts
+-- as activity and restarts the clock. See docs/BATTERY.md.
+local APP_TIMEOUT     = 60    -- seconds of inactivity before closing an 'app'
+local SLEEP_AFTER     = 30    -- idle seconds before parking in frame.sleep()
 
 -- Startup banner. IDLE is a blank screen, which is indistinguishable from
 -- "the app is not running" -- this is the sign of life.
@@ -151,7 +159,7 @@ for _, name in ipairs(MODULES) do
   end
 end
 
-local sel      = 1      -- cursor position, 1-based; this is the default app
+local sel      = 1      -- cursor position, 1-based
 local top      = 1      -- first visible item (scroll window)
 local base     = 0      -- baseline roll, sampled when the menu opens
 local armed     = 0     -- 0 = level, 1/-1 = tilt seen, waiting for the return
@@ -189,7 +197,23 @@ local function blank()
   frame.display.show()
 end
 
+-- The micro-OLED keeps drawing power even with a blank frame on it, and the
+-- firmware only powers it down by itself around frame.sleep(), which this app
+-- does not use. So the panel is switched off explicitly whenever the app has
+-- nothing to show. Draw commands remain valid while it is off and appear as
+-- normal once it is back on, so nothing else has to know about this.
+local display_on = true
+
+local function set_display(on)
+  if on == display_on then return end
+  display_on = on
+  pcall(frame.display.power_save, not on)
+end
+
 local function render()
+  -- panel on before drawing, off only after the screen has been cleared
+  if running or visible then set_display(true) end
+
   if running then
     local mod = mods[running]
     frame.display.text(mod and mod.label or '?', LEFT_X, TOP_Y,
@@ -202,6 +226,7 @@ local function render()
 
   if not visible then
     blank()
+    set_display(false)
     return
   end
 
@@ -246,13 +271,52 @@ local function move(delta)
   render()
 end
 
-local function open_menu()
-  visible = true
-  armed = 0
-  last_act = frame.time.utc()
-  -- Sample the baseline every time the menu opens, not once at startup:
-  -- whatever pose the head is in right now counts as neutral.
+-- Idle baseline for the shared hardware: everything a module might have
+-- switched on, switched off. Applied at boot and after every module exits,
+-- so a module that forgets to clean up in stop() -- or whose stop() errors --
+-- still cannot leave the camera or the microphone draining the battery.
+-- The camera is powered at boot, so this also shuts it down then. A module
+-- that wants it must call frame.camera.power_save(false) first: while
+-- saving, only camera.read() and camera.read_raw() remain available.
+local function release_hardware()
+  pcall(frame.camera.power_save, true)
+  pcall(frame.microphone.stop)
+end
+
+-- The ONLY way a module leaves the screen. Rule: a module that is no longer
+-- on screen has no activity left. Every exit path -- double tap, timeout,
+-- menu opened over it, host replacing the menu, deep sleep, break signal --
+-- goes through here, so stop() always runs and the hardware is released.
+--
+-- keep_screen: the caller draws something else straight away (the menu), so
+-- skip the blank frame and leave the panel powered. Blanking first meant two
+-- show() calls milliseconds apart with the panel switched off and on between
+-- them, and the menu came up with its top rows missing.
+local function stop_app(keep_screen)
+  if not running then return end
+  local mod = mods[running]
+  if mod and mod.stop then pcall(mod.stop) end
+  release_hardware()
+  send(APP_STOP, running)
+  running = nil
+  run_text = ''
+  if not keep_screen then render() end
+end
+
+-- Sample the roll baseline and drop any half-made gesture. Done every time
+-- the menu opens or a module launches, not once at startup: whatever pose the
+-- head is in right now counts as neutral.
+local function reset_roll()
+  armed, roll_dir, roll_hold = 0, 0, 0
   base = frame.imu.direction().roll
+end
+
+local function open_menu()
+  -- the menu replaces whatever owns the display, without a blank in between
+  if running then stop_app(true) end
+  visible = true
+  last_act = frame.time.utc()
+  reset_roll()
   send(MENU_OPEN, sel)
   render()
 end
@@ -263,26 +327,17 @@ local function close_menu()
   render()
 end
 
-local function stop_app()
-  if not running then return end
-  local mod = mods[running]
-  if mod and mod.stop then pcall(mod.stop) end
-  send(APP_STOP, running)
-  running = nil
-  run_text = ''
-  render()
-end
-
 -- Launch the module under the cursor. The menu gets out of the way, so the
 -- module owns the whole display.
 local function launch(index)
   if #items == 0 then return end
-  if running then stop_app() end
+  if running then stop_app(true) end   -- the module draws next
 
   visible = false
   running = index
   run_at = frame.time.utc()
   run_text = ''
+  reset_roll()   -- the back gesture is measured from the launch pose
 
   send(MENU_SELECT, index)
   send(APP_START, index)
@@ -311,6 +366,25 @@ local function launch(index)
   render()
 end
 
+-- Hand an input event to the running module. A module that defines
+-- on_tap() / on_roll(dir) takes over that input; each returns the text to
+-- show and, optionally, true to say "done" -- the module then closes and the
+-- menu comes back. Any input counts as activity for APP_TIMEOUT.
+local function module_input(handler, ...)
+  run_at = frame.time.utc()
+  local ok, text, done = pcall(handler, ...)
+  if not ok then
+    run_text = 'err: ' .. tostring(text)
+  elseif text ~= nil then
+    run_text = tostring(text)
+  end
+  if ok and done then
+    open_menu()   -- stops the module first
+  else
+    render()
+  end
+end
+
 -- Counting happens HERE, not in the loop, because this is the only place with
 -- accurate timing. The loop drained one queued tap per iteration, and idle
 -- iterations are IDLE_PERIOD apart -- far enough that three real taps looked
@@ -337,6 +411,7 @@ end)
 -- number. Placing three separate pieces needs two offsets, and with a
 -- proportional font neither can be derived from a character count.
 local function draw_splash()
+  set_display(true)
   local full = '<' .. SPLASH_TEXT .. '>'
   local x = (SCREEN_W - #full * CHAR_W) // 2
   local y = (VISIBLE_BOTTOM - CHAR_H) // 2
@@ -347,6 +422,8 @@ local function draw_splash()
 end
 
 function app_loop()
+  release_hardware()
+
   draw_splash()
 
   -- the host waits for this line on await_print
@@ -358,8 +435,52 @@ function app_loop()
   -- IDLE it would blank the screen and the banner would never be seen.
   local splash_until = frame.time.utc() + SPLASH_SECONDS
 
+  -- Start the idle clock now. Left at 0 it would already be older than
+  -- SLEEP_AFTER, and the app would park itself the moment it booted.
+  last_act = frame.time.utc()
+
   local next_imu = 0   -- utc() of the next orientation sample
   local next_app = 0   -- utc() of the next 'app' module refresh
+
+  -- Head-tilt recogniser, shared by the menu and running modules. Poll
+  -- rarely: the sensor is slow, but the loop must spin fast for incoming
+  -- Bluetooth traffic. Returns the direction of a COMPLETED tilt-and-return
+  -- (1 right, -1 left), or 0.
+  local function roll_step(now)
+    if now < next_imu then return 0 end
+    next_imu = now + IMU_PERIOD
+    local delta = (frame.imu.direction().roll - base) * ROLL_SIGN
+
+    if now - tap_shake < ROLL_MUTE then
+      -- still ringing from a tap; throw the reading away
+      armed, roll_dir, roll_hold = 0, 0, 0
+    elseif armed == 0 then
+      -- Tilting only arms the step, and only once it has been HELD:
+      -- a tap spikes roll far past the threshold for a sample or two.
+      local dir = 0
+      if delta > ROLL_THRESHOLD then
+        dir = 1      -- tilt right -> cursor down, on the way back
+      elseif delta < -ROLL_THRESHOLD then
+        dir = -1     -- tilt left -> cursor up, on the way back
+      end
+
+      if dir ~= 0 and dir == roll_dir then
+        roll_hold = roll_hold + 1
+        if roll_hold >= ROLL_HOLD_SAMPLES then
+          armed, roll_hold = dir, 0
+        end
+      else
+        roll_dir = dir
+        roll_hold = (dir ~= 0) and 1 or 0
+      end
+    elseif math.abs(delta) < DEADZONE then
+      -- Head is level again: that completes the gesture.
+      local dir = armed
+      armed, roll_dir, roll_hold = 0, 0, 0
+      return dir
+    end
+    return 0
+  end
 
   while true do
     local rc, err = pcall(function()
@@ -379,6 +500,8 @@ function app_loop()
           -- behind them, so launching one only notifies the host.
           items = split_lines(data.app_data[MENU_SET])
           data.app_data[MENU_SET] = nil
+          -- stop the running module while mods still points at it
+          stop_app()
           mods = {}
           sel = 1
           top = 1
@@ -417,7 +540,6 @@ function app_loop()
           if visible then
             close_menu()
           else
-            if running then stop_app() end
             open_menu()
           end
         end
@@ -441,19 +563,37 @@ function app_loop()
             -- flash the banner, then fall back to blank on its own.
             draw_splash()
             splash_until = now + SPLASH_SECONDS
+            last_act = now   -- a tap postpones deep sleep
+          elseif mods[running] and mods[running].on_tap then
+            module_input(mods[running].on_tap)
+          elseif mods[running] and mods[running].mode == 'app' then
+            run_at = now     -- a tap keeps an 'app' module alive
           end
         elseif n == 2 then
-          if running then stop_app() else launch(sel) end
+          -- back, one level up: module -> menu -> blank
+          if running then
+            open_menu()   -- stops the module first
+          elseif visible then
+            close_menu()
+          end
         end
       end
 
-      -- 3. the running module
+      -- 3. the running module. Tilt only reaches a module that takes it
+      --    (on_roll), and only moves its cursor -- it never leaves the
+      --    module. A module without on_roll does not poll the IMU at all.
       if running then
         local mod = mods[running]
+        local dir = (mod and mod.on_roll) and roll_step(now) or 0
 
-        if mod and mod.mode == 'app' then
-          -- keep refreshing until closed; no timeout
-          if now >= next_app then
+        if dir ~= 0 then
+          module_input(mod.on_roll, dir)
+
+        elseif mod and mod.mode == 'app' then
+          -- keep refreshing until closed or left alone for APP_TIMEOUT
+          if now - run_at > APP_TIMEOUT then
+            stop_app()
+          elseif now >= next_app then
             next_app = now + APP_TICK_PERIOD
             if mod.tick then
               local ok, text = pcall(mod.tick)
@@ -470,43 +610,11 @@ function app_loop()
           stop_app()
         end
 
-      -- 4. head tilt, only while the menu is up. Poll rarely: the sensor is
-      --    slow, but the loop must spin fast for incoming Bluetooth traffic.
-      --    Skipping the poll while IDLE also saves battery.
+      -- 4. head tilt scrolls the menu. Nothing polls the IMU while IDLE,
+      --    which saves battery.
       elseif visible and #items > 0 then
-        if now >= next_imu then
-          next_imu = now + IMU_PERIOD
-          local delta = (frame.imu.direction().roll - base) * ROLL_SIGN
-
-          if now - tap_shake < ROLL_MUTE then
-            -- still ringing from a tap; throw the reading away
-            armed, roll_dir, roll_hold = 0, 0, 0
-          elseif armed == 0 then
-            -- Tilting only arms the step, and only once it has been HELD:
-            -- a tap spikes roll far past the threshold for a sample or two.
-            local dir = 0
-            if delta > ROLL_THRESHOLD then
-              dir = 1      -- tilt right -> cursor down, on the way back
-            elseif delta < -ROLL_THRESHOLD then
-              dir = -1     -- tilt left -> cursor up, on the way back
-            end
-
-            if dir ~= 0 and dir == roll_dir then
-              roll_hold = roll_hold + 1
-              if roll_hold >= ROLL_HOLD_SAMPLES then
-                armed, roll_hold = dir, 0
-              end
-            else
-              roll_dir = dir
-              roll_hold = (dir ~= 0) and 1 or 0
-            end
-          elseif math.abs(delta) < DEADZONE then
-            -- Head is level again: that completes the gesture.
-            local dir = armed
-            armed, roll_dir, roll_hold = 0, 0, 0
-            move(dir)
-          end
-        end
+        local dir = roll_step(now)
+        if dir ~= 0 then move(dir) end
 
         -- 5. auto-hide after a spell of inactivity
         if now - last_act > MENU_TIMEOUT then
@@ -514,12 +622,45 @@ function app_loop()
         end
       end
 
-      -- cannot sleep long: a burst of incoming Bluetooth data may be queued
       -- Pace the loop by state. Idling with a blank screen needs nothing but
       -- tap latency, so it runs far slower and stops burning battery; the
-      -- tap callback is interrupt-driven and loses nothing by it.
+      -- tap callback is interrupt-driven and loses nothing by it. While the
+      -- menu or a module is up the loop must stay quick, partly for feel and
+      -- partly because incoming Bluetooth data may be queued.
       if visible or running then
         frame.sleep(ACTIVE_PERIOD)
+
+      elseif now - last_act > SLEEP_AFTER
+             and not frame.bluetooth.is_connected() then
+        -- Deep sleep: frame.sleep() with no argument parks the device until a
+        -- tap, which is far beyond what loop pacing can save. Two conditions
+        -- make it safe to use here.
+        --
+        -- Only with no host attached, because a sleeping app cannot be
+        -- reached over Bluetooth -- otherwise development would stall.
+        --
+        -- And the tap state is cleared on the way out. It is unknown whether
+        -- the firmware also delivers the waking tap to tap_callback; by
+        -- zeroing the counter either way, the gesture count cannot be thrown
+        -- off by one, so a triple tap stays a triple tap.
+        --
+        -- Rule: going to sleep closes whatever is open. The branch order
+        -- above already keeps a running module or the menu out of here, but
+        -- that is incidental; this makes it hold even if the pacing changes,
+        -- so nothing wakes up half-alive with a stale screen.
+        if running then stop_app() end
+        if visible then close_menu() end
+        set_display(false)
+        frame.sleep()
+
+        local woke = frame.time.utc()
+        tap_n, tap_at, tap_shake = 0, 0, woke
+        armed, roll_dir, roll_hold = 0, 0, 0
+        last_act = woke
+
+        draw_splash()
+        splash_until = woke + SPLASH_SECONDS
+
       else
         frame.sleep(IDLE_PERIOD)
       end
@@ -527,6 +668,7 @@ function app_loop()
 
     -- the host's break signal also lands here -- exit cleanly
     if rc == false then
+      pcall(stop_app)
       print(err)
       frame.display.text(' ', LEFT_X, TOP_Y)
       frame.display.show()

@@ -53,7 +53,7 @@ Run anything with `.venv/bin/python <file>.py`.
 
 ## Quick connect
 
-Ready-made script: [`utils/connect.py`](utils/connect.py).
+Ready-made script: [`utils/connect.py`](../utils/connect.py).
 
 ```bash
 .venv/bin/python utils/connect.py
@@ -282,8 +282,8 @@ was never set — usable for timeouts.
 
 ## The menu app
 
-A working in-glasses menu lives in [`frame_app.lua`](frame_app.lua), driven by
-the reference host [`host_test.py`](host_test.py). The wire protocol and the
+A working in-glasses menu lives in [`frame_app.lua`](../frame_app.lua), driven by
+the reference host [`host_test.py`](../host_test.py). The wire protocol and the
 design rationale are in [`PROTOCOL.md`](PROTOCOL.md).
 
 ```bash
@@ -349,6 +349,7 @@ frame_app.lua      the application that runs on the glasses (uploaded as main.lu
 modules/           one Lua file per menu item
 host_test.py       reference host: uploads everything, then listens
 check.sh           syntax and ASCII checks, no device needed
+docs/              FRAME.md, PLATFORM.md, PROTOCOL.md
 utils/             diagnostics, run individually as needed
   connect.py         smoke test: connect, report hardware, draw text
   wait_for_frame.py  keep scanning until the glasses start advertising

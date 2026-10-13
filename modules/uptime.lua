@@ -1,4 +1,4 @@
--- Menu module: time since boot. ASCII only, see PROTOCOL.md.
+-- Menu module: time since boot. ASCII only, see docs/PROTOCOL.md.
 --
 -- frame.time.utc() counts monotonically from power-on and works even when
 -- the clock was never set, so this needs no host and no time sync.
