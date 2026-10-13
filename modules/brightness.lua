@@ -14,6 +14,7 @@ local _M = {}
 
 _M.label = 'Brightness'
 _M.mode = 'app'
+_M.background = false  -- sleeps: stopped as soon as it leaves the screen
 
 local MIN, MAX = -2, 2
 

@@ -6,13 +6,22 @@
 --
 -- Menu state lives here, not on the host. Each item is a module in modules/
 -- that declares a label and either run() or tick(). Adding an item means
--- adding one file and listing it in MODULES below. The host still receives
+-- adding one file and listing it in MENU below. The host still receives
 -- every event, so it can react too, but nothing here needs a host.
 --
+-- The menu is a tree: submenus hold modules or further submenus. The top row
+-- of the screen is a breadcrumb -- the path from the root to what is shown.
+--
 -- States:
---   IDLE    -- blank display, nothing running
---   MENU    -- the list; tilting the head scrolls it
+--   IDLE    -- blank display, nothing on screen
+--   MENU    -- one level of the tree; tilting the head scrolls it
 --   RUNNING -- a module owns the display
+--
+-- Modules either sleep or run in the background (_M.background). A sleeping
+-- module is stopped as soon as it leaves the screen; a background one keeps
+-- being ticked off screen, one at a time, and a play icon in the top bar says
+-- so. Either way a single tap on the blank screen brings back the last module
+-- that was launched.
 --
 -- Roll (tilt toward a shoulder, then back): right scrolls down, left scrolls
 -- up. The return to neutral is part of the gesture -- see the latch below.
@@ -20,11 +29,14 @@
 -- has one, see on_roll); it never leaves the module. Leaving is a double tap.
 --
 -- Taps (Frame has no buttons; count is the only way to tell intents apart):
---   single -- select: run the item under the cursor (MENU)
---   double -- back: from a module to the menu, from the menu to blank
---   triple -- toggle the menu, from any state
+--   single -- select: run the item under the cursor, or enter a submenu;
+--             on the blank screen, return to the last module
+--   double -- back, one level up: module -> its menu level -> parent menu
+--             -> ... -> root -> blank
+--   triple -- toggle the menu, from any state. Hiding it returns to the root.
 -- One meaning per count, everywhere. A single tap elsewhere is harmless: it
--- flashes the banner when idle and keeps an 'app' module alive.
+-- flashes the banner when idle and nothing was launched yet, and keeps an
+-- 'app' module alive.
 --
 -- A multi-tap can only be classified once TAP_WINDOW has expired, so single
 -- and double taps are deliberately delayed by that much. Triple taps fire
@@ -43,15 +55,23 @@
 
 local data = require('data.min')
 
--- One module per menu item, in display order. Each must return a table with
--- a .label and either .run() (mode 'info') or .tick() (mode 'app').
-local MODULES = { 'battery', 'uptime', 'brightness', 'firmware', 'tilt',
-                  'photo' }
+-- The menu tree, in display order. A string names a module in modules/; a
+-- table is a submenu -- its label, then its entries, which may themselves be
+-- submenus. Each module must return a table with a .label and either .run()
+-- (mode 'info') or .tick() (mode 'app'), and may set .background.
+local MENU = {
+  { label = 'Apps',     'photo', 'timeseries', 'stopwatch' },
+  { label = 'Settings', 'battery', 'uptime', 'brightness', 'firmware', 'tilt',
+                        'taptune' },
+}
+local ROOT_LABEL = 'Menu'   -- first crumb of the breadcrumb
+local CRUMB_SEP  = ' > '
 
 -- Host -> Frame
 local MENU_SET  = 0x20    -- override items, one per line; see docs/PROTOCOL.md
 local MENU_HIDE = 0x21    -- no payload; hide the menu
 local MENU_SHOW = 0x22    -- no payload; show the menu
+local CLOCK_SET = 0x23    -- '>I4i2': unix time, UTC offset in minutes
 
 -- Frame -> Host
 local MENU_SELECT = 0x11  -- [0x11, index] item index was selected (1-based)
@@ -60,6 +80,9 @@ local MENU_OPEN   = 0x13  -- [0x13, index] menu became visible
 local MENU_CLOSE  = 0x14  -- [0x14, index] menu was hidden
 local APP_START   = 0x15  -- [0x15, index] module index started
 local APP_STOP    = 0x16  -- [0x16, index] module index stopped
+local MENU_LEVEL  = 0x17  -- [0x17, depth] entered a submenu / went back up
+local APP_BACKGROUND = 0x18  -- [0x18, index] module index left the screen
+                             -- but keeps running
 
 -- Navigation tuning. Scrolling is driven by roll -- tilting the head toward
 -- a shoulder -- not by pitch. Roll has the wider usable swing of the two
@@ -96,6 +119,7 @@ local IMU_PERIOD      = 0.05  -- seconds between orientation samples
 local IDLE_PERIOD     = 0.15  -- blank screen, only waiting for a tap
 local ACTIVE_PERIOD   = 0.01  -- menu up or a module running
 local APP_TICK_PERIOD = 0.25  -- refresh rate of an 'app' module
+local BG_TICK_PERIOD  = 1     -- tick rate of a module in the background
 local MENU_TIMEOUT    = 10    -- seconds of inactivity before auto-hiding
 local INFO_TIMEOUT    = 5     -- seconds an 'info' module stays on screen
 -- An 'app' module keeps the display lit and the loop at ACTIVE_PERIOD for as
@@ -103,9 +127,14 @@ local INFO_TIMEOUT    = 5     -- seconds an 'info' module stays on screen
 -- as activity and restarts the clock. See docs/BATTERY.md.
 local APP_TIMEOUT     = 60    -- seconds of inactivity before closing an 'app'
 local SLEEP_AFTER     = 30    -- idle seconds before parking in frame.sleep()
+                              -- (never while a module runs in the background)
 
 -- Startup banner. IDLE is a blank screen, which is indistinguishable from
--- "the app is not running" -- this is the sign of life.
+-- "the app is not running" -- this is the sign of life. It is the sprite in
+-- sprites/eye.lua, drawn SPLASH_SCALE times its size; the '<okulo>' text is
+-- only a fallback for when the sprite cannot be loaded.
+local SPLASH_SPRITE   = 'eye'
+local SPLASH_SCALE    = 2
 local SPLASH_TEXT     = 'okulo'
 local SPLASH_COLOR    = 'GREEN'
 local SPLASH_BRACKETS = 'RED'
@@ -117,11 +146,39 @@ local TAP_WINDOW = 0.75  -- max gap between taps belonging to one multi-tap
 local TAP_TOGGLE = 3     -- taps required to toggle the menu
 
 -- Layout. Display is 640x400. x=1 is clipped, so nothing starts left of
--- LEFT_X. A row is 55px.
+-- LEFT_X. A row is 55px. The breadcrumb sits above the list, close to the
+-- top edge (y=1 is visible), so five rows still fit: the last one starts at
+-- 285 and ends near 326, inside the measured VISIBLE_BOTTOM of 340.
 local ROW_H        = 55
-local TOP_Y        = 30
+local CRUMB_Y      = 10
+local TOP_Y        = 65
 local LEFT_X       = 60
 local VISIBLE_ROWS = 5
+local TEXT_ROWS    = 3     -- lines of module output: rows 3..5
+
+-- The top bar, one row at CRUMB_Y, left to right: the breadcrumb, the
+-- background icon, the clock and the battery level. The right-hand pieces have fixed x positions, so the
+-- breadcrumb is cut short in front of whichever comes first. Positions are
+-- estimates for a proportional font: '100%' must end before x=640, or the
+-- firmware drops the glyphs that do not fit.
+local TIME_X       = 430   -- 'HH:MM', or '--:--' until the host sets it
+local BATTERY_X    = 545   -- '84%'
+local BATTERY_LOW  = 15    -- percent; drawn in red at or below this
+local BATTERY_PERIOD = 30  -- seconds between battery readings
+local STATUS_PERIOD  = 1   -- seconds between checks for a new minute
+
+-- Background icon: a play triangle left of the clock, shown while a module
+-- runs in the background. 16x16, 1 bit per pixel, rows
+-- of two bytes, first pixel in the high bit (sprite_engine.sv). A set bit
+-- draws palette index 1 + ICON_PALETTE, a clear bit is transparent; 9 makes
+-- it index 10, GREEN.
+local ICON_X       = 400
+local ICON_Y       = CRUMB_Y + 10
+local ICON_W       = 16
+local ICON_PALETTE = 9
+local ICON_PLAY    = '\x00\x00\x18\x00\x1E\x00\x1F\x00\x1F\xC0\x1F\xF0' ..
+                     '\x1F\xF8\x1F\xFE\x1F\xFE\x1F\xF8\x1F\xF0\x1F\xC0' ..
+                     '\x1F\x00\x1E\x00\x18\x00\x00\x00'
 
 -- The framebuffer is 640x400 but the wearer does not see all of it. Measured
 -- by probing: y=340 is visible, y=370 is not, so the bottom is clipped.
@@ -143,30 +200,79 @@ local CHAR_H    = 24
 data.parsers[MENU_SET]  = function(block) return block end
 data.parsers[MENU_HIDE] = function(block) return block end
 data.parsers[MENU_SHOW] = function(block) return block end
+data.parsers[CLOCK_SET] = function(block) return block end
 
--- Load the modules. A broken module must not take the whole menu down, so
--- each require is guarded and failures become visible menu entries.
-local mods  = {}
-local items = {}
-for _, name in ipairs(MODULES) do
-  local ok, mod = pcall(require, name)
-  if ok and type(mod) == 'table' and mod.label then
-    mods[#mods + 1] = mod
-    items[#items + 1] = mod.label
-  else
-    mods[#mods + 1] = false
-    items[#items + 1] = name .. ' (load failed)'
-  end
+-- Load the modules and build the tree. A broken module must not take the
+-- whole menu down, so each require is guarded and failures become visible
+-- menu entries.
+--
+-- A level is { label, items, sel, top }; sel and top live on the level, so
+-- going back up lands on the submenu just left. An item is either a level
+-- (it has .items) or a leaf { label, id }. id indexes mods and numbers the
+-- modules in tree order; it is what APP_START / APP_STOP report.
+--
+-- paths[id] is the chain of levels leading to a module. Bringing a module
+-- back from the blank screen restores it, so the breadcrumb is right and a
+-- double tap lands in the module's own submenu.
+local mods  = {}   -- id -> module table; false if it failed to load
+local paths = {}   -- id -> { root, ..., the level holding the module }
+
+local function new_level(label)
+  return { label = label, items = {}, sel = 1, top = 1 }
 end
 
-local sel      = 1      -- cursor position, 1-based
-local top      = 1      -- first visible item (scroll window)
+-- pcall(require, ...) that lets the host's break signal through. Loading
+-- guards each module so a broken one cannot take the menu down, but a guard
+-- that catches everything also catches 'break signal': the host's break
+-- landed during loading, was taken for a load error, and the app kept
+-- running. Loading takes seconds, so that happened on most connects.
+local function try_require(name)
+  local ok, mod = pcall(require, name)
+  if not ok and string.find(tostring(mod), 'break signal', 1, true) then
+    error(mod, 0)
+  end
+  return ok, mod
+end
+
+local function build(spec, label, parent)
+  local level = new_level(label or spec.label)
+  local path = { table.unpack(parent or {}) }
+  path[#path + 1] = level
+  for _, entry in ipairs(spec) do
+    local item
+    if type(entry) == 'table' then
+      item = build(entry, nil, path)
+    else
+      local id = #mods + 1
+      paths[id] = path
+      local ok, mod = try_require(entry)
+      if ok and type(mod) == 'table' and mod.label then
+        mods[id] = mod
+        item = { label = mod.label, id = id }
+      else
+        mods[id] = false
+        item = { label = entry .. ' (load failed)', id = id }
+      end
+    end
+    level.items[#level.items + 1] = item
+  end
+  return level
+end
+
+local root  = build(MENU, ROOT_LABEL)
+local stack = { root }  -- path from the root to the level being shown
+
+local function level() return stack[#stack] end
+
 local base     = 0      -- baseline roll, sampled when the menu opens
 local armed     = 0     -- 0 = level, 1/-1 = tilt seen, waiting for the return
 local roll_dir  = 0     -- direction currently being held past the threshold
 local roll_hold = 0     -- how many consecutive samples it has been held
 local visible  = false  -- menu on screen
-local running  = nil    -- index of the running module, or nil
+local running  = nil    -- id of the module on screen, or nil
+local bg       = nil    -- id of the module running in the background, or nil
+local last     = nil    -- id of the last module launched; a tap brings it back
+local run_name = ''     -- its label, the last crumb while it runs
 local run_text = ''     -- what the running module last produced
 local run_at   = 0      -- utc() when the running module started
 local last_act = 0      -- utc() of the last input, drives the menu timeout
@@ -210,16 +316,87 @@ local function set_display(on)
   pcall(frame.display.power_save, not on)
 end
 
+-- Wall clock. frame.time.utc() is NOT set to real time here: it counts from
+-- boot, and every timer in this app relies on that. Setting it would make
+-- each of them jump by fifty years. The host sends the real time instead
+-- (CLOCK_SET) and only the offset is kept, so utc() stays monotonic.
+local clock_offset = nil   -- seconds to add to utc() for local time
+
+local function clock_text()
+  if not clock_offset then return '--:--' end
+  local t = math.floor(frame.time.utc() + clock_offset)
+  return string.format('%02d:%02d', (t // 3600) % 24, (t // 60) % 60)
+end
+
+-- battery_level() is read at most every BATTERY_PERIOD; it is a voltage
+-- estimate and does not move faster than that anyway (docs/BATTERY.md).
+local battery = nil
+local battery_at = -BATTERY_PERIOD
+
+local function battery_level()
+  local now = frame.time.utc()
+  if now - battery_at >= BATTERY_PERIOD then
+    battery_at = now
+    local ok, level = pcall(frame.battery_level)
+    if ok then battery = math.floor(level) end
+  end
+  return battery
+end
+
+-- What the right end of the top bar shows; a change means a redraw.
+local function status_text()
+  return clock_text() .. ' ' .. tostring(battery_level())
+end
+
+-- 'Menu > Settings > Brightness'. When it is too wide for right_x, the
+-- leading crumbs give way to '..': the end of the path is what matters. The
+-- width is only estimated -- the font is proportional, see CHAR_W.
+local function draw_crumbs(parts, right_x)
+  local fit = (right_x - LEFT_X) // CHAR_W
+  local text = table.concat(parts, CRUMB_SEP)
+  local first = 1
+  while #text > fit and first < #parts do
+    first = first + 1
+    text = '..' .. CRUMB_SEP .. table.concat(parts, CRUMB_SEP, first)
+  end
+  frame.display.text(text, LEFT_X, CRUMB_Y, { color = 'SKYBLUE' })
+end
+
+-- The whole top bar. last: an extra crumb (the running module's name).
+local function draw_top_bar(last)
+  local parts = {}
+  for i, l in ipairs(stack) do parts[i] = l.label end
+  if last then parts[#parts + 1] = last end
+
+  -- the icon, guarded: a bad bitmap call must not take the screen down
+  if bg then
+    pcall(frame.display.bitmap, ICON_X, ICON_Y, ICON_W, 2, ICON_PALETTE,
+          ICON_PLAY)
+  end
+  draw_crumbs(parts, (bg and ICON_X or TIME_X) - CHAR_W // 2)
+
+  frame.display.text(clock_text(), TIME_X, CRUMB_Y, { color = 'GREY' })
+  local level = battery_level()
+  if level then
+    frame.display.text(level .. '%', BATTERY_X, CRUMB_Y,
+                       { color = (level <= BATTERY_LOW) and 'RED' or 'GREY' })
+  end
+end
+
 local function render()
   -- panel on before drawing, off only after the screen has been cleared
   if running or visible then set_display(true) end
 
   if running then
-    local mod = mods[running]
-    frame.display.text(mod and mod.label or '?', LEFT_X, TOP_Y,
-                       { color = 'GREY' })
-    frame.display.text(run_text, LEFT_X, TOP_Y + ROW_H * 2,
-                       { color = 'WHITE' })
+    draw_top_bar(run_name)
+    -- a module may return several lines, separated by '\n'
+    local row = 0
+    for line in string.gmatch(run_text, '[^\n]+') do
+      if row >= TEXT_ROWS then break end
+      frame.display.text(line, LEFT_X, TOP_Y + ROW_H * (2 + row),
+                         { color = 'WHITE' })
+      row = row + 1
+    end
     frame.display.show()
     return
   end
@@ -230,44 +407,48 @@ local function render()
     return
   end
 
+  local lv = level()
+  local items = lv.items
+
   if #items == 0 then
-    frame.display.text('no modules', LEFT_X, 180, { color = 'GREY' })
+    draw_top_bar()
+    frame.display.text('empty', LEFT_X, TOP_Y + ROW_H * 2, { color = 'GREY' })
     frame.display.show()
     return
   end
 
   -- keep the cursor inside the scroll window
-  if sel < top then top = sel end
-  if sel > top + VISIBLE_ROWS - 1 then top = sel - VISIBLE_ROWS + 1 end
-
-  local row = 0
-  for i = top, math.min(top + VISIBLE_ROWS - 1, #items) do
-    local y = TOP_Y + row * ROW_H
-    if i == sel then
-      frame.display.text('> ' .. items[i], LEFT_X, y, { color = 'WHITE' })
-    else
-      frame.display.text('  ' .. items[i], LEFT_X, y, { color = 'GREY' })
-    end
-    row = row + 1
+  if lv.sel < lv.top then lv.top = lv.sel end
+  if lv.sel > lv.top + VISIBLE_ROWS - 1 then
+    lv.top = lv.sel - VISIBLE_ROWS + 1
   end
 
-  -- scroll indicator, only when the list does not fit
-  if #items > VISIBLE_ROWS then
-    frame.display.text(
-      string.format('%d/%d', sel, #items),
-      560, TOP_Y, { color = 'SKYBLUE' })
+  draw_top_bar()
+
+  local row = 0
+  for i = lv.top, math.min(lv.top + VISIBLE_ROWS - 1, #items) do
+    local y = TOP_Y + row * ROW_H
+    local label = items[i].label
+    if items[i].items then label = label .. ' >' end   -- a submenu
+    if i == lv.sel then
+      frame.display.text('> ' .. label, LEFT_X, y, { color = 'WHITE' })
+    else
+      frame.display.text('  ' .. label, LEFT_X, y, { color = 'GREY' })
+    end
+    row = row + 1
   end
 
   frame.display.show()
 end
 
 local function move(delta)
-  if #items == 0 then return end
-  sel = sel + delta
-  if sel < 1 then sel = #items end
-  if sel > #items then sel = 1 end
+  local lv = level()
+  if #lv.items == 0 then return end
+  lv.sel = lv.sel + delta
+  if lv.sel < 1 then lv.sel = #lv.items end
+  if lv.sel > #lv.items then lv.sel = 1 end
   last_act = frame.time.utc()
-  send(MENU_CURSOR, sel)
+  send(MENU_CURSOR, lv.sel)
   render()
 end
 
@@ -283,23 +464,54 @@ local function release_hardware()
   pcall(frame.microphone.stop)
 end
 
--- The ONLY way a module leaves the screen. Rule: a module that is no longer
--- on screen has no activity left. Every exit path -- double tap, timeout,
--- menu opened over it, host replacing the menu, deep sleep, break signal --
--- goes through here, so stop() always runs and the hardware is released.
+-- Does this module want to keep running once it leaves the screen?
+-- .background is true, or a function asked at that moment -- which is how a
+-- background module stops itself: it answers false. Anything else sleeps.
+local function wants_background(mod)
+  if not mod then return false end
+  if type(mod.background) == 'function' then
+    local ok, keep = pcall(mod.background)
+    return ok and keep == true
+  end
+  return mod.background == true
+end
+
+-- The ONLY way a module stops, from the screen or from the background. Rule:
+-- a stopped module has no activity left, so stop() always runs here. The
+-- hardware goes back to idle too -- unless a background module is still
+-- running, because it may be using it.
+local function quit(id)
+  local mod = mods[id]
+  if mod and mod.stop then pcall(mod.stop) end
+  if bg == id then bg = nil end
+  if not bg then release_hardware() end
+  send(APP_STOP, id)
+end
+
+-- The ONLY way a module leaves the screen. Every exit path -- double tap,
+-- timeout, menu opened over it, host replacing the menu, deep sleep, break
+-- signal -- goes through here. A sleeping module is stopped; a background
+-- one keeps running off screen, replacing any previous background module.
 --
 -- keep_screen: the caller draws something else straight away (the menu), so
 -- skip the blank frame and leave the panel powered. Blanking first meant two
 -- show() calls milliseconds apart with the panel switched off and on between
 -- them, and the menu came up with its top rows missing.
-local function stop_app(keep_screen)
+--
+-- stop: stop it even if it would rather stay in the background.
+local function stop_app(keep_screen, stop)
   if not running then return end
-  local mod = mods[running]
-  if mod and mod.stop then pcall(mod.stop) end
-  release_hardware()
-  send(APP_STOP, running)
+  local id = running
   running = nil
+  run_name = ''
   run_text = ''
+  if not stop and wants_background(mods[id]) then
+    if bg and bg ~= id then quit(bg) end
+    bg = id
+    send(APP_BACKGROUND, id)
+  else
+    quit(id)
+  end
   if not keep_screen then render() end
 end
 
@@ -311,38 +523,76 @@ local function reset_roll()
   base = frame.imu.direction().roll
 end
 
-local function open_menu()
+-- at_root: opening from a blank screen starts at the root, however the
+-- screen got blank -- close_menu() already resets, but a module that timed
+-- out did not go through it. Out of a module, the menu opens at its level.
+local function open_menu(at_root)
+  if at_root and #stack > 1 then
+    stack = { root }
+    send(MENU_LEVEL, 1)
+  end
   -- the menu replaces whatever owns the display, without a blank in between
   if running then stop_app(true) end
   visible = true
   last_act = frame.time.utc()
   reset_roll()
-  send(MENU_OPEN, sel)
+  send(MENU_OPEN, level().sel)
   render()
 end
 
+-- Hiding the menu also returns it to the root, so opening it always starts
+-- from the top. The cursor on every level is kept.
 local function close_menu()
   visible = false
-  send(MENU_CLOSE, sel)
+  send(MENU_CLOSE, level().sel)
+  if #stack > 1 then
+    stack = { root }
+    send(MENU_LEVEL, 1)
+  end
   render()
 end
 
--- Launch the module under the cursor. The menu gets out of the way, so the
--- module owns the whole display.
-local function launch(index)
-  if #items == 0 then return end
+-- Back from the menu: one level up, or hide it when already at the root.
+local function menu_back()
+  if #stack == 1 then
+    close_menu()
+    return
+  end
+  stack[#stack] = nil
+  last_act = frame.time.utc()
+  send(MENU_LEVEL, #stack)
+  render()
+end
+
+-- Put module id on screen. The module gets the whole display; the menu gets
+-- out of the way. A module coming back from the background is not started
+-- again -- it never stopped.
+local function run_module(id)
   if running then stop_app(true) end   -- the module draws next
 
+  -- the breadcrumb, and where a double tap leads, follow the module's path
+  local path = paths[id]
+  if path and stack[#stack] ~= path[#path] then
+    stack = { table.unpack(path) }
+    send(MENU_LEVEL, #stack)
+  end
+  local lv = level()
+  local name = '?'
+  for _, item in ipairs(lv.items) do
+    if item.id == id then name = item.label end
+  end
+
   visible = false
-  running = index
+  running = id
+  last = id
+  run_name = name
   run_at = frame.time.utc()
   run_text = ''
   reset_roll()   -- the back gesture is measured from the launch pose
 
-  send(MENU_SELECT, index)
-  send(APP_START, index)
+  send(APP_START, id)
 
-  local mod = mods[index]
+  local mod = mods[id]
   if not mod then
     -- a host-supplied item has no module behind it; the host does the work
     run_text = '(host item)'
@@ -350,7 +600,11 @@ local function launch(index)
     return
   end
 
-  if mod.start then pcall(mod.start) end
+  if bg == id then
+    bg = nil                 -- back in the foreground, still running
+  elseif mod.start then
+    pcall(mod.start)
+  end
 
   -- an 'info' module produces its value once; an 'app' module is ticked
   if mod.mode == 'app' then
@@ -366,10 +620,28 @@ local function launch(index)
   render()
 end
 
+-- Select the item under the cursor: enter a submenu, or launch a module.
+local function launch(index)
+  local item = level().items[index]
+  if not item then return end
+  send(MENU_SELECT, index)
+
+  if item.items then
+    stack[#stack + 1] = item
+    last_act = frame.time.utc()
+    send(MENU_LEVEL, #stack)
+    render()
+    return
+  end
+
+  run_module(item.id)
+end
+
 -- Hand an input event to the running module. A module that defines
 -- on_tap() / on_roll(dir) takes over that input; each returns the text to
--- show and, optionally, true to say "done" -- the module then closes and the
--- menu comes back. Any input counts as activity for APP_TIMEOUT.
+-- show and, optionally, true to say "done" -- the module then stops, even a
+-- background one, and the menu comes back. Any input counts as activity for
+-- APP_TIMEOUT.
 local function module_input(handler, ...)
   run_at = frame.time.utc()
   local ok, text, done = pcall(handler, ...)
@@ -379,7 +651,8 @@ local function module_input(handler, ...)
     run_text = tostring(text)
   end
   if ok and done then
-    open_menu()   -- stops the module first
+    stop_app(true, true)
+    open_menu()
   else
     render()
   end
@@ -402,23 +675,82 @@ frame.imu.tap_callback(function()
   tap_at = t
 end)
 
--- '<okulo>' centred, with the brackets in a second colour. Drawn as three
--- pieces because frame.display.text() takes one colour per call.
--- Two overlapping draws, not three adjacent ones. The whole string goes down
--- in the bracket colour first, so the firmware computes every advance; then
--- the word alone is drawn over it in the text colour, offset by the width of
--- '<'. The brackets keep showing, and this needs exactly one measured
--- number. Placing three separate pieces needs two offsets, and with a
--- proportional font neither can be derived from a character count.
-local function draw_splash()
-  set_display(true)
+-- The splash sprite, packed for frame.display.bitmap: one string per art
+-- row, already scaled, so drawing is one call per row. 16-colour sprites take
+-- 4 bits a pixel, first pixel in the high nibble (sprite_engine.sv), and
+-- palette index 0 is transparent.
+--
+-- Packed, drawn and thrown away every time, sprite file included. Memory
+-- is what runs out on Frame: holding the art and the packed rows (about
+-- 15 KB) for a picture shown for two seconds pushed the app over the edge,
+-- and the firmware reboots when it cannot allocate.
+local splash_w = 0
+
+local function pack_splash()
+  -- loadfile, not require: require would keep the art cached for good, and
+  -- Frame's Lua has no package table to evict it from
+  local ok, sprite = pcall(function()
+    return assert(loadfile(SPLASH_SPRITE .. '.lua'))()
+  end)
+  if not ok and string.find(tostring(sprite), 'break signal', 1, true) then
+    error(sprite, 0)
+  end
+  if not ok or type(sprite) ~= 'table' or not sprite.art then return nil end
+
+  local rows = {}
+  for i, line in ipairs(sprite.art) do
+    -- widen: every art pixel becomes SPLASH_SCALE screen pixels
+    local px = {}
+    for c in string.gmatch(line, '.') do
+      local v = sprite.colors[c] or 0
+      for _ = 1, SPLASH_SCALE do px[#px + 1] = v end
+    end
+    if #px % 2 == 1 then px[#px + 1] = 0 end   -- whole bytes per row
+    local bytes = {}
+    for k = 1, #px, 2 do
+      bytes[#bytes + 1] = string.char(px[k] * 16 + px[k + 1])
+    end
+    -- heighten: the same row, SPLASH_SCALE times over
+    rows[i] = string.rep(table.concat(bytes), SPLASH_SCALE)
+    splash_w = #px
+  end
+  return rows
+end
+
+-- '<okulo>' centred, with the brackets in a second colour: the fallback. Two
+-- overlapping draws, not three adjacent ones. The whole string goes down in
+-- the bracket colour first, so the firmware computes every advance; then the
+-- word alone is drawn over it in the text colour, offset by the width of
+-- '<'. This needs exactly one measured number; placing three separate pieces
+-- needs two offsets, and with a proportional font neither can be derived
+-- from a character count.
+local function draw_splash_text()
   local full = '<' .. SPLASH_TEXT .. '>'
   local x = (SCREEN_W - #full * CHAR_W) // 2
   local y = (VISIBLE_BOTTOM - CHAR_H) // 2
-
   frame.display.text(full, x, y, { color = SPLASH_BRACKETS })
   frame.display.text(SPLASH_TEXT, x + BRACKET_W, y, { color = SPLASH_COLOR })
+end
+
+-- The sprite, centred in the visible area.
+local function draw_splash()
+  set_display(true)
+  local splash_rows = pack_splash()
+
+  if splash_rows then
+    local h = #splash_rows * SPLASH_SCALE
+    local x = (SCREEN_W - splash_w) // 2
+    local y = (VISIBLE_BOTTOM - h) // 2
+    for i, row in ipairs(splash_rows) do
+      pcall(frame.display.bitmap, x, y + (i - 1) * SPLASH_SCALE, splash_w, 16,
+            0, row)
+    end
+  else
+    draw_splash_text()
+  end
   frame.display.show()
+  splash_rows = nil
+  collectgarbage('collect')
 end
 
 function app_loop()
@@ -428,6 +760,9 @@ function app_loop()
 
   -- the host waits for this line on await_print
   print('Frame app is running')
+  -- what everything above costs; Frame reboots when Lua runs out of memory
+  collectgarbage('collect')
+  print(string.format('mem %d KB', math.floor(collectgarbage('count'))))
 
   -- Hold the banner on a timer rather than sleeping: the host sends its
   -- first message immediately after start_frame_app() returns, and the loop
@@ -441,6 +776,9 @@ function app_loop()
 
   local next_imu = 0   -- utc() of the next orientation sample
   local next_app = 0   -- utc() of the next 'app' module refresh
+  local next_bg  = 0   -- utc() of the next background tick
+  local next_status = 0  -- utc() of the next clock / battery check
+  local status_shown = ''
 
   -- Head-tilt recogniser, shared by the menu and running modules. Poll
   -- rarely: the sensor is slow, but the loop must spin fast for incoming
@@ -496,21 +834,39 @@ function app_loop()
       -- 1. incoming messages from the host
       if data.process_raw_items() > 0 then
         if data.app_data[MENU_SET] ~= nil then
-          -- Host overrides the module menu. Such items have no module
-          -- behind them, so launching one only notifies the host.
-          items = split_lines(data.app_data[MENU_SET])
+          -- Host overrides the module menu with one flat level. Such items
+          -- have no module behind them, so launching one only notifies the
+          -- host; their id is their line number.
+          local lines = split_lines(data.app_data[MENU_SET])
           data.app_data[MENU_SET] = nil
-          -- stop the running module while mods still points at it
-          stop_app()
+          -- stop every module while mods still points at it
+          stop_app(false, true)
+          if bg then quit(bg) end
           mods = {}
-          sel = 1
-          top = 1
+          paths = {}
+          last = nil
+          root = new_level(ROOT_LABEL)
+          for i, line in ipairs(lines) do
+            root.items[i] = { label = line, id = i }
+            paths[i] = { root }
+          end
+          stack = { root }
           if visible then open_menu() else render() end
+        end
+
+        if data.app_data[CLOCK_SET] ~= nil then
+          local block = data.app_data[CLOCK_SET]
+          data.app_data[CLOCK_SET] = nil
+          if #block >= 6 then
+            local unix, tz = string.unpack('>I4i2', block)
+            clock_offset = unix + tz * 60 - frame.time.utc()
+            if visible or running then render() end
+          end
         end
 
         if data.app_data[MENU_SHOW] ~= nil then
           data.app_data[MENU_SHOW] = nil
-          if not visible then open_menu() end
+          if not visible then open_menu(not running) end
         end
 
         if data.app_data[MENU_HIDE] ~= nil then
@@ -540,7 +896,7 @@ function app_loop()
           if visible then
             close_menu()
           else
-            open_menu()
+            open_menu(not running)
           end
         end
 
@@ -556,11 +912,17 @@ function app_loop()
 
         if n == 1 then
           if visible then
-            launch(sel)
+            launch(level().sel)
+          elseif not running and last then
+            -- The blank screen: back to the last module, wherever it was in
+            -- the tree. A background one is still running; a sleeping one
+            -- starts again.
+            splash_until = 0
+            last_act = now
+            run_module(last)
           elseif not running then
-            -- Waking from a blank idle screen. A lone tap had no meaning
-            -- here before, so it costs nothing to make it the sign of life:
-            -- flash the banner, then fall back to blank on its own.
+            -- Nothing launched yet. The tap is the sign of life: flash the
+            -- banner, then fall back to blank on its own.
             draw_splash()
             splash_until = now + SPLASH_SECONDS
             last_act = now   -- a tap postpones deep sleep
@@ -570,11 +932,11 @@ function app_loop()
             run_at = now     -- a tap keeps an 'app' module alive
           end
         elseif n == 2 then
-          -- back, one level up: module -> menu -> blank
+          -- back, one level up: module -> its level -> parent -> blank
           if running then
-            open_menu()   -- stops the module first
+            open_menu()   -- the module leaves the screen first
           elseif visible then
-            close_menu()
+            menu_back()
           end
         end
       end
@@ -590,16 +952,20 @@ function app_loop()
           module_input(mod.on_roll, dir)
 
         elseif mod and mod.mode == 'app' then
-          -- keep refreshing until closed or left alone for APP_TIMEOUT
+          -- keep refreshing until closed or left alone for APP_TIMEOUT;
+          -- a background module then carries on off screen
           if now - run_at > APP_TIMEOUT then
             stop_app()
           elseif now >= next_app then
             next_app = now + APP_TICK_PERIOD
             if mod.tick then
-              local ok, text = pcall(mod.tick)
+              local ok, text, done = pcall(mod.tick)
               local fresh = ok and tostring(text or '')
                               or ('err: ' .. tostring(text))
-              if fresh ~= run_text then
+              if ok and done then
+                stop_app(true, true)   -- finished on its own
+                open_menu()
+              elseif fresh ~= run_text then
                 run_text = fresh
                 render()
               end
@@ -612,13 +978,38 @@ function app_loop()
 
       -- 4. head tilt scrolls the menu. Nothing polls the IMU while IDLE,
       --    which saves battery.
-      elseif visible and #items > 0 then
+      elseif visible and #level().items > 0 then
         local dir = roll_step(now)
         if dir ~= 0 then move(dir) end
 
         -- 5. auto-hide after a spell of inactivity
         if now - last_act > MENU_TIMEOUT then
           close_menu()
+        end
+      end
+
+      -- 6. the background module, ticked rarely and never drawn. Returning
+      --    true as tick()'s second value stops it from there too.
+      if bg and now >= next_bg then
+        next_bg = now + BG_TICK_PERIOD
+        local mod = mods[bg]
+        if mod and mod.tick then
+          local ok, _, done = pcall(mod.tick)
+          if ok and done then
+            quit(bg)
+            if visible or running then render() end   -- the icon goes
+          end
+        end
+      end
+
+      -- 7. the clock turns over a minute, or the battery level moves: the
+      --    top bar is out of date
+      if (visible or running) and now >= next_status then
+        next_status = now + STATUS_PERIOD
+        local status = status_text()
+        if status ~= status_shown then
+          status_shown = status
+          render()
         end
       end
 
@@ -630,7 +1021,7 @@ function app_loop()
       if visible or running then
         frame.sleep(ACTIVE_PERIOD)
 
-      elseif now - last_act > SLEEP_AFTER
+      elseif now - last_act > SLEEP_AFTER and not bg
              and not frame.bluetooth.is_connected() then
         -- Deep sleep: frame.sleep() with no argument parks the device until a
         -- tap, which is far beyond what loop pacing can save. Two conditions
@@ -638,6 +1029,9 @@ function app_loop()
         --
         -- Only with no host attached, because a sleeping app cannot be
         -- reached over Bluetooth -- otherwise development would stall.
+        --
+        -- Never with a module in the background: it would be frozen, which
+        -- is exactly what background means it must not be.
         --
         -- And the tap state is cleared on the way out. It is unknown whether
         -- the firmware also delivers the waking tap to tap_callback; by
@@ -668,7 +1062,8 @@ function app_loop()
 
     -- the host's break signal also lands here -- exit cleanly
     if rc == false then
-      pcall(stop_app)
+      pcall(stop_app, true, true)
+      if bg then pcall(quit, bg) end
       print(err)
       frame.display.text(' ', LEFT_X, TOP_Y)
       frame.display.show()

@@ -9,7 +9,7 @@ cd "$(dirname "$0")"
 
 fail=0
 
-for f in frame_app.lua modules/*.lua; do
+for f in frame_app.lua modules/*.lua sprites/*.lua; do
   if out=$(nix run nixpkgs#lua5_4 -- -e "assert(loadfile('$f'))" 2>&1); then
     echo "syntax ok   $f"
   else
@@ -21,7 +21,7 @@ done
 
 # Non-ASCII breaks upload_file(): it chunks by characters but enforces the MTU
 # limit in bytes. See docs/PROTOCOL.md.
-for f in frame_app.lua modules/*.lua; do
+for f in frame_app.lua modules/*.lua sprites/*.lua; do
   if LC_ALL=C grep -qP '[^\x00-\x7F]' "$f" 2>/dev/null; then
     echo "NON-ASCII   $f  (will break upload)"
     fail=1

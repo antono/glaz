@@ -60,10 +60,35 @@ which is called periodically and returns the current string; the display is
 only redrawn when the text actually changes. Optional `start()` and `stop()`
 bracket the lifetime.
 
-**Rule: a module that has left the screen has no activity left.** Whatever
-`start()` or `run()` switched on, `stop()` must switch off. `stop()` is called
-on **every** exit path, for both kinds, and all of them go through
-`stop_app()`:
+The returned text may hold up to **three lines** separated by `\n`; they are
+drawn on rows 3–5, below the breadcrumb. `modules/timeseries.lua` uses all
+three: interval scale, status, sent/failed counters.
+
+**Sleeping or background (`_M.background`).** Every module is one of two:
+
+- **sleeping** (the default, `_M.background = false`) — stopped the moment it
+  leaves the screen. Bringing it back runs `start()` again; anything it wants
+  to remember lives in the module's own locals.
+- **background** (`_M.background = true`) — leaving the screen does not stop
+  it. It keeps getting `tick()` once per `BG_TICK_PERIOD` (1 s), nothing is
+  drawn, and a green play icon shows at the right end of the breadcrumb row
+  for as long as it runs. Bringing it back does **not** call `start()` — it
+  never stopped.
+
+`background` may also be a **function**, asked each time the module leaves the
+screen: `true` keeps it running, `false` stops it like a sleeping one. That is
+how a background module ends itself — `modules/stopwatch.lua` answers `false`
+once it has been reset. A background module can also finish on its own by
+returning `true` as the second value of `tick()`, on screen or off.
+
+Only **one** module runs in the background at a time: a second one leaving the
+screen stops the first. While one runs, the glasses **never enter deep sleep**
+— a parked CPU would freeze it — so it costs battery until it stops.
+
+**Rule: a module that has stopped has no activity left.** Whatever `start()` or
+`run()` switched on, `stop()` must switch off. `stop()` is called on **every**
+exit path, for both kinds; a sleeping module leaves through `stop_app()`, and
+every stop goes through `quit()`:
 
 - the `INFO_TIMEOUT` / `APP_TIMEOUT` timeouts;
 - the menu opening over the module (a double or triple tap, or the host's
@@ -75,7 +100,9 @@ on **every** exit path, for both kinds, and all of them go through
 As a safety net, after `stop()` the app also returns the shared hardware to
 idle: camera in power save, microphone stopped (`release_hardware()`). This
 also runs when `stop()` is missing or throws an error. A module must not rely
-on it; it exists so a buggy module cannot drain the battery.
+on it; it exists so a buggy module cannot drain the battery. It is **skipped
+while a background module runs**, since that module may be using the
+hardware.
 
 **Input hooks (optional, `app` modules).** A module can take input itself:
 
@@ -86,8 +113,8 @@ on it; it exists so a buggy module cannot drain the battery.
   alive.
 
 Each returns the text to show (`nil` keeps the current text) and, optionally,
-`true` as a second value meaning "done": the module is stopped and the menu
-comes back. Double and triple taps are never passed to a module, so back and
+`true` as a second value meaning "done": the module is stopped — even a
+background one — and the menu comes back. Double and triple taps are never passed to a module, so back and
 menu always work. `modules/brightness.lua` is the example: tilt previews a
 level, a single tap keeps it, a double tap cancels.
 
@@ -105,15 +132,20 @@ end
 return _M
 ```
 
-Adding an item means adding one file and listing its name in `MODULES` at the
-top of `frame_app.lua`:
+Adding an item means adding one file and listing its name in the `MENU` tree
+at the top of `frame_app.lua`:
 
 ```lua
-local MODULES = { 'battery', 'uptime', 'brightness', 'firmware', 'tilt',
-                  'photo' }
+local MENU = {
+  { label = 'Apps',     'photo' },
+  { label = 'Settings', 'battery', 'uptime', 'brightness', 'firmware', 'tilt' },
+}
 ```
 
-The order of that list is the display order. The host uploads every
+A string is a module; a table is a submenu — its `label`, then its entries,
+which can be submenus again. The order is the display order. Modules are
+numbered in tree order (`photo` = 1, `battery` = 2, ...); that number is the
+`index` in `APP_START` / `APP_STOP`. The host uploads every
 `modules/*.lua` to the device root, because `frame_app.lua` requires them by
 bare name.
 
@@ -138,8 +170,8 @@ Each tap count means one thing everywhere:
 
 | Taps | Meaning |
 | --- | --- |
-| **1** | select — run the item under the cursor |
-| **2** | back — one level up: module → menu → blank |
+| **1** | select — run the item under the cursor, or enter the submenu; on the blank screen, back to the last module |
+| **2** | back — one level up: module → its submenu → parent → … → root → blank |
 | **3** | menu — open or hide it, from any state |
 
 ```
@@ -156,12 +188,53 @@ Each tap count means one thing everywhere:
 
 | State | Display | 1 tap | 2 taps | 3 taps | Tilt |
 | --- | --- | --- | --- | --- | --- |
-| **IDLE** | blank | banner (sign of life) | — | menu | not polled |
-| **MENU** | the list | launch | hide | hide | scrolls |
-| **RUNNING** | the module | `on_tap()`, else keep `app` alive | back to menu | menu | `on_roll()` only, never leaves |
+| **IDLE** | blank | last module, or the banner if none yet | — | menu | not polled |
+| **MENU** | one level of the tree | launch / enter | up a level, hide at root | hide | scrolls |
+| **RUNNING** | the module | `on_tap()`, else keep `app` alive | back to menu (background modules keep running) | menu | `on_roll()` only, never leaves |
 
 Returning to the menu leaves the cursor on the module just closed, so it can
-be run again with a single tap.
+be run again with a single tap. Each level keeps its own cursor, so going up
+lands on the submenu just left.
+
+**A single tap on the blank screen brings back the last module launched**,
+wherever it sits in the tree: a background one as it was, a sleeping one
+started afresh. The breadcrumb shows its full path, and a double tap from it
+lands in its submenu. Before anything was launched, the tap flashes the
+banner instead.
+
+**Opening the menu from a blank screen starts at the root** — triple tap or
+`MENU_SHOW`, whether the screen went blank by hiding the menu, a timeout or
+deep sleep. Out of a running module (double or triple tap) the menu opens at
+the level the module was launched from.
+
+### Breadcrumbs
+
+The top row shows the path to what is on screen, in sky blue: `Menu`,
+`Menu > Settings`, and while a module runs `Menu > Settings > Brightness`.
+Submenus carry a trailing `>` in the list.
+
+The same row is the **top bar**, left to right:
+
+| Piece | x | Notes |
+| --- | --- | --- |
+| breadcrumb | 60 | sky blue |
+| background icon | 400 | green play triangle, a 16×16 1-bit `frame.display.bitmap`; only while a module runs in the background |
+| clock | 430 | `HH:MM`, grey; `--:--` until the host sends `CLOCK_SET` |
+| battery | 545 | `84%`, grey; red at 15 % or below |
+
+The breadcrumb is cut short in front of the icon or the clock. Positions are
+estimates for a proportional font; the firmware silently drops any glyph that
+would cross `x = 640`, so `100%` must end before it. The clock and battery
+are checked once a second and the screen is redrawn only when the text
+changes; the battery itself is read every 30 s.
+
+**The clock never sets `frame.time.utc()`.** That counter runs from boot and
+every timer in the app (timeouts, taps, the stopwatch) is built on it; setting
+it to unix time would make each of them jump by decades. The app keeps only
+the offset between host time and `utc()`. It lives in RAM, so after a reboot
+the clock shows `--:--` until a host connects again. If the path is too wide, leading
+crumbs collapse to `..` — the width is estimated from `CHAR_W`, since the font
+is proportional (see Layout).
 
 **Tilt never leaves a module.** Inside a module tilt only moves the module's
 own cursor, and only if it defines `on_roll()`. The roll baseline is sampled
@@ -213,6 +286,7 @@ which splits long messages into MTU-sized packets and reassembles them.
 | `0x20` | `MENU_SET` | UTF-8 text, one item per line (`\n`) |
 | `0x21` | `MENU_HIDE` | none — hide the menu, return to IDLE |
 | `0x22` | `MENU_SHOW` | none — open the menu without resending items |
+| `0x23` | `CLOCK_SET` | 6 bytes, big-endian: `uint32` unix time, `int16` UTC offset in minutes |
 
 `MENU_SET` is an **override**: it replaces the module-defined menu with
 host-supplied labels and resets the cursor. Those items have no module behind
@@ -241,6 +315,8 @@ Every event is exactly 2 bytes.
 | `0x14` | `MENU_CLOSE` | `[0x14, index]` | menu was hidden |
 | `0x15` | `APP_START` | `[0x15, index]` | module `index` started |
 | `0x16` | `APP_STOP` | `[0x16, index]` | module `index` stopped |
+| `0x17` | `MENU_LEVEL` | `[0x17, depth]` | entered a submenu or went up; root is 1 |
+| `0x18` | `APP_BACKGROUND` | `[0x18, index]` | module `index` left the screen but keeps running |
 | `0x07` | photo chunk | `[0x07, jpeg bytes...]` | part of a photo (Camera module) |
 | `0x08` | photo end | `[0x08]` | last chunk; the photo is complete |
 
@@ -253,11 +329,16 @@ uploaded next to `data` (`upload_stdlua_libs(["data", "camera"])`).
 `send_metering_data()`**: they send `0x11` and `0x12`, the same codes as
 `MENU_SELECT` and `MENU_CURSOR`.
 
-`index` is **1-based**, as in Lua.
+`index` is **1-based**, as in Lua. In `MENU_SELECT`, `MENU_CURSOR`,
+`MENU_OPEN` and `MENU_CLOSE` it is the position **within the current level**;
+in `APP_START` / `APP_STOP` it is the module's number in tree order. Selecting
+a submenu emits `MENU_SELECT` and then `MENU_LEVEL` with the new depth.
 
 Launching an item emits `MENU_SELECT` and then `APP_START`; `APP_STOP` follows
-when it closes, whether by going back to the menu, by a timeout, or because
-another module was launched.
+when it stops, whether by going back to the menu, by a timeout, or because
+another module was launched. A background module leaving the screen emits
+`APP_BACKGROUND` instead, `APP_START` again when it comes back, and `APP_STOP`
+only when it really stops.
 
 Only `MENU_SELECT` is required. The rest are advisory: `MENU_CURSOR` is useful
 if the host wants to show something in sync with the cursor (a preview, a hint),
@@ -313,8 +394,9 @@ works even when the clock was never set (measured: 687.83 → 691.998 over ~4s).
 
 ## Layout
 
-The display is 640 × 400 and a row is 55 px, so **5 items fit**. Longer lists
-scroll within a window and a `3/9` counter appears in the top-right corner.
+The display is 640 × 400 and a row is 55 px. The top bar takes the top row
+at `y = 10`, and **5 items fit** below it. Longer lists scroll within a window
+with no position counter; the cursor alone shows where you are.
 
 ### The visible area is smaller than the framebuffer
 
@@ -338,9 +420,10 @@ So the **bottom is clipped below roughly `y = 340`**, while the left, right and
 top edges are reachable at mid-height. Useful vertical space is about 340 px,
 not 400.
 
-The layout keeps rows at `y` = 30, 85, 140, 195, 250 — five rows, the last one
-well inside the bound. A sixth row would land at 305 and, with a glyph height
-near 41 px, finish around 346: past the measured limit.
+The layout puts the breadcrumb at `y = 10` and list rows at `y` = 65, 120,
+175, 230, 285 — five rows, the last one finishing near 326 with a glyph height
+near 41 px, inside the bound. A sixth row would land at 340: past the measured
+limit. (The old layout, without a breadcrumb, used 30 … 250.)
 
 Independently of this, `frame_msg`'s `print_short_text()` helper hardcodes
 `(1, 1)` and comes out clipped, so the host draws its own loading text instead.
@@ -412,7 +495,8 @@ What it does, in the order any host should:
 4. `upload_frame_app('frame_app.lua')` — the application itself
 5. `start_frame_app()` — waits for the line `Frame app is running`
 6. `register_data_response_handler(..., [0x11, 0x12, 0x13, 0x14], handler)`
-7. optionally `send_message(0x20, ...)` to override the module menu
+7. `send_message(0x23, ...)` — the wall clock for the top bar
+8. optionally `send_message(0x20, ...)` to override the module menu
 
 Shutdown: `stop_frame_app()` (break + reset) then `disconnect()`. The reset
 boots `main.lua`, so the menu comes straight back.
@@ -543,8 +627,9 @@ slowed down to accommodate it.
 
 ## Next steps
 
-- **nested menus** — host answers `MENU_SELECT` with a new `MENU_SET`; the
-  protocol already supports this, nothing to change
+- **host-defined trees** — `MENU_SET` is still one flat level; a host can
+  nest by answering `MENU_SELECT` with a new `MENU_SET`, but gets no
+  breadcrumb for it
 - **submenus from modules** — let a module return a list instead of a string
 - **camera settings** — resolution and quality picked by tilt, as in
   Brightness; `modules/photo.lua` has them fixed (512 px, `MEDIUM`)

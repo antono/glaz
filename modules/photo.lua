@@ -22,6 +22,7 @@ local _M = {}
 
 _M.label = 'Camera'
 _M.mode = 'app'
+_M.background = false  -- sleeps: stopped as soon as it leaves the screen
 
 local RESOLUTION = 512       -- px, square; any even number 100..720
 local QUALITY    = 'MEDIUM'  -- VERY_LOW .. VERY_HIGH; bigger = slower to send

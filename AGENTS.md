@@ -39,5 +39,5 @@ python3 -m venv .venv
 - Frame-side Lua must be **ASCII only** — non-ASCII bytes break upload.
 - Frame runs **Lua 5.4**; check with 5.4, not older versions.
 - Run `./check.sh` after changing any `.lua` file.
-- Adding a menu item: add a file in `modules/` and list it in `MODULES`
+- Adding a menu item: add a file in `modules/` and list it in the `MENU` tree
   in `frame_app.lua`. See `docs/PROTOCOL.md`.

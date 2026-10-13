@@ -6,7 +6,10 @@ glasses, and the menu items are Lua modules in modules/. This script uploads
 them and then just listens. See frame_app.lua and docs/PROTOCOL.md.
 """
 import asyncio
+import os
+import struct
 import time
+from datetime import datetime
 from pathlib import Path
 
 from frame_msg import FrameMsg, RxPhoto
@@ -15,6 +18,7 @@ from frame_msg import FrameMsg, RxPhoto
 MENU_SET = 0x20
 MENU_HIDE = 0x21
 MENU_SHOW = 0x22
+CLOCK_SET = 0x23
 
 # Frame -> Host
 MENU_SELECT = 0x11
@@ -23,6 +27,8 @@ MENU_OPEN = 0x13
 MENU_CLOSE = 0x14
 APP_START = 0x15
 APP_STOP = 0x16
+MENU_LEVEL = 0x17
+APP_BACKGROUND = 0x18
 
 EVENTS = {
     MENU_SELECT: "SELECT",
@@ -31,9 +37,12 @@ EVENTS = {
     MENU_CLOSE: "menu hidden",
     APP_START: "app START",
     APP_STOP: "app stop",
+    MENU_LEVEL: "menu depth",
+    APP_BACKGROUND: "app to background",
 }
 
 MODULES_DIR = Path(__file__).parent / "modules"
+SPRITES_DIR = Path(__file__).parent / "sprites"
 
 # The Camera module (modules/photo.lua) streams each JPEG in chunks flagged
 # 0x07 / 0x08 -- the frame_msg camera library's own codes. Saved here.
@@ -46,13 +55,58 @@ PHOTOS_DIR = Path(__file__).parent / "photos"
 #
 # This is safe to re-upload over: FrameMsg.connect() sends break/reset/break,
 # and that last break exists precisely to interrupt an auto-starting main.lua.
-FRAME_APP_NAME = "main"
+FRAME_APP_NAME = os.environ.get("FRAME_APP_NAME", "main")
+
+
+async def wait_for_repl(frame, attempts=6):
+    """Wait until the Lua REPL answers after connect()'s break/reset/break.
+
+    The reset re-runs main.lua, and the trailing break can go missing: the app
+    loads each module inside pcall() so a broken one cannot take the menu
+    down, and a break landing there is caught as a load error -- the app
+    keeps running. Measured: anything from a 5.5 s delay (past send_lua()'s
+    fixed 5 s timeout) to no effect at all. So ping with a unique token, and
+    send the break again after every unanswered ping; most of the time the
+    app sits in its main loop, where a break does stop it.
+
+    Late replies to earlier pings, and the 'break signal' message, are skipped:
+    frame_ble queues the first print after each request, whoever sent it.
+    """
+    ble = frame.ble
+    for n in range(1, attempts + 1):
+        token = f"ready{n}"
+        try:
+            reply = await frame.send_lua(f"print('{token}')", await_print=True)
+            while reply != token:
+                ble._awaiting_print_response = True
+                reply = await asyncio.wait_for(ble._print_response.get(), 5)
+            return
+        except Exception:
+            await ble.send_break_signal()   # the last one may have been eaten
+    raise Exception("Frame REPL did not come back after reset")
+
+
+async def start_app(frame, name, timeout=20):
+    """require() the app and wait for its 'Frame app is running' line.
+
+    Not frame.start_frame_app(): that waits a fixed 5 s for the first print,
+    and loading every module plus packing the splash sprite takes longer.
+    """
+    ble = frame.ble
+    await frame.send_lua(f"require('{name}')")
+    # flag set after sending: send_lua(await_print=False) clears it, and the
+    # app takes seconds before it prints anything
+    ble._awaiting_print_response = True
+    reply = await asyncio.wait_for(ble._print_response.get(), timeout)
+    if reply != "Frame app is running":
+        raise Exception(f"app did not start: {reply}")
 
 
 async def main():
     frame = FrameMsg()
     await frame.connect()
     print("Connected.")
+    await wait_for_repl(frame)
 
     # Not print_short_text(): that helper hardcodes (1, 1), which is in the
     # clipped corner. Measured usable area: see docs/PROTOCOL.md.
@@ -75,12 +129,17 @@ async def main():
         await frame.upload_file(str(path), path.name)
         print(f"  module: {path.name}")
 
+    # Sprites (sprites/*.lua, the splash art) land at the root the same way.
+    for path in sorted(SPRITES_DIR.glob("*.lua")):
+        await frame.upload_file(str(path), path.name)
+        print(f"  sprite: {path.name}")
+
     await frame.upload_frame_app(
         local_filename="frame_app.lua",
         frame_filename=f"{FRAME_APP_NAME}.lua",
     )
     frame.attach_print_response_handler()
-    await frame.start_frame_app(frame_app_name=FRAME_APP_NAME)
+    await start_app(frame, FRAME_APP_NAME)
     print(f"Frame app started (deployed as {FRAME_APP_NAME}.lua).")
 
     def on_event(payload: bytes):
@@ -88,6 +147,14 @@ async def main():
         print(f"  {EVENTS.get(code, hex(code))}: {index}")
 
     frame.register_data_response_handler(on_event, list(EVENTS), on_event)
+
+    # The glasses have no idea what time it is: frame.time.utc() counts from
+    # boot. Send unix time and the local UTC offset; the app keeps only the
+    # difference, for the clock in the top bar. See docs/PROTOCOL.md.
+    offset = datetime.now().astimezone().utcoffset()
+    tz_minutes = int(offset.total_seconds() // 60) if offset else 0
+    await frame.send_message(CLOCK_SET,
+                             struct.pack(">Ih", int(time.time()), tz_minutes))
 
     # RxPhoto reassembles the chunks and turns the image upright (the sensor
     # is mounted rotated).
@@ -106,8 +173,10 @@ async def main():
 
     photo_saver = asyncio.create_task(save_photos())
 
-    print("\nSingle tap  -- select: run the highlighted item")
-    print("Double tap  -- back: app -> menu -> blank")
+    print("\nSingle tap  -- select: run the item or enter the submenu;\n"
+          "              on a blank screen, back to the last app")
+    print("Double tap  -- back one level: app -> submenu -> root -> blank\n"
+          "              (a background app keeps running)")
     print("Triple tap  -- open or hide the menu")
     print("Tilt        -- scroll the menu, or an app's own cursor")
     print("'info' apps clear themselves after 5s; the menu hides after 10s.")

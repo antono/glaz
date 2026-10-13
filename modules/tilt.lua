@@ -10,6 +10,7 @@ local _M = {}
 
 _M.label = 'Tilt'
 _M.mode = 'app'
+_M.background = false  -- sleeps: stopped as soon as it leaves the screen
 
 function _M.tick()
   local d = frame.imu.direction()
