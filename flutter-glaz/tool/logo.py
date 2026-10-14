@@ -1,0 +1,293 @@
+#!/usr/bin/env python3
+"""Pixel-art logo for glaz: a wide-open, bloodshot eye. Three variants.
+
+Plain Python, no Pillow: the art is computed on a small grid, then written
+as PNG with zlib, scaled up by whole pixels so the edges stay sharp.
+
+    python tool/logo.py preview          # writes assets/logo/preview.png
+    python tool/logo.py icons [variant]  # all platform icons from one variant
+
+Variants: bloodshot (default), oled, flipper.
+"""
+import math
+import struct
+import sys
+import zlib
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+
+# Frame's display palette, so the logo matches what the glasses draw.
+FRAME = {
+    'void': (0, 0, 0), 'white': (255, 255, 255), 'grey': (157, 157, 157),
+    'red': (190, 38, 51), 'pink': (224, 111, 139), 'orange': (235, 137, 49),
+    'yellow': (247, 226, 107), 'green': (68, 137, 26), 'lightgreen': (163, 206, 39),
+    'nightblue': (0, 87, 132), 'seablue': (49, 162, 242), 'skyblue': (178, 220, 239),
+}
+
+
+def rgba(c, a=255):
+    return (*c, a)
+
+
+CLEAR = (0, 0, 0, 0)
+
+
+class Grid:
+    def __init__(self, n, fill=CLEAR):
+        self.n = n
+        self.px = [[fill] * n for _ in range(n)]
+
+    def set(self, x, y, c):
+        if 0 <= x < self.n and 0 <= y < self.n:
+            self.px[y][x] = c
+
+    def get(self, x, y):
+        return self.px[y][x]
+
+
+def line(x0, y0, x1, y1):
+    """Bresenham: the integer points from (x0, y0) to (x1, y1)."""
+    pts = []
+    dx, dy = abs(x1 - x0), -abs(y1 - y0)
+    sx, sy = (1 if x0 < x1 else -1), (1 if y0 < y1 else -1)
+    err = dx + dy
+    while True:
+        pts.append((x0, y0))
+        if x0 == x1 and y0 == y1:
+            return pts
+        e2 = 2 * err
+        if e2 >= dy:
+            err += dy
+            x0 += sx
+        if e2 <= dx:
+            err += dx
+            y0 += sy
+
+
+def eye(n, *, half_w, half_h, iris_r, pupil_r, colors, veins, bg=None,
+        bg_radius=0, look=(0, 0)):
+    """Draw one eye on an n x n grid.
+
+    The eye is a lens (two circular lids meeting at pointed corners); a tall
+    lens reads as a wide-open, staring eye with white all round the iris.
+    veins: polylines in grid coordinates, the first segment drawn darker.
+    """
+    g = Grid(n)
+    c = (n - 1) / 2
+    # rounded-square background
+    if bg:
+        for y in range(n):
+            for x in range(n):
+                dx = max(0, abs(x - c) - (c - bg_radius))
+                dy = max(0, abs(y - c) - (c - bg_radius))
+                if dx * dx + dy * dy <= bg_radius * bg_radius + 0.5:
+                    g.set(x, y, bg)
+
+    R = (half_w ** 2 + half_h ** 2) / (2 * half_h)
+
+    def inside(x, y):
+        up = math.hypot(x - c, y - (c + (R - half_h)))
+        down = math.hypot(x - c, y - (c - (R - half_h)))
+        return up <= R and down <= R
+
+    sclera = {(x, y) for y in range(n) for x in range(n) if inside(x, y)}
+    # outline: pixels next to the sclera (8-neighbourhood) but outside it
+    outline = set()
+    for (x, y) in sclera:
+        for ddx in (-1, 0, 1):
+            for ddy in (-1, 0, 1):
+                p = (x + ddx, y + ddy)
+                if p not in sclera:
+                    outline.add(p)
+    for p in outline:
+        g.set(*p, colors['outline'])
+    ix, iy = c + look[0], c + look[1]
+    for (x, y) in sclera:
+        # shadow under the upper lid
+        top = min(yy for (xx, yy) in sclera if xx == x)
+        g.set(x, y, colors['shade'] if y - top < 1 else colors['sclera'])
+
+    # veins, clipped to the sclera
+    for path in veins:
+        for i in range(len(path) - 1):
+            col = colors['vein_dark'] if i == 0 else colors['vein']
+            for p in line(*path[i], *path[i + 1]):
+                if p in sclera:
+                    g.set(*p, col)
+
+    # iris, pupil, highlight
+    for (x, y) in sclera:
+        d = math.hypot(x - ix, y - iy)
+        if d <= iris_r:
+            if d > iris_r - 1.2:
+                col = colors['iris_edge']
+            elif d <= pupil_r + 0.4:
+                col = colors['pupil']
+            elif d <= pupil_r + 1.6:
+                col = colors['iris_in']
+            else:
+                # spokes: alternate two tones by angle
+                a = math.atan2(y - iy, x - ix)
+                col = colors['iris'] if int((a + math.pi) / (math.pi / 6)) % 2 \
+                    else colors['iris_alt']
+            g.set(x, y, col)
+    hx, hy = round(ix - pupil_r * 0.9), round(iy - pupil_r * 0.9)
+    for p in ((hx, hy), (hx - 1, hy), (hx, hy - 1), (hx - 1, hy - 1)):
+        if p in sclera:
+            g.set(*p, colors['glint'])
+    g.set(round(ix + pupil_r), round(iy + pupil_r - 1), colors['glint'])
+    return g
+
+
+def veins_for(n):
+    """Hand-placed vein paths, scaled from a 32-pixel layout."""
+    s = n / 32
+    base = [
+        # from the left corner
+        [(3, 16), (7, 15), (10, 13), (11, 10)],
+        [(7, 15), (9, 18), (8, 21)],
+        [(4, 17), (8, 19), (10, 22)],
+        [(5, 14), (7, 11), (9, 9)],
+        # from the right corner
+        [(28, 16), (24, 17), (22, 20), (22, 23)],
+        [(24, 17), (23, 13), (24, 10)],
+        [(27, 15), (24, 13), (21, 9)],
+        [(27, 17), (25, 20), (26, 21)],
+        # from the lids
+        [(15, 6), (14, 8), (12, 8)],
+        [(18, 26), (19, 24), (21, 24)],
+        [(12, 25), (11, 23)],
+    ]
+    return [[(round(x * s), round(y * s)) for (x, y) in path] for path in base]
+
+
+def variant(name):
+    F = FRAME
+    if name == 'bloodshot':
+        # classic: white of the eye, green iris, transparent background
+        return eye(32, half_w=14.5, half_h=10.5, iris_r=7.2, pupil_r=2.6,
+                   veins=veins_for(32), colors={
+                       'outline': rgba((24, 8, 12)), 'sclera': rgba((250, 244, 236)),
+                       'shade': rgba((214, 196, 192)),
+                       'vein_dark': rgba((140, 18, 30)), 'vein': rgba(F['red']),
+                       'iris_edge': rgba((24, 60, 10)), 'iris': rgba(F['green']),
+                       'iris_alt': rgba(F['lightgreen']), 'iris_in': rgba((120, 170, 30)),
+                       'pupil': rgba((8, 8, 8)), 'glint': rgba(F['white']),
+                   })
+    if name == 'oled':
+        # Frame's OLED look: black tile, sky-blue rim, blue iris, pink-red veins
+        return eye(32, half_w=13.5, half_h=10, iris_r=6.6, pupil_r=2.4,
+                   veins=veins_for(32), bg=rgba((6, 6, 10)), bg_radius=7,
+                   colors={
+                       'outline': rgba(F['skyblue']), 'sclera': rgba((236, 238, 244)),
+                       'shade': rgba((150, 170, 190)),
+                       'vein_dark': rgba(F['red']), 'vein': rgba(F['pink']),
+                       'iris_edge': rgba(F['nightblue']), 'iris': rgba(F['seablue']),
+                       'iris_alt': rgba(F['skyblue']), 'iris_in': rgba(F['nightblue']),
+                       'pupil': rgba((0, 0, 0)), 'glint': rgba(F['white']),
+                   })
+    if name == 'flipper':
+        # chunky 24-pixel eye on Flipper orange, pin-prick pupil: staring
+        return eye(24, half_w=10.5, half_h=8.5, iris_r=5.6, pupil_r=1.0,
+                   veins=veins_for(24), bg=rgba(F['orange']), bg_radius=5,
+                   colors={
+                       'outline': rgba((0, 0, 0)), 'sclera': rgba((255, 246, 214)),
+                       'shade': rgba((224, 190, 150)),
+                       'vein_dark': rgba((150, 14, 24)), 'vein': rgba(F['red']),
+                       'iris_edge': rgba((0, 0, 0)), 'iris': rgba(F['yellow']),
+                       'iris_alt': rgba(F['orange']), 'iris_in': rgba(F['orange']),
+                       'pupil': rgba((0, 0, 0)), 'glint': rgba(F['white']),
+                   })
+    raise SystemExit(f'unknown variant {name!r}')
+
+
+VARIANTS = ('bloodshot', 'oled', 'flipper')
+
+
+def render(g, size, *, pad=0, bg=CLEAR):
+    """Scale a grid to size x size: nearest neighbour, optional padding."""
+    inner = size - 2 * pad
+    out = [[bg] * size for _ in range(size)]
+    for y in range(inner):
+        for x in range(inner):
+            p = g.get(x * g.n // inner, y * g.n // inner)
+            if p[3]:
+                out[y + pad][x + pad] = p
+    return out
+
+
+def write_png(path, rows, alpha=True):
+    """RGBA, or RGB when alpha=False: the App Store refuses icons that have
+    an alpha channel at all, even a fully opaque one."""
+    h, w = len(rows), len(rows[0])
+    n = 4 if alpha else 3
+    raw = b''.join(b'\0' + bytes(v for px in r for v in px[:n]) for r in rows)
+
+    def chunk(tag, data):
+        body = tag + data
+        return struct.pack('>I', len(data)) + body + \
+            struct.pack('>I', zlib.crc32(body) & 0xffffffff)
+    png = b'\x89PNG\r\n\x1a\n' + \
+        chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 6 if alpha else 2, 0, 0, 0)) + \
+        chunk(b'IDAT', zlib.compress(raw, 9)) + chunk(b'IEND', b'')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(png)
+
+
+def preview():
+    cell, gap = 384, 32
+    bg = (32, 32, 36, 255)
+    w = 3 * cell + 4 * gap
+    rows = [[bg] * w for _ in range(cell + 2 * gap)]
+    for i, name in enumerate(VARIANTS):
+        tile = render(variant(name), cell)
+        ox = gap + i * (cell + gap)
+        for y in range(cell):
+            for x in range(cell):
+                if tile[y][x][3]:
+                    rows[gap + y][ox + x] = tile[y][x]
+    write_png(ROOT / 'assets/logo/preview.png', rows)
+    for name in VARIANTS:
+        write_png(ROOT / f'assets/logo/{name}.png', render(variant(name), 512))
+
+
+def icons(name):
+    g = variant(name)
+    black = (0, 0, 0, 255)
+    # In the app: the art at 512 px, transparent where the art is.
+    write_png(ROOT / 'assets/logo/logo.png', render(g, 512))
+    # Launcher icons have no transparency on iOS; fill with black, the OLED's
+    # "off", and leave a margin so the eye is not cropped by the mask.
+    def solid(size):
+        pad = size // 10
+        return render(g, size, pad=pad, bg=black)
+    res = ROOT / 'android/app/src/main/res'
+    for d, s in (('mdpi', 48), ('hdpi', 72), ('xhdpi', 96), ('xxhdpi', 144),
+                 ('xxxhdpi', 192)):
+        write_png(res / f'mipmap-{d}/ic_launcher.png', solid(s))
+    ios = ROOT / 'ios/Runner/Assets.xcassets/AppIcon.appiconset'
+    for f in ios.glob('Icon-App-*.png'):
+        pts, scale = f.stem.removeprefix('Icon-App-').split('@')
+        size = round(float(pts.split('x')[0]) * int(scale.rstrip('x')))
+        write_png(f, solid(size), alpha=False)
+    # iOS launch screen: the eye alone, on the storyboard's black background
+    launch = ROOT / 'ios/Runner/Assets.xcassets/LaunchImage.imageset'
+    for suffix, size in (('', 128), ('@2x', 256), ('@3x', 384)):
+        write_png(launch / f'LaunchImage{suffix}.png', render(g, size))
+    # Android launch screen: drawn by launch_background.xml
+    write_png(res / 'drawable-nodpi/launch_eye.png', render(g, 384))
+    mac = ROOT / 'macos/Runner/Assets.xcassets/AppIcon.appiconset'
+    for f in mac.glob('app_icon_*.png'):
+        size = int(f.stem.removeprefix('app_icon_'))
+        write_png(f, render(g, size, pad=size // 10))
+
+
+if __name__ == '__main__':
+    cmd = sys.argv[1] if len(sys.argv) > 1 else 'preview'
+    if cmd == 'preview':
+        preview()
+    elif cmd == 'icons':
+        icons(sys.argv[2] if len(sys.argv) > 2 else 'bloodshot')
+    else:
+        raise SystemExit(__doc__)

@@ -4,7 +4,13 @@ The phone side of glaz. The menu and the apps live on the glasses
 (`../frame_app.lua`); this app is the host that talks to them over
 Bluetooth -- the role `../host_test.py` plays on a laptop today.
 
-Right now it is the stock Flutter template, nothing more.
+Today it has the look and the screens, but no Bluetooth yet:
+
+- **Glasses** -- connection status and the gestures that drive the glasses
+- **Menu** -- what the menu on the glasses contains, section by section
+- **About** -- version and open-source licences
+
+![logo variants](assets/logo/preview.png)
 
 ## Plain-language summary
 
@@ -30,6 +36,28 @@ flutter test
 Platforms: Android, iOS, Linux, macOS. iOS and macOS builds need Xcode, which
 Nix cannot provide. The emulator is for the UI only: it has no Bluetooth, so
 talking to the glasses needs a real phone.
+
+## Look
+
+Dark only, in Frame's own palette (`lib/theme.dart`): the glasses' display is
+an OLED, black is "off", so the phone is black too. The logo is a pixel-art
+eye drawn by `tool/logo.py` -- plain Python, no Pillow:
+
+```sh
+python tool/logo.py preview          # assets/logo/preview.png: all variants
+python tool/logo.py icons bloodshot  # the app logo and every platform icon
+```
+
+Variants: `bloodshot` (the default), `oled`, `flipper`. `icons` rewrites the
+Android, iOS and macOS icons and both launch screens, so switching the logo is
+that one command.
+
+## Keeping in step with the glasses
+
+The Menu tab describes `../frame_app.lua`'s `MENU` tree by hand
+(`lib/glasses_menu.dart`). `flutter test` reads the Lua and fails when the
+sections, items or labels drift apart -- update the Dart list after adding a
+module.
 
 ## Talking to the glasses
 
