@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:frame_ble/frame_ble.dart';
@@ -15,6 +16,21 @@ class FrameLink extends ChangeNotifier {
   String? name;
   String? error;
 
+  /// From the glasses' STATUS answer; null until the first one.
+  int? battery;
+  String? firmware;
+
+  /// A job that has the glasses to itself (Upload, Restart): its name, the
+  /// step it is on, and how far along, 0..1 (null: unknown). [taskError] is
+  /// the last one's failure, cleared when the next starts.
+  String? task;
+  String taskStep = '';
+  double? taskProgress;
+  String? taskError;
+
+  static const statusEvery = Duration(minutes: 1);
+  Timer? _statusTimer;
+
   BrilliantDevice? _device;
   StreamSubscription<List<int>>? _data;
   StreamSubscription<BrilliantDevice>? _conn;
@@ -25,6 +41,7 @@ class FrameLink extends ChangeNotifier {
 
   Stream<List<int>> get events => _events.stream;
   bool get connected => state == LinkState.connected;
+  bool get busy => task != null;
 
   void _set(LinkState s) {
     state = s;
@@ -68,14 +85,75 @@ class FrameLink extends ChangeNotifier {
     name = device.device.advName.isEmpty
         ? device.device.platformName
         : device.device.advName;
-    _data = device.dataResponse.listen(_events.add);
+    _data = device.dataResponse.listen((m) {
+      if (m.isNotEmpty && m[0] == status) onStatus(m);
+      _events.add(m);
+    });
     _set(LinkState.connected);
+    if (busy) return; // a reset during Upload; the job carries on
+    _greet();
+    _statusTimer?.cancel();
+    _statusTimer = Timer.periodic(statusEvery, (_) {
+      if (!busy) requestStatus();
+    });
+  }
+
+  void _greet() {
     for (final f in onConnected) {
       f();
     }
+    requestStatus();
+  }
+
+  /// Ask for battery and firmware; the answer comes as STATUS. One byte of
+  /// payload, because frame_ble sends nothing for an empty one.
+  Future<void> requestStatus() => send(statusGet, [0]);
+
+  /// [0x1B, battery %, firmware version...]; 255 = not sampled yet.
+  @visibleForTesting
+  void onStatus(List<int> m) {
+    if (m.length < 2) return;
+    battery = m[1] == 255 ? battery : m[1];
+    if (m.length > 2) firmware = ascii.decode(m.sublist(2), allowInvalid: true);
+    notifyListeners();
+  }
+
+  /// Runs [job] with the glasses to itself. Messages to the running app
+  /// are held back meanwhile: the app is stopped while the job runs. When
+  /// it ends the app is greeted again as on a fresh connect.
+  Future<void> runTask(
+    String name,
+    Future<void> Function(
+      BrilliantDevice device,
+      void Function(String step, [double? progress]) report,
+    )
+    job,
+  ) async {
+    final device = _device;
+    if (device == null || busy) return;
+    task = name;
+    taskStep = '';
+    taskProgress = null;
+    taskError = null;
+    notifyListeners();
+    try {
+      await job(device, (step, [progress]) {
+        taskStep = step;
+        taskProgress = progress;
+        notifyListeners();
+      });
+    } catch (e) {
+      taskError = '$e';
+    } finally {
+      task = null;
+      notifyListeners();
+    }
+    if (connected) _greet();
   }
 
   void _detach(LinkState next) {
+    _statusTimer?.cancel();
+    _statusTimer = null;
     _data?.cancel();
     _data = null;
     _device = null;
@@ -104,7 +182,9 @@ class FrameLink extends ChangeNotifier {
   Future<void> send(int code, List<int> payload) {
     final job = _tail.then((_) async {
       final device = _device;
-      if (device == null) return;
+      // nothing for the app while a task has stopped it: a data packet's
+      // answer would be taken for the REPL's
+      if (device == null || busy) return;
       final last = _lastSent[code];
       if (last != null) {
         final wait = sameCodeGap - DateTime.now().difference(last);

@@ -38,6 +38,8 @@ dependencies:
   notification_listener_service: ^1.0.0
   http: ^1.6.0
   shared_preferences: ^2.5.6
+  image: ^4.12.0
+  path_provider: ^2.1.6
 
 dev_dependencies:
   flutter_test:
@@ -60,6 +62,15 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  # What Upload sends to the glasses. frame_app.lua, modules/ and sprites/
+  # are links to the repository's own files, so the app always carries the
+  # Lua it was built next to; lib/ holds the frame_msg libraries.
+  assets:
+    - assets/lua/
+    - assets/lua/modules/
+    - assets/lua/sprites/
+    - assets/lua/lib/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

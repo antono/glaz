@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'screens/apps_screen.dart';
 import 'screens/glasses_screen.dart';
+import 'screens/photos_screen.dart';
 import 'screens/services_screen.dart';
 import 'screens/settings_screen.dart';
 import 'services/services.dart';
@@ -45,6 +46,7 @@ class _HomePageState extends State<HomePage> {
 
   static const _screens = [
     GlassesScreen(),
+    PhotosScreen(),
     AppsScreen(),
     ServicesScreen(),
     SettingsScreen(),
@@ -62,6 +64,11 @@ class _HomePageState extends State<HomePage> {
             icon: Icon(Icons.visibility_outlined),
             selectedIcon: Icon(Icons.visibility),
             label: 'Glasses',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.photo_library_outlined),
+            selectedIcon: Icon(Icons.photo_library),
+            label: 'Photos',
           ),
           NavigationDestination(
             icon: Icon(Icons.apps_outlined),

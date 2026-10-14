@@ -69,8 +69,9 @@ in
     # What Flutter 3.47's Gradle plugin builds against (FlutterExtension.kt:
     # compileSdk/targetSdk 36). The SDK lives in the read-only Nix store, so
     # Gradle cannot fetch missing parts itself; they must be listed here. The
-    # NDK default (28.2.13676358) already matches.
-    platforms.version = [ "36" "35" ];
+    # NDK default (28.2.13676358) already matches. 34 is for plugins that
+    # still compile against it (notification_listener_service).
+    platforms.version = [ "36" "35" "34" ];
     buildTools.version = [ "36.0.0" "35.0.0" ];
     emulator.enable = false;
     systemImages.enable = false;

@@ -95,8 +95,8 @@ const services = [
   GlazService(
     'photos',
     'Photos',
-    'Receives photos from Camera and Time series',
-    false,
+    'Saves photos from Camera and Time series, by date',
+    true,
   ),
   GlazService(
     'location',

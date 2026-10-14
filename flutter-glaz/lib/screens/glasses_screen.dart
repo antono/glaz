@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'package:flutter/services.dart';
+
 import '../frame/link.dart';
+import '../frame/upload.dart';
 import '../services/services.dart';
 
-/// The glasses themselves: connection, battery, and the main.lua on them.
-/// The connection is real; battery, firmware and upload are not wired yet.
+/// The glasses themselves: connection, battery, firmware, and the main.lua
+/// on them (Upload, Restart).
 class GlassesScreen extends StatelessWidget {
   const GlassesScreen({super.key});
 
@@ -87,11 +90,19 @@ class GlassesScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          const Row(
+          Row(
             children: [
-              Expanded(child: _Stat(Icons.battery_unknown, 'Battery', '--')),
-              SizedBox(width: 16),
-              Expanded(child: _Stat(Icons.memory, 'Firmware', '--')),
+              Expanded(
+                child: _Stat(
+                  _batteryIcon(link.battery),
+                  'Battery',
+                  link.battery == null ? '--' : '${link.battery}%',
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _Stat(Icons.memory, 'Firmware', link.firmware ?? '--'),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -105,17 +116,42 @@ class GlassesScreen extends StatelessWidget {
                   subtitle: Text('The menu app that runs on the glasses'),
                 ),
                 const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.upload),
-                  title: const Text('Upload'),
-                  subtitle: const Text('main.lua and the installed apps'),
-                  onTap: () => _notYet(context),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.restart_alt),
-                  title: const Text('Restart'),
-                  onTap: () => _notYet(context),
-                ),
+                if (link.busy)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${link.task}: ${link.taskStep}'),
+                        const SizedBox(height: 8),
+                        LinearProgressIndicator(value: link.taskProgress),
+                      ],
+                    ),
+                  )
+                else ...[
+                  if (link.taskError != null)
+                    ListTile(
+                      leading: Icon(Icons.error_outline, color: scheme.error),
+                      title: const Text('Last attempt failed'),
+                      subtitle: Text(link.taskError!),
+                    ),
+                  ListTile(
+                    enabled: link.connected,
+                    leading: const Icon(Icons.upload),
+                    title: const Text('Upload'),
+                    subtitle: const Text(
+                      'main.lua and the apps switched on in Apps',
+                    ),
+                    onTap: () => _upload(context, link),
+                  ),
+                  ListTile(
+                    enabled: link.connected,
+                    leading: const Icon(Icons.restart_alt),
+                    title: const Text('Restart'),
+                    subtitle: const Text('Start the app on the glasses again'),
+                    onTap: () => link.runTask('Restart', restartApp),
+                  ),
+                ],
               ],
             ),
           ),
@@ -125,12 +161,43 @@ class GlassesScreen extends StatelessWidget {
   }
 }
 
-void _notYet(BuildContext context) {
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      const SnackBar(content: Text('Not wired to the glasses yet')),
-    );
+IconData _batteryIcon(int? level) => switch (level) {
+  null => Icons.battery_unknown,
+  <= 15 => Icons.battery_alert,
+  <= 50 => Icons.battery_3_bar,
+  <= 85 => Icons.battery_5_bar,
+  _ => Icons.battery_full,
+};
+
+Future<void> _upload(BuildContext context, FrameLink link) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Upload to the glasses?'),
+      content: const Text(
+        'The app on the glasses stops, the glasses restart, and main.lua '
+        'with the apps switched on in Apps is written to them. Takes a '
+        'minute or two; keep the glasses close.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Upload'),
+        ),
+      ],
+    ),
+  );
+  if (ok != true) return;
+  final settings = Services.instance.settings;
+  final files = await luaFiles(rootBundle, settings.installed);
+  await link.runTask(
+    'Upload',
+    (device, report) => uploadApp(device, files, report),
+  );
 }
 
 class _Stat extends StatelessWidget {

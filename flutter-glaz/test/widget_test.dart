@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,12 +10,21 @@ import 'package:glaz/services/services.dart';
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    await Services.start();
+    final dir = Directory.systemTemp.createTempSync('glaz_widget');
+    await Services.start(photoDir: Directory('${dir.path}/photos'));
   });
 
   testWidgets('tabs switch screens', (tester) async {
     await tester.pumpWidget(const GlazApp());
     expect(find.text('Not connected'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.photo_library_outlined));
+    // the gallery reads its folder for real, outside the test's fake clock
+    await tester.runAsync(
+      () => Future.delayed(const Duration(milliseconds: 200)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('No photos yet'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.apps_outlined));
     await tester.pumpAndSettle();
