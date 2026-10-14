@@ -137,9 +137,9 @@ at the top of `frame_app.lua`:
 
 ```lua
 local MENU = {
-  { label = 'Apps',     'photo', 'timeseries', 'stopwatch' },
+  { label = 'Apps',     'photo', 'timeseries', 'stopwatch', 'files' },
   { label = 'Sensors',  'battery', 'tilt', 'taptune' },
-  { label = 'Settings', 'bluetooth', 'brightness' },
+  { label = 'Settings', 'bluetooth', 'brightness', 'sleep' },
   { label = 'Info',     'uptime', 'firmware', 'about' },
 }
 ```

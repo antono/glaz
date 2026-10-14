@@ -60,9 +60,9 @@ local data = require('data.min')
 -- submenus. Each module must return a table with a .label and either .run()
 -- (mode 'info') or .tick() (mode 'app'), and may set .background.
 local MENU = {
-  { label = 'Apps',     'photo', 'timeseries', 'stopwatch' },
+  { label = 'Apps',     'photo', 'timeseries', 'stopwatch', 'files' },
   { label = 'Sensors',  'battery', 'tilt', 'taptune' },
-  { label = 'Settings', 'bluetooth', 'brightness' },
+  { label = 'Settings', 'bluetooth', 'brightness', 'sleep' },
   { label = 'Info',     'uptime', 'firmware', 'about' },
 }
 local ROOT_LABEL = 'Menu'   -- first crumb of the breadcrumb
@@ -278,6 +278,8 @@ local visible  = false  -- menu on screen
 local running  = nil    -- id of the module on screen, or nil
 local bg       = nil    -- id of the module running in the background, or nil
 local last     = nil    -- id of the last module launched; a tap brings it back
+local bg_name  = ''     -- label of the background module, for warnings
+local sleep_requested = false  -- a module asked for deep sleep (Sleep)
 local run_name = ''     -- its label, the last crumb while it runs
 local run_text = ''     -- what the running module last produced
 local run_at   = 0      -- utc() when the running module started
@@ -500,7 +502,7 @@ end
 local function quit(id)
   local mod = mods[id]
   if mod and mod.stop then pcall(mod.stop) end
-  if bg == id then bg = nil end
+  if bg == id then bg, bg_name = nil, '' end
   if not bg then release_hardware() end
   send(APP_STOP, id)
 end
@@ -519,12 +521,13 @@ end
 local function stop_app(keep_screen, stop)
   if not running then return end
   local id = running
+  local name = run_name
   running = nil
   run_name = ''
   run_text = ''
   if not stop and wants_background(mods[id]) then
     if bg and bg ~= id then quit(bg) end
-    bg = id
+    bg, bg_name = id, name
     send(APP_BACKGROUND, id)
   else
     quit(id)
@@ -599,9 +602,13 @@ local function run_module(id)
     if item.id == id then name = item.label end
   end
 
+  local mod = mods[id]
+
   visible = false
   running = id
-  last = id
+  -- a module can opt out of being brought back by a tap (Sleep would only
+  -- ask again)
+  if not (mod and mod.resume == false) then last = id end
   run_name = name
   run_at = frame.time.utc()
   run_text = ''
@@ -609,7 +616,6 @@ local function run_module(id)
 
   send(APP_START, id)
 
-  local mod = mods[id]
   if not mod then
     -- a host-supplied item has no module behind it; the host does the work
     run_text = '(host item)'
@@ -618,9 +624,11 @@ local function run_module(id)
   end
 
   if bg == id then
-    bg = nil                 -- back in the foreground, still running
+    bg, bg_name = nil, ''    -- back in the foreground, still running
   elseif mod.start then
-    pcall(mod.start)
+    -- what the module may want to know about the rest of the app; today
+    -- only which module runs in the background (Sleep warns about it)
+    pcall(mod.start, { background = bg and bg_name or nil })
   end
 
   -- an 'info' module produces its value once; an 'app' module is ticked
@@ -657,8 +665,10 @@ end
 -- Hand an input event to the running module. A module that defines
 -- on_tap() / on_roll(dir) takes over that input; each returns the text to
 -- show and, optionally, true to say "done" -- the module then stops, even a
--- background one, and the menu comes back. Any input counts as activity for
--- APP_TIMEOUT.
+-- background one, and the menu comes back. 'sleep' instead of true asks for
+-- deep sleep right away: the module stops, and the loop parks the device on
+-- its next pass (see the deep-sleep branch). Any input counts as activity
+-- for APP_TIMEOUT.
 local function module_input(handler, ...)
   run_at = frame.time.utc()
   local ok, text, done = pcall(handler, ...)
@@ -667,7 +677,10 @@ local function module_input(handler, ...)
   elseif text ~= nil then
     run_text = tostring(text)
   end
-  if ok and done then
+  if ok and done == 'sleep' then
+    sleep_requested = true
+    stop_app(false, true)
+  elseif ok and done then
     stop_app(true, true)
     open_menu()
   else
@@ -1067,8 +1080,9 @@ function app_loop()
       if visible or running then
         frame.sleep(ACTIVE_PERIOD)
 
-      elseif now - last_act > SLEEP_AFTER and not bg
-             and not frame.bluetooth.is_connected() then
+      elseif sleep_requested
+             or (now - last_act > SLEEP_AFTER and not bg
+                 and not frame.bluetooth.is_connected()) then
         -- Deep sleep: frame.sleep() with no argument parks the device until a
         -- tap, which is far beyond what loop pacing can save. Two conditions
         -- make it safe to use here.
@@ -1084,12 +1098,18 @@ function app_loop()
         -- zeroing the counter either way, the gesture count cannot be thrown
         -- off by one, so a triple tap stays a triple tap.
         --
+        -- sleep_requested (the Sleep module) overrides both: the user asked,
+        -- so the background module is stopped -- Sleep warned which one --
+        -- and a connected host simply loses the app until a tap wakes it.
+        --
         -- Rule: going to sleep closes whatever is open. The branch order
         -- above already keeps a running module or the menu out of here, but
         -- that is incidental; this makes it hold even if the pacing changes,
         -- so nothing wakes up half-alive with a stale screen.
         if running then stop_app() end
         if visible then close_menu() end
+        if bg then quit(bg) end
+        sleep_requested = false
         set_display(false)
         frame.sleep()
 

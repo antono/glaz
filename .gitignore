@@ -6,3 +6,4 @@ __pycache__/
 .ck/
 .serena/
 photos/
+.DS_Store
