@@ -9,7 +9,7 @@
 #   lua 5.4         check.sh -- Frame runs Lua 5.4, older versions reject
 #                   valid code (docs/PROTOCOL.md)
 #   python + venv   host_test.py and utils/ (frame-ble, frame-msg), from
-#                   requirements.txt
+#                   requirements.txt; libstdc++ and zlib for numpy's wheel
 #   gcc-arm-embedded, make
 #                   building the firmware in ../frame-codebase
 #   nrfutil         packaging the firmware as a DFU zip (docs/FIRMWARE.md)
@@ -19,7 +19,7 @@
 #
 # macOS gaps: iOS builds need Xcode, which Nix cannot provide; and there is
 # no command-line DFU path on macOS (docs/FIRMWARE.md) -- use nRF Connect.
-{ pkgs, lib, inputs, ... }:
+{ pkgs, lib, config, inputs, ... }:
 
 let
   available = lib.meta.availableOn pkgs.stdenv.hostPlatform;
@@ -49,6 +49,15 @@ in
     enable = true;
     venv.enable = true;
     venv.requirements = ./requirements.txt;
+    # pip wheels with native code (numpy, pulled in by frame-msg) link
+    # against libstdc++ and libz, which NixOS has no global copy of. Without
+    # these, host_test.py dies with "libstdc++.so.6: cannot open shared
+    # object file". The first entry is the module's default, kept.
+    libraries = [
+      "${config.devenv.dotfile}/profile"
+      pkgs.stdenv.cc.cc.lib
+      pkgs.zlib
+    ];
   };
 
   # Flutter for the companion app, with an Android SDK to build it. The app

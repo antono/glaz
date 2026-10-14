@@ -22,7 +22,7 @@ Two ways to work:
 | Field | Value |
 | --- | --- |
 | Device | `Frame E0` |
-| MAC | `15:08:1C:CE:EF:E0` (as shown by AR Studio) |
+| MAC | `15:08:1C:CE:EF:E0` (as shown by AR Studio); BlueZ/macOS: `E0:EF:CE:1C:08:15` |
 | Firmware | `v25.080.0838` |
 | MTU | 243 bytes |
 | Display | 640 × 400, 16 colors |
@@ -142,6 +142,88 @@ Confirm the bond is gone: the same `system_profiler` command should find
 nothing.
 
 **Prevention:** do not let the battery hit zero.
+
+---
+
+## Connecting from Linux / NixOS (hit 2026-10-14)
+
+**In short:** the laptop's Bluetooth worked, but the glasses were not on air.
+Everything below follows from that.
+
+1. **No Python deps outside devenv.** There is no `.venv` in the repo, so
+   `python3 utils/connect.py` fails with `No module named 'frame_ble'`. Use
+   `devenv shell`, or a throwaway venv from the system `python3`:
+   `python3 -m venv /tmp/venv && /tmp/venv/bin/pip install -r requirements.txt`.
+   On NixOS that venv's pip wheels (numpy, pulled in by `frame-msg`) fail with
+   `libstdc++.so.6` / `libz.so.1: cannot open shared object file`. Point them
+   at the nix libraries (`utils/connect.py` only needs `frame-ble` and works
+   without this):
+
+   ```bash
+   export LD_LIBRARY_PATH=$(nix build --no-link --print-out-paths \
+     nixpkgs#stdenv.cc.cc.lib)/lib:$(nix build --no-link --print-out-paths \
+     nixpkgs#zlib | grep -v dev)/lib
+   ```
+2. **`devenv shell` can be busy/slow.** A parallel `devenv shell` (e.g. a
+   Flutter build) makes a second one slow; the venv above avoids it.
+3. **Wrong MAC for BlueZ.** The table above lists the AR Studio form
+   `15:08:1C:CE:EF:E0`; BlueZ uses the reversed `E0:EF:CE:1C:08:15`.
+   `bluetoothctl info 15:08:...` says "not available" even when all is fine.
+4. **"Settings sees Frame E0" does not mean it is on air.** GNOME Settings and
+   `bluetoothctl devices` list the **cached** device. Check that it is live:
+
+   ```bash
+   bluetoothctl info E0:EF:CE:1C:08:15 | grep RSSI   # no RSSI -> not heard
+   bluetoothctl --timeout 30 scan le | grep -i frame
+   ```
+
+   A `[DEL] Device E0:EF:CE:1C:08:15 Frame E0` line in the scan means BlueZ
+   just dropped the stale cache entry — the glasses are *not* advertising.
+5. **`connect()` gives up after 10 s.** `FrameBle.connect()` scans 10 s for the
+   Frame service UUID and raises `No matching Frame device found`. A sleeping
+   or low-battery Frame advertises rarely; run `utils/wait_for_frame.py` (scans
+   up to 180 s) first, then connect.
+
+6. **Pairing has to happen from the script, not from GNOME Settings.**
+   After pairing in Settings the first connect from Python succeeded at the
+   BLE level, then the glasses dropped the link and BlueZ cleared the bond
+   (`Paired: no`). frame_ble then crashes with
+   `AttributeError: 'NoneType' object has no attribute '_backend'` -- its
+   disconnect handler sets `_client = None` mid-`connect()`. Pairing from
+   Settings again gave `org.bluez.Error.AuthenticationCanceled`, and
+   `bluetoothctl pair` with a `NoInputNoOutput` agent got no answer.
+   What worked: `bluetoothctl remove E0:EF:CE:1C:08:15`, put the glasses in
+   pairing mode, then connect with bleak's `BleakClient(..., pair=True)`.
+7. **A half-done upload leaves `loading...` on the display.** `host_test.py`
+   deletes `main.lua` before it writes the files. If a write fails (seen once:
+   `GATT Protocol Error: Unlikely Error` on the first chunk), the glasses
+   sit in a bare REPL with `loading...` on screen. Nothing is broken; run the
+   upload again.
+
+The working recipe used both workarounds: find Frame by address with a long
+scan, and pair on connect. Both are monkey-patches around frame_ble 1.1.1, which
+has no options for them:
+
+```python
+from bleak import BleakScanner
+import bleak
+
+_find = BleakScanner.find_device_by_filter
+async def by_address(_f, timeout=10, **_kw):
+    return await _find(lambda d, _a: d.address == "E0:EF:CE:1C:08:15", timeout=180)
+BleakScanner.find_device_by_filter = staticmethod(by_address)
+
+_init = bleak.BleakClient.__init__
+def init(self, *a, **k):
+    k.setdefault("pair", True)
+    _init(self, *a, **k)
+bleak.BleakClient.__init__ = init
+# ...then run host_test.py / utils/connect.py as usual
+```
+
+If the glasses still do not show up with an RSSI: they are in deep sleep
+(tapping does not wake it — put them on the charger and take them off),
+connected to the phone app (one connection only), or flat.
 
 ---
 
