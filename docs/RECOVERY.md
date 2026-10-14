@@ -125,7 +125,7 @@ To go back to stock:
    [frame-codebase/releases](https://github.com/brilliantlabsAR/frame-codebase/releases)
    (currently `v25.278.1113`).
 2. `frame.update()` — reboots into the bootloader, advertises as
-   `Frame Update`, times out after 5 minutes.
+   `Frame Update`, times out after 3 minutes of inactivity.
 3. DFU the `.zip` with nRF Connect on a phone.
 
 If Lua is too broken to call `frame.update()`, send a break signal first; the

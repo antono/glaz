@@ -46,3 +46,6 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# firmware zips, fetched by tool/fetch_firmware.sh
+/assets/firmware/*.zip

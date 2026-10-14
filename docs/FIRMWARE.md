@@ -181,10 +181,30 @@ the key in the repository** (`source/bootloader/dfu_private_key.pem`).
 Flashing needs no debugger and no disassembly:
 
 1. `frame.update()` — the device reboots into the bootloader and advertises as
-   `Frame Update`, timing out after 5 minutes.
+   `Frame Update`, timing out after 3 minutes of inactivity
+   (`NRF_BL_DFU_INACTIVITY_TIMEOUT_MS 180000` in the bootloader's
+   `sdk_config.h`).
 2. DFU the `.zip`.
 
 ### Step 2, in practice
+
+**From the Glaz app** (Glasses > Firmware): pick a package, Install. It
+offers the three newest official releases and our own builds, the zips that
+`flutter-glaz/tool/fetch_firmware.sh` puts in `flutter-glaz/assets/firmware/`.
+A custom build is told apart by a suffix on its version, which the build
+stamps into `frame.FIRMWARE_VERSION`:
+
+```bash
+make application BUILD_VERSION="v$(TZ= date +%y.%j.%H%M)-tap-tuning"
+```
+
+The app does what the Noa app does (`flutter-glaz/lib/frame/dfu.dart`):
+break, `frame.update()`, find the bootloader by its DFU service `fe59`, and
+hand the zip to `frame_ble`'s `BrilliantDfuDevice`. DFU writes only the
+application partition, so the files on flash should survive and `main.lua`
+come back on its own after the reboot -- not yet confirmed on the device; if
+the menu does not return, Upload again.
+
 
 **nRF Connect on a phone** is the path that always works. Transfer the `.zip`
 to the phone, connect to `Frame Update`, run DFU.
@@ -233,7 +253,7 @@ async def main():
 asyncio.run(main())"
 ```
 
-Then scan for `Frame Update`. The window is **5 minutes**; letting it expire is
+Then scan for `Frame Update`. The window is **3 minutes**; letting it expire is
 harmless, the glasses simply boot back into the app.
 
 ### Risk

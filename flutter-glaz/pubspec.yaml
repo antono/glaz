@@ -40,6 +40,7 @@ dependencies:
   shared_preferences: ^2.5.6
   image: ^4.12.0
   path_provider: ^2.1.6
+  flutter_blue_plus: ^1.36.8
 
 dev_dependencies:
   flutter_test:
@@ -71,6 +72,8 @@ flutter:
     - assets/lua/modules/
     - assets/lua/sprites/
     - assets/lua/lib/
+    # DFU zips for Update, fetched by tool/fetch_firmware.sh (not committed)
+    - assets/firmware/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

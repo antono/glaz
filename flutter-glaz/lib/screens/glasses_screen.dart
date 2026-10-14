@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../frame/link.dart';
 import '../frame/upload.dart';
 import '../services/services.dart';
+import 'firmware_screen.dart';
 
 /// The glasses themselves: connection, battery, firmware, and the main.lua
 /// on them (Upload, Restart).
@@ -101,7 +102,16 @@ class GlassesScreen extends StatelessWidget {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: _Stat(Icons.memory, 'Firmware', link.firmware ?? '--'),
+                child: GestureDetector(
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const FirmwareScreen()),
+                  ),
+                  child: _Stat(
+                    Icons.memory,
+                    'Firmware  >',
+                    link.firmware ?? '--',
+                  ),
+                ),
               ),
             ],
           ),
