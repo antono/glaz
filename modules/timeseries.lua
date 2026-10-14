@@ -18,6 +18,10 @@
 -- by the transfer, not the interval: shots that fall behind are dropped, not
 -- queued. Without a host nothing is shot and the series waits.
 --
+-- Before each photo it sends PHOTO_FROM [0x1A, series]: the number of this
+-- series, 1..255, new on every start. The phone puts a series in a folder of
+-- its own, named by when it started (docs/PROTOCOL.md, "Photos").
+--
 -- In the background the module is ticked once per BG_TICK_PERIOD (1 s in
 -- frame_app.lua), so shots land on whole seconds there.
 local camera = require('camera.min')
@@ -31,12 +35,14 @@ local INTERVALS  = { 1, 2, 4, 8, 10, 20, 30, 40, 60 }   -- seconds
 local RESOLUTION = 512       -- px, square; same as modules/photo.lua
 local QUALITY    = 'MEDIUM'
 local WARMUP     = 1.5       -- seconds of auto exposure before the first shot
+local PHOTO_FROM = 0x1A
 
 local idx      = 3      -- INTERVALS[idx] is the chosen interval; 4 s
 local shooting = false
 local next_at  = 0      -- utc() of the next shot
 local sent     = 0
 local failed   = 0
+local series   = 0      -- number of the current series, for PHOTO_FROM
 
 local function interval() return INTERVALS[idx] end
 
@@ -68,6 +74,12 @@ function _M.background()
 end
 
 local function shoot()
+  for _ = 1, 50 do
+    if pcall(frame.bluetooth.send, string.char(PHOTO_FROM, series)) then
+      break
+    end
+    frame.sleep(0.01)
+  end
   local ok = pcall(camera.capture_and_send, {
     resolution = RESOLUTION, quality = QUALITY, pan = 0, raw = false,
   })
@@ -102,6 +114,7 @@ function _M.on_tap()
   else
     shooting = true
     sent, failed = 0, 0
+    series = series % 255 + 1
     pcall(frame.camera.power_save, false)
     next_at = frame.time.utc() + WARMUP   -- exposure settles first
   end

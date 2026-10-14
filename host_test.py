@@ -9,6 +9,8 @@ import asyncio
 import os
 import struct
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -19,6 +21,8 @@ MENU_SET = 0x20
 MENU_HIDE = 0x21
 MENU_SHOW = 0x22
 CLOCK_SET = 0x23
+NOTIFY = 0x24
+NET_RESPONSE = 0x25
 
 # Frame -> Host
 MENU_SELECT = 0x11
@@ -29,6 +33,7 @@ APP_START = 0x15
 APP_STOP = 0x16
 MENU_LEVEL = 0x17
 APP_BACKGROUND = 0x18
+NET_REQUEST = 0x19
 
 EVENTS = {
     MENU_SELECT: "SELECT",
@@ -47,6 +52,38 @@ SPRITES_DIR = Path(__file__).parent / "sprites"
 # The Camera module (modules/photo.lua) streams each JPEG in chunks flagged
 # 0x07 / 0x08 -- the frame_msg camera library's own codes. Saved here.
 PHOTOS_DIR = Path(__file__).parent / "photos"
+
+# Internet for modules (_M.host.http, docs/PROTOCOL.md "Internet"). The phone
+# asks the user per module; here the permission is a comma-separated list of
+# module names, or '*' for all. Limits match the phone's.
+NET_ALLOW = {m.strip() for m in os.environ.get("FRAME_NET_ALLOW", "*").split(",")}
+NET_TIMEOUT = 15        # seconds; the glasses give up after 20
+NET_BODY_MAX = 4096     # what fits next to the app in the glasses' memory
+
+# Notifications (docs/PROTOCOL.md "Notifications"): the phone forwards its
+# own; here, the desktop's. Off with FRAME_NOTIFY=0.
+NOTIFY_ON = os.environ.get("FRAME_NOTIFY", "1") != "0"
+NOTIFY_TEXT_MAX = 200
+
+# The display font is ASCII only. Cyrillic is transliterated like the phone
+# does; anything else that is not ASCII is dropped.
+TRANSLIT = dict(zip(
+    "абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
+    ["a", "b", "v", "g", "d", "e", "e", "zh", "z", "i", "y", "k", "l", "m",
+     "n", "o", "p", "r", "s", "t", "u", "f", "kh", "ts", "ch", "sh", "shch",
+     "", "y", "", "e", "yu", "ya"]))
+
+
+def to_ascii(text: str) -> str:
+    out = []
+    for ch in text:
+        low = ch.lower()
+        if low in TRANSLIT:
+            t = TRANSLIT[low]
+            out.append(t.capitalize() if ch != low else t)
+        elif ch.isascii():
+            out.append(ch)
+    return "".join(out)
 
 # Deploy as main.lua so the menu is autonomous: the firmware auto-runs main.lua
 # on power-on and after a reset, so the app survives disconnecting the host.
@@ -84,6 +121,65 @@ async def wait_for_repl(frame, attempts=6):
         except Exception:
             await ble.send_break_signal()   # the last one may have been eaten
     raise Exception("Frame REPL did not come back after reset")
+
+
+def http_fetch(request: bytes) -> tuple[int, bytes]:
+    """Run one module request, 'module\nMETHOD\nurl\nbody'. Blocking."""
+    module, method, url, body = (request.decode("ascii", "replace")
+                                 .split("\n", 3) + ["", "", ""])[:4]
+    if "*" not in NET_ALLOW and module not in NET_ALLOW:
+        return 403, b"not allowed: FRAME_NET_ALLOW"
+    if method not in ("GET", "POST") or not url.startswith(("http://", "https://")):
+        return 400, b"bad request"
+    # curl's user agent: services like wttr.in answer it with plain text
+    req = urllib.request.Request(
+        url, data=body.encode() if method == "POST" else None, method=method,
+        headers={"User-Agent": "curl/8"})
+    try:
+        with urllib.request.urlopen(req, timeout=NET_TIMEOUT) as resp:
+            return resp.status, resp.read(NET_BODY_MAX)
+    except urllib.error.HTTPError as e:
+        return e.code, e.read(NET_BODY_MAX)
+    except Exception as e:  # network error, timeout: status 0, body says why
+        return 0, str(e).encode("ascii", "replace")[:NET_BODY_MAX]
+
+
+async def watch_desktop_notifications(on_notify):
+    """Call on_notify(app, title, text) for every desktop notification.
+
+    GNOME Shell is the org.freedesktop.Notifications server; apps reach it
+    with a Notify method call on the session bus. A monitor connection sees
+    those calls without taking part. Linux only: returns quietly where there
+    is no session bus.
+    """
+    try:
+        from dbus_fast import BusType, Message, MessageType
+        from dbus_fast.aio import MessageBus
+        bus = await MessageBus(bus_type=BusType.SESSION).connect()
+    except Exception as e:
+        print(f"  notifications: off ({e})")
+        return
+    rule = ("type='method_call',interface='org.freedesktop.Notifications',"
+            "member='Notify'")
+    await bus.call(Message(
+        destination="org.freedesktop.DBus", path="/org/freedesktop/DBus",
+        interface="org.freedesktop.DBus.Monitoring", member="BecomeMonitor",
+        signature="asu", body=[[rule], 0]))
+
+    def on_message(msg):
+        # Notify(app_name, replaces_id, app_icon, summary, body, ...). Only
+        # calls to the well-known name: a proxy in between forwards each one
+        # again to the shell's unique name, and that copy is skipped.
+        if (msg.message_type == MessageType.METHOD_CALL and msg.member == "Notify"
+                and msg.destination == "org.freedesktop.Notifications"):
+            app, _, _, title, text = msg.body[:5]
+            on_notify(app, title, text)
+        # handled: a monitor must never reply to someone else's call
+        return True
+
+    bus.add_message_handler(on_message)
+    print("  notifications: forwarding the desktop's")
+    await bus.wait_for_disconnect()
 
 
 async def start_app(frame, name, timeout=20):
@@ -158,6 +254,51 @@ async def main():
 
     frame.register_data_response_handler(on_event, list(EVENTS), on_event)
 
+    # A request arrives as [0x19, id, more, bytes...] packets, more = 0 on
+    # the last; answered with one NET_RESPONSE: id, status, body.
+    net_parts: dict[int, bytes] = {}
+    net_tasks: set[asyncio.Task] = set()
+
+    async def answer(req_id: int, request: bytes):
+        status, body = await asyncio.to_thread(http_fetch, request)
+        module, method, url = request.decode(errors="replace").split("\n")[:3]
+        print(f"  net {module}: {method} {url} -> {status}")
+        if not frame.ble.is_connected():
+            print("  net: not answered, the glasses are gone")
+            return
+        await frame.send_message(NET_RESPONSE,
+                                 struct.pack(">BH", req_id, status) + body)
+
+    def on_net(payload: bytes):
+        req_id, more = payload[1], payload[2]
+        net_parts[req_id] = net_parts.get(req_id, b"") + payload[3:]
+        if more:
+            return
+        task = asyncio.create_task(answer(req_id, net_parts.pop(req_id)))
+        net_tasks.add(task)
+        task.add_done_callback(net_tasks.discard)
+
+    frame.register_data_response_handler(on_net, [NET_REQUEST], on_net)
+
+    async def notify(app: str, title: str, text: str):
+        # one line each: newlines inside a field would shift the fields
+        app, title, text = (to_ascii(" ".join(f.split())) for f in (app, title, text))
+        if not frame.ble.is_connected():
+            # frame_ble would crash on the zero MTU of a dropped link
+            print(f"  notify: not sent, the glasses are gone: {app}: {title}")
+            return
+        print(f"  notify: {app}: {title}")
+        await frame.send_message(
+            NOTIFY, f"{app}\n{title}\n{text[:NOTIFY_TEXT_MAX]}".encode())
+
+    def on_notify(app, title, text):
+        task = asyncio.create_task(notify(app, title, text))
+        net_tasks.add(task)
+        task.add_done_callback(net_tasks.discard)
+
+    notify_watch = (asyncio.create_task(watch_desktop_notifications(on_notify))
+                    if NOTIFY_ON else None)
+
     # The glasses have no idea what time it is: frame.time.utc() counts from
     # boot. Send unix time and the local UTC offset; the app keeps only the
     # difference, for the clock in the top bar. See docs/PROTOCOL.md.
@@ -199,8 +340,11 @@ async def main():
         pass
     finally:
         photo_saver.cancel()
+        if notify_watch:
+            notify_watch.cancel()
         rx_photo.detach(frame)
         frame.unregister_data_response_handler(on_event)
+        frame.unregister_data_response_handler(on_net)
         frame.detach_print_response_handler()
         # break + reset. The reset boots main.lua, so the menu comes straight
         # back and keeps working on the glasses after the host goes away.

@@ -139,8 +139,8 @@ at the top of `frame_app.lua`:
 local MENU = {
   { label = 'Apps',     'photo', 'timeseries', 'stopwatch', 'files' },
   { label = 'Sensors',  'battery', 'tilt', 'taptune' },
-  { label = 'Settings', 'bluetooth', 'brightness', 'sleep' },
-  { label = 'Info',     'uptime', 'firmware', 'about' },
+  { label = 'Settings', 'brightness', 'sleep' },
+  { label = 'Info',     'bluetooth', 'uptime', 'firmware', 'about' },
 }
 ```
 
@@ -211,8 +211,8 @@ the level the module was launched from.
 
 ### Breadcrumbs
 
-The top row shows the path to what is on screen, in sky blue: `Menu`,
-`Menu > Settings`, and while a module runs `Menu > Settings > Brightness`.
+The top row shows the path to what is on screen, in sky blue: `Glaz`,
+`Glaz > Settings`, and while a module runs `Glaz > Settings > Brightness`.
 Submenus carry a trailing `>` in the list.
 
 The same row is the **top bar**, left to right:
@@ -220,7 +220,8 @@ The same row is the **top bar**, left to right:
 | Piece | x | Notes |
 | --- | --- | --- |
 | breadcrumb | 60 | sky blue |
-| background icon | 400 | green play triangle, a 16×16 1-bit `frame.display.bitmap`; only while a module runs in the background |
+| background icon | 376 | green play triangle, a 16×16 1-bit `frame.display.bitmap`; only while a module runs in the background |
+| Bluetooth icon | 400 | the Bluetooth rune, same bitmap format; sky blue while a host is connected, grey when not; always shown |
 | clock | 430 | `HH:MM`, grey; `--:--` until the host sends `CLOCK_SET` |
 | battery | 545 | `84%`, grey; red at 15 % or below |
 
@@ -289,6 +290,9 @@ which splits long messages into MTU-sized packets and reassembles them.
 | `0x21` | `MENU_HIDE` | none — hide the menu, return to IDLE |
 | `0x22` | `MENU_SHOW` | none — open the menu without resending items |
 | `0x23` | `CLOCK_SET` | 6 bytes, big-endian: `uint32` unix time, `int16` UTC offset in minutes |
+| `0x24` | `NOTIFY` | ASCII text `app\ntitle\ntext` — see [Host services](#host-services) |
+| `0x25` | `NET_RESPONSE` | `uint8` request id, `uint16` HTTP status (big-endian), then the body |
+| `0x26` | `STATUS_GET` | any one byte — ask for `STATUS`; see [Status](#status) |
 
 `MENU_SET` is an **override**: it replaces the module-defined menu with
 host-supplied labels and resets the cursor. Those items have no module behind
@@ -307,7 +311,7 @@ host is a pure observer.
 
 ### Frame → Host
 
-Every event is exactly 2 bytes.
+Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 
 | Code | Name | Bytes | Meaning |
 | --- | --- | --- | --- |
@@ -319,6 +323,9 @@ Every event is exactly 2 bytes.
 | `0x16` | `APP_STOP` | `[0x16, index]` | module `index` stopped |
 | `0x17` | `MENU_LEVEL` | `[0x17, depth]` | entered a submenu or went up; root is 1 |
 | `0x18` | `APP_BACKGROUND` | `[0x18, index]` | module `index` left the screen but keeps running |
+| `0x19` | `NET_REQUEST` | `[0x19, id, more, bytes...]` | part of a module's HTTP request — see [Host services](#host-services) |
+| `0x1A` | `PHOTO_FROM` | `[0x1A, series]` | the next photo is a single shot (`0`) or part of series `series` — see [Photos](#photos) |
+| `0x1B` | `STATUS` | `[0x1B, battery, version...]` | answer to `STATUS_GET` — see [Status](#status) |
 | `0x07` | photo chunk | `[0x07, jpeg bytes...]` | part of a photo (Camera module) |
 | `0x08` | photo end | `[0x08]` | last chunk; the photo is complete |
 
@@ -348,6 +355,120 @@ and the others let the host track what is on screen.
 
 > The code byte arrives **first in the payload**: the handler receives the whole
 > message, not just the tail. Verified against `frame_msg.py:166`.
+
+---
+
+## Host services
+
+### Plain-language summary
+
+The glasses have no Internet and no phone of their own. While the Glaz app
+on the phone is connected, it lends them both: notifications from the phone
+pop up on the glasses, and an app on the glasses can ask the phone to fetch
+a web page for it. Which apps may do that is up to the user, per app, in
+Glaz > Apps.
+
+### Notifications
+
+`NOTIFY` (`0x24`) carries one notification as three lines: the app's name,
+the title, the text. The phone turns everything into ASCII before sending —
+the display font has nothing else — transliterating Cyrillic and dropping
+what it cannot map, and cuts the text to 200 bytes.
+
+On the glasses it covers whatever is on screen for `NOTICE_SECONDS` (5 s):
+the app name in the top bar, the title in yellow, the text wrapped over the
+four rows below. A tap dismisses it early, and that tap does nothing else.
+What it covered keeps running and comes back. The last `NOTICE_KEEP` (10)
+are kept for the Notifications module (Info > Notifications).
+
+The glasses park in deep sleep only with no host connected, so a connected
+phone always reaches them.
+
+### Internet
+
+A module asks through `_M.host`, which `frame_app.lua` gives every module
+when it loads it:
+
+```lua
+local id, err = _M.host.http('GET', 'https://wttr.in/?format=%t')
+-- later, from tick():
+local status, body = _M.host.result(id)   -- nil while pending
+```
+
+On the wire the request is one text, `module\nMETHOD\nurl\nbody`, cut into
+`NET_REQUEST` packets of at most `frame.bluetooth.max_length()` bytes:
+`[0x19, id, more, bytes...]`, with `more = 0` on the last. `id` runs 1 to
+255 and wraps. `module` is the file name in `modules/`, without `.lua` —
+the name the phone checks the permission against.
+
+The phone answers with one `NET_RESPONSE` (`0x25`): `id`, the HTTP status
+and the body, cut to 4 KB because that is what fits next to the app in the
+glasses' memory. Status `0` means the request never got an answer — no
+permission is not one of those, that is a real `403`. The body then says
+why, as text:
+
+| Status | Body | When |
+| --- | --- | --- |
+| `403` | `not allowed: Glaz > Apps` | the module has no Internet permission, or the service is off |
+| `400` | `bad request` | not `GET` or `POST`, or not an `http(s)` URL |
+| `0` | the error | network error, or no answer within 15 s |
+
+The glasses give up on their own after `NET_TIMEOUT` (20 s): `result()` then
+returns `0, 'timeout'`. A module's requests are dropped when it stops.
+
+`host_test.py` answers these too, so modules like Weather work from a
+laptop. Its permission is the `FRAME_NET_ALLOW` environment variable: module
+names, comma separated, or `*` (the default) for all.
+
+The permission is per module, not per URL: a module that has it may fetch
+anything. Modules are plain Lua the user installed, so one could pass
+another's name; the permission is consent, not a sandbox.
+
+### Photos
+
+Camera and Time series send each JPEG as `0x07` chunks and a final `0x08`
+(the frame_msg camera library). Right before each photo they send
+`PHOTO_FROM` (`0x1A`): `[0x1A, 0]` from Camera, `[0x1A, series]` from Time
+series, where `series` is 1 to 255 and new on every start of a series. It
+also tells the phone a new photo begins, so a photo cut short is not glued
+to the next one.
+
+The phone rotates each photo upright (the sensor is mounted turned by 90
+degrees) and files it by date:
+
+```
+photos/2026-10-14/2026-10-14 17-35-01-137.jpg   single shot, by time taken
+photos/2026-10-14/2026-10-14 17-52-10/          a series, by time started
+    2026-10-14 17-52-14-002.jpg                 ... its photos, by time taken
+```
+
+Every name is a date and time, down to the millisecond for photos, so the
+names alone sort them and say when each was taken.
+
+A photo with the same `series` as the previous one, less than 10 minutes
+after it, goes into the same folder; anything else starts a new one. The
+counter lives on the glasses and restarts at 1 when they do, so the gap is
+what keeps an old folder from being reused. A photo with no `PHOTO_FROM`
+before it counts as a single shot.
+
+### Status
+
+The phone shows the glasses' battery and firmware version. While the app
+runs the REPL is blocked, so it cannot simply evaluate
+`frame.battery_level()`; it sends `STATUS_GET` (`0x26`) instead, on connect
+and every minute after. The payload is ignored, but it must not be empty:
+`frame_ble`'s `sendMessage` sends nothing at all for an empty one.
+
+The glasses answer `[0x1B, battery, version...]`: the battery as the same
+smoothed percentage the top bar shows (255 before the first sample), then
+`frame.FIRMWARE_VERSION` as text, for example `v25.080.0838`.
+
+### One message per code at a time
+
+`data.lua` on the glasses keeps one finished message per code until the
+main loop collects it, so a second `NOTIFY` arriving before the loop runs
+would overwrite the first. The phone therefore sends one message at a time
+and waits 200 ms after each before the next of the same code.
 
 ---
 

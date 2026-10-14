@@ -60,12 +60,14 @@ local data = require('data.min')
 -- submenus. Each module must return a table with a .label and either .run()
 -- (mode 'info') or .tick() (mode 'app'), and may set .background.
 local MENU = {
-  { label = 'Apps',     'photo', 'timeseries', 'stopwatch', 'files' },
+  { label = 'Apps',     'photo', 'timeseries', 'stopwatch', 'files',
+                        'weather' },
   { label = 'Sensors',  'battery', 'tilt', 'taptune' },
-  { label = 'Settings', 'bluetooth', 'brightness', 'sleep' },
-  { label = 'Info',     'uptime', 'firmware', 'about' },
+  { label = 'Settings', 'brightness', 'sleep' },
+  { label = 'Info',     'notifications', 'bluetooth', 'uptime', 'firmware',
+                        'about' },
 }
-local ROOT_LABEL = 'Menu'   -- first crumb of the breadcrumb
+local ROOT_LABEL = 'Glaz'   -- first crumb of the breadcrumb
 local CRUMB_SEP  = ' > '
 
 -- Host -> Frame
@@ -73,6 +75,9 @@ local MENU_SET  = 0x20    -- override items, one per line; see docs/PROTOCOL.md
 local MENU_HIDE = 0x21    -- no payload; hide the menu
 local MENU_SHOW = 0x22    -- no payload; show the menu
 local CLOCK_SET = 0x23    -- '>I4i2': unix time, UTC offset in minutes
+local NOTIFY    = 0x24    -- 'app\ntitle\ntext', ASCII: a phone notification
+local NET_RESPONSE = 0x25 -- '>BI2' id, HTTP status; then the body
+local STATUS_GET = 0x26   -- any payload; answered with STATUS
 
 -- Frame -> Host
 local MENU_SELECT = 0x11  -- [0x11, index] item index was selected (1-based)
@@ -84,6 +89,10 @@ local APP_STOP    = 0x16  -- [0x16, index] module index stopped
 local MENU_LEVEL  = 0x17  -- [0x17, depth] entered a submenu / went back up
 local APP_BACKGROUND = 0x18  -- [0x18, index] module index left the screen
                              -- but keeps running
+local NET_REQUEST = 0x19  -- [0x19, id, more, bytes...] a module's HTTP
+                          -- request, split over packets; more = 0 on the last
+local STATUS      = 0x1B  -- [0x1B, battery %, firmware version...]; 255 =
+                          -- battery not sampled yet
 
 -- Navigation tuning. Scrolling is driven by roll -- tilting the head toward
 -- a shoulder -- not by pitch. Roll has the wider usable swing of the two
@@ -130,6 +139,17 @@ local APP_TIMEOUT     = 60    -- seconds of inactivity before closing an 'app'
 local SLEEP_AFTER     = 30    -- idle seconds before parking in frame.sleep()
                               -- (never while a module runs in the background)
 
+-- Host services (docs/PROTOCOL.md). A notification pops up over whatever is
+-- on screen and goes away by itself, or with a tap; the last few are kept
+-- for the Notifications module. An HTTP request the phone never answers is
+-- given up on after NET_TIMEOUT -- the phone has its own, shorter, timeout.
+local NOTICE_SECONDS = 5
+local NOTICE_KEEP    = 10
+local NOTICE_CHARS   = 26     -- characters per line, under the 29 of
+                              -- (640 - LEFT_X) / CHAR_W: the font is
+                              -- proportional and overflow is dropped
+local NET_TIMEOUT    = 20
+
 -- Startup banner. IDLE is a blank screen, which is indistinguishable from
 -- "the app is not running" -- this is the sign of life. It is the sprite in
 -- sprites/flipper.lua, drawn SPLASH_SCALE times its size; the '<glaz>' text is
@@ -159,7 +179,7 @@ local VISIBLE_ROWS = 5
 local TEXT_ROWS    = 3     -- lines of module output: rows 3..5
 
 -- The top bar, one row at CRUMB_Y, left to right: the breadcrumb, the
--- background icon, the clock and the battery level. The right-hand pieces have fixed x positions, so the
+-- background icon, the Bluetooth icon, the clock and the battery level. The right-hand pieces have fixed x positions, so the
 -- breadcrumb is cut short in front of whichever comes first. Positions are
 -- estimates for a proportional font: '100%' must end before x=640, or the
 -- firmware drops the glyphs that do not fit.
@@ -178,13 +198,23 @@ local STATUS_PERIOD  = 1   -- seconds between checks for a new minute
 -- of two bytes, first pixel in the high bit (sprite_engine.sv). A set bit
 -- draws palette index 1 + ICON_PALETTE, a clear bit is transparent; 9 makes
 -- it index 10, GREEN.
-local ICON_X       = 400
+local ICON_X       = 376
 local ICON_Y       = CRUMB_Y + 10
 local ICON_W       = 16
 local ICON_PALETTE = 9
 local ICON_PLAY    = '\x00\x00\x18\x00\x1E\x00\x1F\x00\x1F\xC0\x1F\xF0' ..
                      '\x1F\xF8\x1F\xFE\x1F\xFE\x1F\xF8\x1F\xF0\x1F\xC0' ..
                      '\x1F\x00\x1E\x00\x18\x00\x00\x00'
+
+-- Bluetooth icon: the rune, right of the background icon, always shown. Same
+-- bitmap format as ICON_PLAY. Palette offsets: 13 draws index 14, SKYBLUE,
+-- while a host is connected; 1 draws index 2, GREY, while none is.
+local BT_X          = 400
+local BT_ON_PALETTE = 13
+local BT_OFF_PALETTE = 1
+local ICON_BT       = '\x00\x00\x01\x80\x01\xC0\x01\xB0\x19\x98\x0D\xB0' ..
+                      '\x07\xC0\x03\x80\x07\xC0\x0D\xB0\x19\x98\x01\xB0' ..
+                      '\x01\xC0\x01\x80\x00\x00\x00\x00'
 
 -- The framebuffer is 640x400 but the wearer does not see all of it. Measured
 -- by probing: y=340 is visible, y=370 is not, so the bottom is clipped.
@@ -207,6 +237,82 @@ data.parsers[MENU_SET]  = function(block) return block end
 data.parsers[MENU_HIDE] = function(block) return block end
 data.parsers[MENU_SHOW] = function(block) return block end
 data.parsers[CLOCK_SET] = function(block) return block end
+data.parsers[NOTIFY]    = function(block) return block end
+data.parsers[NET_RESPONSE] = function(block) return block end
+data.parsers[STATUS_GET] = function(block) return block end
+
+-- Services the phone provides to modules. Each module is handed its own
+-- copy as _M.host, bound to its file name: that name is what the phone
+-- checks the Internet permission against (Glaz > Apps).
+--
+--   local id, err = _M.host.http('GET', url[, body])  -- nil, why on failure
+--   local status, body = _M.host.result(id)  -- nil while pending; then once
+--   _M.host.notices()  -- the kept notifications, newest first:
+--                      -- { app, title, text }
+--
+-- status 0 means the request never got an answer from the server; body says
+-- why. Results are handed out once and then forgotten.
+local notices  = {}
+local requests = {}   -- id -> { owner, at, status, body }; status nil = pending
+local next_req = 0
+
+-- One request, split into packets of what the link can carry. The radio may
+-- still be busy with the previous packet, so each is retried briefly.
+local function send_request(id, payload)
+  local chunk = frame.bluetooth.max_length() - 3
+  local pos = 1
+  repeat
+    local part = string.sub(payload, pos, pos + chunk - 1)
+    pos = pos + chunk
+    local packet = string.char(NET_REQUEST, id, pos <= #payload and 1 or 0)
+                   .. part
+    local sent = false
+    for _ = 1, 50 do
+      if pcall(frame.bluetooth.send, packet) then
+        sent = true
+        break
+      end
+      frame.sleep(0.01)
+    end
+    if not sent then return false end
+  until pos > #payload
+  return true
+end
+
+local function host_api(owner)
+  local api = {}
+
+  function api.http(method, url, body)
+    if not frame.bluetooth.is_connected() then return nil, 'no phone' end
+    next_req = next_req % 255 + 1
+    local id = next_req
+    requests[id] = { owner = owner, at = frame.time.utc() }
+    local payload = owner .. '\n' .. method .. '\n' .. url .. '\n' .. (body or '')
+    if not send_request(id, payload) then
+      requests[id] = nil
+      return nil, 'send failed'
+    end
+    return id
+  end
+
+  function api.result(id)
+    local r = requests[id]
+    if not r or r.owner ~= owner then return 0, 'unknown request' end
+    if r.status == nil then
+      if frame.time.utc() - r.at > NET_TIMEOUT then
+        requests[id] = nil
+        return 0, 'timeout'
+      end
+      return nil
+    end
+    requests[id] = nil
+    return r.status, r.body
+  end
+
+  function api.notices() return notices end
+
+  return api
+end
 
 -- Load the modules and build the tree. A broken module must not take the
 -- whole menu down, so each require is guarded and failures become visible
@@ -222,6 +328,7 @@ data.parsers[CLOCK_SET] = function(block) return block end
 -- double tap lands in the module's own submenu.
 local mods  = {}   -- id -> module table; false if it failed to load
 local paths = {}   -- id -> { root, ..., the level holding the module }
+local names = {}   -- id -> file name in modules/, the module's host identity
 
 local function new_level(label)
   return { label = label, items = {}, sel = 1, top = 1 }
@@ -251,8 +358,10 @@ local function build(spec, label, parent)
     else
       local id = #mods + 1
       paths[id] = path
+      names[id] = entry
       local ok, mod = try_require(entry)
       if ok and type(mod) == 'table' and mod.label then
+        mod.host = host_api(entry)
         mods[id] = mod
         item = { label = mod.label, id = id }
       else
@@ -284,6 +393,8 @@ local run_name = ''     -- its label, the last crumb while it runs
 local run_text = ''     -- what the running module last produced
 local run_at   = 0      -- utc() when the running module started
 local last_act = 0      -- utc() of the last input, drives the menu timeout
+local notice   = nil    -- the notification on screen, over everything else
+local notice_until = 0  -- utc() when it goes away by itself
 
 -- Tap state, filled by the callback and drained by the main loop
 local tap_n     = 0   -- taps in the current multi-tap window (set in callback)
@@ -297,6 +408,33 @@ local function split_lines(s)
     out[#out + 1] = line
   end
   return out
+end
+
+-- Words into lines of at most width characters; a word longer than a line
+-- is cut. Past max lines the last one ends in '..'.
+local function wrap(text, width, max)
+  local lines, line = {}, ''
+  for word in string.gmatch(text, '%S+') do
+    while #word > width do
+      if line ~= '' then lines[#lines + 1] = line; line = '' end
+      lines[#lines + 1] = string.sub(word, 1, width)
+      word = string.sub(word, width + 1)
+    end
+    if line == '' then
+      line = word
+    elseif #line + 1 + #word <= width then
+      line = line .. ' ' .. word
+    else
+      lines[#lines + 1] = line
+      line = word
+    end
+  end
+  if line ~= '' then lines[#lines + 1] = line end
+  if #lines > max then
+    for i = #lines, max + 1, -1 do lines[i] = nil end
+    lines[max] = string.sub(lines[max], 1, width - 2) .. '..'
+  end
+  return lines
 end
 
 local function send(code, value)
@@ -362,12 +500,18 @@ local function battery_level()
   return math.floor(sum / #battery_samples + 0.5)
 end
 
--- What the right end of the top bar shows; a change means a redraw.
-local function status_text()
-  return clock_text() .. ' ' .. tostring(battery_level())
+local function bt_connected()
+  local ok, connected = pcall(frame.bluetooth.is_connected)
+  return ok and connected
 end
 
--- 'Menu > Settings > Brightness'. When it is too wide for right_x, the
+-- What the right end of the top bar shows; a change means a redraw.
+local function status_text()
+  return clock_text() .. ' ' .. tostring(battery_level()) .. ' ' ..
+         tostring(bt_connected())
+end
+
+-- 'Glaz > Settings > Brightness'. When it is too wide for right_x, the
 -- leading crumbs give way to '..': the end of the path is what matters. The
 -- width is only estimated -- the font is proportional, see CHAR_W.
 local function draw_crumbs(parts, right_x)
@@ -382,9 +526,12 @@ local function draw_crumbs(parts, right_x)
 end
 
 -- The whole top bar. last: an extra crumb (the running module's name).
-local function draw_top_bar(last)
-  local parts = {}
-  for i, l in ipairs(stack) do parts[i] = l.label end
+-- crumbs: shown instead of the menu path (a notification's app name).
+local function draw_top_bar(last, crumbs)
+  local parts = crumbs or {}
+  if not crumbs then
+    for i, l in ipairs(stack) do parts[i] = l.label end
+  end
   if last then parts[#parts + 1] = last end
 
   -- the icon, guarded: a bad bitmap call must not take the screen down
@@ -392,7 +539,9 @@ local function draw_top_bar(last)
     pcall(frame.display.bitmap, ICON_X, ICON_Y, ICON_W, 2, ICON_PALETTE,
           ICON_PLAY)
   end
-  draw_crumbs(parts, (bg and ICON_X or TIME_X) - CHAR_W // 2)
+  pcall(frame.display.bitmap, BT_X, ICON_Y, ICON_W, 2,
+        bt_connected() and BT_ON_PALETTE or BT_OFF_PALETTE, ICON_BT)
+  draw_crumbs(parts, (bg and ICON_X or BT_X) - CHAR_W // 2)
 
   frame.display.text(clock_text(), TIME_X, CRUMB_Y, { color = 'GREY' })
   local level = battery_level()
@@ -403,6 +552,22 @@ local function draw_top_bar(last)
 end
 
 local function render()
+  -- A notification covers everything; what was under it carries on and is
+  -- drawn again when it goes.
+  if notice then
+    set_display(true)
+    draw_top_bar(nil, { notice[1] })
+    if notice[2] ~= '' then
+      frame.display.text(string.sub(notice[2], 1, NOTICE_CHARS), LEFT_X,
+                         TOP_Y, { color = 'YELLOW' })
+    end
+    for i, line in ipairs(wrap(notice[3], NOTICE_CHARS, VISIBLE_ROWS - 1)) do
+      frame.display.text(line, LEFT_X, TOP_Y + ROW_H * i, { color = 'WHITE' })
+    end
+    frame.display.show()
+    return
+  end
+
   -- panel on before drawing, off only after the screen has been cleared
   if running or visible then set_display(true) end
 
@@ -502,6 +667,10 @@ end
 local function quit(id)
   local mod = mods[id]
   if mod and mod.stop then pcall(mod.stop) end
+  -- its unanswered requests would never be collected
+  for rid, r in pairs(requests) do
+    if r.owner == names[id] then requests[rid] = nil end
+  end
   if bg == id then bg, bg_name = nil, '' end
   if not bg then release_hardware() end
   send(APP_STOP, id)
@@ -888,6 +1057,12 @@ function app_loop()
         render()
       end
 
+      -- a notification has had its time; what it covered comes back
+      if notice and now > notice_until then
+        notice = nil
+        render()
+      end
+
       -- 1. incoming messages from the host
       if data.process_raw_items() > 0 then
         if data.app_data[MENU_SET] ~= nil then
@@ -901,6 +1076,7 @@ function app_loop()
           if bg then quit(bg) end
           mods = {}
           paths = {}
+          names = {}
           last = nil
           root = new_level(ROOT_LABEL)
           for i, line in ipairs(lines) do
@@ -918,6 +1094,47 @@ function app_loop()
             local unix, tz = string.unpack('>I4i2', block)
             clock_offset = unix + tz * 60 - frame.time.utc()
             if visible or running then render() end
+          end
+        end
+
+        if data.app_data[NOTIFY] ~= nil then
+          local app, title, text = string.match(data.app_data[NOTIFY],
+                                                '^([^\n]*)\n([^\n]*)\n?(.*)$')
+          data.app_data[NOTIFY] = nil
+          if app then
+            table.insert(notices, 1, { app, title, text })
+            notices[NOTICE_KEEP + 1] = nil
+            notice = notices[1]
+            notice_until = now + NOTICE_SECONDS
+            splash_until = 0
+            last_act = now
+            render()
+          end
+        end
+
+        if data.app_data[NET_RESPONSE] ~= nil then
+          local block = data.app_data[NET_RESPONSE]
+          data.app_data[NET_RESPONSE] = nil
+          if #block >= 3 then
+            local id, status = string.unpack('>BI2', block)
+            local r = requests[id]
+            -- a request already given up on, or of a module since stopped,
+            -- is no longer in the table: the answer is dropped
+            if r and r.status == nil then
+              r.status, r.body = status, string.sub(block, 4)
+            end
+          end
+        end
+
+        -- The REPL is blocked while the app runs, so the phone asks here.
+        -- The battery is the same smoothed level as in the top bar.
+        if data.app_data[STATUS_GET] ~= nil then
+          data.app_data[STATUS_GET] = nil
+          local packet = string.char(STATUS, battery_level() or 255) ..
+                         tostring(frame.FIRMWARE_VERSION)
+          for _ = 1, 50 do
+            if pcall(frame.bluetooth.send, packet) then break end
+            frame.sleep(0.01)
           end
         end
 
@@ -949,6 +1166,7 @@ function app_loop()
           tap_mute = tap_at + TAP_WINDOW
         else
           tap_mute = now + TAP_WINDOW
+          notice = nil   -- whatever comes next replaces it
           -- The menu must ALWAYS be reachable, from every state.
           if visible then
             close_menu()
@@ -965,6 +1183,13 @@ function app_loop()
         if now < tap_mute then
           tap_mute = tap_at + TAP_WINDOW
           n = 0   -- trailing taps of a toggle mean nothing
+        end
+
+        -- a tap on a notification only dismisses it
+        if notice and n > 0 then
+          notice = nil
+          n = 0
+          render()
         end
 
         if n == 1 then
@@ -1034,8 +1259,9 @@ function app_loop()
         end
 
       -- 4. head tilt scrolls the menu. Nothing polls the IMU while IDLE,
-      --    which saves battery.
-      elseif visible and #level().items > 0 then
+      --    which saves battery. Nor under a notification: the cursor would
+      --    move unseen.
+      elseif visible and not notice and #level().items > 0 then
         local dir = roll_step(now)
         if dir ~= 0 then move(dir) end
 

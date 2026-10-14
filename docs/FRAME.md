@@ -200,6 +200,13 @@ Everything below follows from that.
    sit in a bare REPL with `loading...` on screen. Nothing is broken; run the
    upload again.
 
+8. **BlueZ keeps the link after a script is killed.** Once bonded, the link
+   can stay up (`bluetoothctl info` says `Connected: yes`) after the Python
+   process dies. A connected Frame does not advertise, so the next scan finds
+   nothing. Run `bluetoothctl disconnect E0:EF:CE:1C:08:15` first.
+9. **`GATT Protocol Error: Unlikely Error` on the reset signal** -- the
+   glasses reboot before acknowledging the write. Just run the upload again.
+
 The working recipe used both workarounds: find Frame by address with a long
 scan, and pair on connect. Both are monkey-patches around frame_ble 1.1.1, which
 has no options for them:

@@ -14,6 +14,10 @@
 -- run_auto_exposure() are used from it: its auto-exposure and metering
 -- messages use 0x11 / 0x12, which collide with this app's menu events.
 --
+-- Before each photo it sends PHOTO_FROM [0x1A, 0]: 0 says "a single shot",
+-- so the phone files it under the day rather than in a series folder
+-- (docs/PROTOCOL.md, "Photos").
+--
 -- The camera is powered only while this module is open. frame_app.lua powers
 -- it down again on every exit path (release_hardware), stop() included.
 local camera = require('camera.min')
@@ -31,6 +35,8 @@ local QUALITY    = 'MEDIUM'  -- VERY_LOW .. VERY_HIGH; bigger = slower to send
 -- a tap that comes sooner runs it here until this much time has passed.
 local WARMUP     = 1.5       -- seconds
 local AE_STEP    = 0.1       -- seconds between exposure updates while warming
+
+local PHOTO_FROM = 0x1A
 
 local opened_at = 0
 local shots = 0
@@ -64,6 +70,12 @@ function _M.on_tap()
   while frame.time.utc() - opened_at < WARMUP do
     pcall(camera.run_auto_exposure)
     frame.sleep(AE_STEP)
+  end
+
+  -- the photo's label; worth a retry, the radio may still be busy
+  for _ = 1, 50 do
+    if pcall(frame.bluetooth.send, string.char(PHOTO_FROM, 0)) then break end
+    frame.sleep(0.01)
   end
 
   -- Blocks the app loop for the length of the transfer, about 1-3 s at this
