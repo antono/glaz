@@ -137,14 +137,16 @@ at the top of `frame_app.lua`:
 
 ```lua
 local MENU = {
-  { label = 'Apps',     'photo' },
-  { label = 'Settings', 'battery', 'uptime', 'brightness', 'firmware', 'tilt' },
+  { label = 'Apps',     'photo', 'timeseries', 'stopwatch' },
+  { label = 'Sensors',  'battery', 'tilt', 'taptune' },
+  { label = 'Settings', 'bluetooth', 'brightness' },
+  { label = 'Info',     'uptime', 'firmware', 'about' },
 }
 ```
 
 A string is a module; a table is a submenu — its `label`, then its entries,
 which can be submenus again. The order is the display order. Modules are
-numbered in tree order (`photo` = 1, `battery` = 2, ...); that number is the
+numbered in tree order (`photo` = 1, `timeseries` = 2, ...); that number is the
 `index` in `APP_START` / `APP_STOP`. The host uploads every
 `modules/*.lua` to the device root, because `frame_app.lua` requires them by
 bare name.

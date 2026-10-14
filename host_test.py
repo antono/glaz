@@ -104,8 +104,18 @@ async def start_app(frame, name, timeout=20):
 
 async def main():
     frame = FrameMsg()
-    await frame.connect()
+    # Not connect()'s own break/reset/break: the reset reboots main.lua, and
+    # with the app installed the glasses then dropped the link a few seconds
+    # later, every time (measured; cause not found). Instead: break the
+    # running app, take main.lua out of the way, and only then reset -- into
+    # a bare REPL with all memory free for the upload. The upload below
+    # writes main.lua back.
+    await frame.connect(initialize=False)
     print("Connected.")
+    await wait_for_repl(frame)
+    await frame.send_lua("pcall(frame.file.remove, 'main.lua');print('cleared')",
+                         await_print=True)
+    await frame.ble.send_reset_signal()
     await wait_for_repl(frame)
 
     # Not print_short_text(): that helper hardcodes (1, 1), which is in the

@@ -182,7 +182,59 @@ Flashing needs no debugger and no disassembly:
 
 1. `frame.update()` — the device reboots into the bootloader and advertises as
    `Frame Update`, timing out after 5 minutes.
-2. DFU the `.zip` with nRF Connect.
+2. DFU the `.zip`.
+
+### Step 2, in practice
+
+**nRF Connect on a phone** is the path that always works. Transfer the `.zip`
+to the phone, connect to `Frame Update`, run DFU.
+
+**From Linux**, it can be done from the command line:
+
+```bash
+git clone https://github.com/bringert/nrf5-ota-dfu-python.git
+cd nrf5-ota-dfu-python
+pip install bleak pexpect intelhex
+
+which gatttool || echo 'missing -- see below'
+
+python dfu.py --secure -z <firmware>.zip -a <MAC>
+```
+
+Two things that are easy to lose time on:
+
+- Despite its README, this tool only uses **bleak for scanning**; the transfer
+  itself drives **`gatttool`** from BlueZ. That makes it Linux-only, and
+  `gatttool` has been deprecated since BlueZ 5.44 — distributions often ship
+  it only if built with `--enable-deprecated`. Check before relying on it.
+- Addresses differ by platform. Linux uses the real MAC (ours is
+  `E0:EF:CE:1C:08:15`, the reverse of what AR Studio prints); macOS reports
+  opaque CoreBluetooth UUIDs instead, which is one reason the tool is not
+  portable.
+
+**From macOS there is currently no command-line path.** `nrfutil`'s BLE DFU
+needs an nRF dongle to act as the central, and no maintained PyPI package
+implements Nordic Secure DFU over bleak. Writing one is tractable — the
+protocol is just the control point `8EC90001-F315-4F60-9FB8-838830DAEA50` and
+the packet characteristic `…0002`, with select/create/execute per object — but
+it does not exist off the shelf.
+
+### Entering the bootloader
+
+```bash
+.venv/bin/python -c "
+import asyncio
+from frame_ble import FrameBle
+async def main():
+    f = FrameBle(); await f.connect()
+    await f.send_break_signal(); await asyncio.sleep(0.6)
+    try: await f.send_lua('frame.update()')
+    except Exception: pass   # no reply is expected, it reboots
+asyncio.run(main())"
+```
+
+Then scan for `Frame Update`. The window is **5 minutes**; letting it expire is
+harmless, the glasses simply boot back into the app.
 
 ### Risk
 

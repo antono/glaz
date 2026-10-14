@@ -61,8 +61,9 @@ local data = require('data.min')
 -- (mode 'info') or .tick() (mode 'app'), and may set .background.
 local MENU = {
   { label = 'Apps',     'photo', 'timeseries', 'stopwatch' },
-  { label = 'Settings', 'battery', 'uptime', 'brightness', 'firmware', 'tilt',
-                        'taptune' },
+  { label = 'Sensors',  'battery', 'tilt', 'taptune' },
+  { label = 'Settings', 'bluetooth', 'brightness' },
+  { label = 'Info',     'uptime', 'firmware', 'about' },
 }
 local ROOT_LABEL = 'Menu'   -- first crumb of the breadcrumb
 local CRUMB_SEP  = ' > '
@@ -131,14 +132,15 @@ local SLEEP_AFTER     = 30    -- idle seconds before parking in frame.sleep()
 
 -- Startup banner. IDLE is a blank screen, which is indistinguishable from
 -- "the app is not running" -- this is the sign of life. It is the sprite in
--- sprites/eye.lua, drawn SPLASH_SCALE times its size; the '<okulo>' text is
+-- sprites/flipper.lua, drawn SPLASH_SCALE times its size; the '<glaz>' text is
 -- only a fallback for when the sprite cannot be loaded.
-local SPLASH_SPRITE   = 'eye'
-local SPLASH_SCALE    = 2
-local SPLASH_TEXT     = 'okulo'
+local SPLASH_SPRITE   = 'flipper'
+local SPLASH_SCALE    = 3
+local SPLASH_TEXT     = 'glaz'
 local SPLASH_COLOR    = 'GREEN'
 local SPLASH_BRACKETS = 'RED'
-local SPLASH_SECONDS  = 2
+local SPLASH_SECONDS  = 3   -- counted from when drawing ends: drawing the
+                            -- 128x64 sprite at 3x takes about 1.5 s itself
 
 -- Tap tuning
 local TAP_BOUNCE = 0.15  -- taps closer than this are sensor bounce, not input
@@ -164,7 +166,11 @@ local TEXT_ROWS    = 3     -- lines of module output: rows 3..5
 local TIME_X       = 430   -- 'HH:MM', or '--:--' until the host sets it
 local BATTERY_X    = 545   -- '84%'
 local BATTERY_LOW  = 15    -- percent; drawn in red at or below this
-local BATTERY_PERIOD = 30  -- seconds between battery readings
+-- The battery reading is a voltage estimate and swings by 10-15 points
+-- between samples while the radio transmits (docs/BATTERY.md), so the top bar
+-- shows the mean of every sample from the last BATTERY_WINDOW instead.
+local BATTERY_SAMPLE = 10  -- seconds between battery samples, in any state
+local BATTERY_WINDOW = 300 -- seconds of samples averaged for the top bar
 local STATUS_PERIOD  = 1   -- seconds between checks for a new minute
 
 -- Background icon: a play triangle left of the clock, shown while a module
@@ -328,19 +334,30 @@ local function clock_text()
   return string.format('%02d:%02d', (t // 3600) % 24, (t // 60) % 60)
 end
 
--- battery_level() is read at most every BATTERY_PERIOD; it is a voltage
--- estimate and does not move faster than that anyway (docs/BATTERY.md).
-local battery = nil
-local battery_at = -BATTERY_PERIOD
+-- Battery samples, oldest first: { utc(), level }. Taken from the main loop
+-- whatever the state, so the average is ready when the top bar is drawn.
+-- Samples older than the window are dropped by age, not count: after deep
+-- sleep, the samples from before it are simply gone.
+local battery_samples = {}
+local battery_next = 0   -- utc() of the next sample
 
-local function battery_level()
-  local now = frame.time.utc()
-  if now - battery_at >= BATTERY_PERIOD then
-    battery_at = now
-    local ok, level = pcall(frame.battery_level)
-    if ok then battery = math.floor(level) end
+local function sample_battery(now)
+  if now < battery_next then return end
+  battery_next = now + BATTERY_SAMPLE
+  local ok, level = pcall(frame.battery_level)
+  if ok then battery_samples[#battery_samples + 1] = { now, level } end
+  while #battery_samples > 0 and now - battery_samples[1][1] > BATTERY_WINDOW do
+    table.remove(battery_samples, 1)
   end
-  return battery
+end
+
+-- Mean of the last BATTERY_WINDOW of samples, rounded; nil before the first.
+local function battery_level()
+  sample_battery(frame.time.utc())
+  if #battery_samples == 0 then return nil end
+  local sum = 0
+  for _, s in ipairs(battery_samples) do sum = sum + s[2] end
+  return math.floor(sum / #battery_samples + 0.5)
 end
 
 -- What the right end of the top bar shows; a change means a redraw.
@@ -675,49 +692,84 @@ frame.imu.tap_callback(function()
   tap_at = t
 end)
 
--- The splash sprite, packed for frame.display.bitmap: one string per art
--- row, already scaled, so drawing is one call per row. 16-colour sprites take
--- 4 bits a pixel, first pixel in the high nibble (sprite_engine.sv), and
--- palette index 0 is transparent.
+-- The splash sprite, drawn with frame.display.bitmap one art row at a time.
+-- 16-colour sprites take 4 bits a pixel, first pixel in the high nibble
+-- (sprite_engine.sv), and palette index 0 is transparent.
 --
--- Packed, drawn and thrown away every time, sprite file included. Memory
--- is what runs out on Frame: holding the art and the packed rows (about
--- 15 KB) for a picture shown for two seconds pushed the app over the edge,
--- and the firmware reboots when it cannot allocate.
-local splash_w = 0
-
-local function pack_splash()
-  -- loadfile, not require: require would keep the art cached for good, and
-  -- Frame's Lua has no package table to evict it from
-  local ok, sprite = pcall(function()
-    return assert(loadfile(SPLASH_SPRITE .. '.lua'))()
-  end)
-  if not ok and string.find(tostring(sprite), 'break signal', 1, true) then
-    error(sprite, 0)
-  end
-  if not ok or type(sprite) ~= 'table' or not sprite.art then return nil end
-
-  local rows = {}
-  for i, line in ipairs(sprite.art) do
-    -- widen: every art pixel becomes SPLASH_SCALE screen pixels
-    local px = {}
-    for c in string.gmatch(line, '.') do
-      local v = sprite.colors[c] or 0
-      for _ = 1, SPLASH_SCALE do px[#px + 1] = v end
+-- Memory is what runs out on Frame, and the firmware reboots when it cannot
+-- allocate. So the sprite file is never compiled: require would keep the art
+-- cached for good (Frame's Lua has no package table to evict it from),
+-- loadfile(name)() comes back nil on Frame, and reading the file into one
+-- string to load() it died with 'not enough memory' next to the running
+-- app (all measured, firmware v25.080.0838). Instead the file is scanned as
+-- text, line by line, in the fixed format of sprites/*.lua:
+--   colours:  "  w = 1," or "  ['.'] = 0,"
+--   art rows: "  '....',"
+-- Two passes: the first collects the colours and the size, the second packs
+-- and draws each row as it is read. Only one row is ever held.
+local function scan_sprite(name, on_row)
+  local fh = frame.file.open(name .. '.lua', 'read')
+  while true do
+    local line = fh:read()
+    if line == nil then break end
+    local row = string.match(line, "^%s*'([^']*)',?%s*$")
+    if row then
+      on_row(row)
+    else
+      local key, value = string.match(line, "^%s*%['(.)'%]%s*=%s*(%d+)")
+      if not key then
+        key, value = string.match(line, "^%s*(%a)%s*=%s*(%d+),")
+      end
+      if key then on_row(nil, key, tonumber(value)) end
     end
-    if #px % 2 == 1 then px[#px + 1] = 0 end   -- whole bytes per row
-    local bytes = {}
-    for k = 1, #px, 2 do
-      bytes[#bytes + 1] = string.char(px[k] * 16 + px[k + 1])
-    end
-    -- heighten: the same row, SPLASH_SCALE times over
-    rows[i] = string.rep(table.concat(bytes), SPLASH_SCALE)
-    splash_w = #px
   end
-  return rows
+  fh:close()
 end
 
--- '<okulo>' centred, with the brackets in a second colour: the fallback. Two
+-- One art row as a bitmap strip: widened SPLASH_SCALE times, then repeated
+-- SPLASH_SCALE times to make it as tall.
+local function pack_row(line, colors)
+  local px = {}
+  for c in string.gmatch(line, '.') do
+    local v = colors[c] or 0
+    for _ = 1, SPLASH_SCALE do px[#px + 1] = v end
+  end
+  if #px % 2 == 1 then px[#px + 1] = 0 end   -- whole bytes per row
+  local bytes = {}
+  for k = 1, #px, 2 do
+    bytes[#bytes + 1] = string.char(px[k] * 16 + px[k + 1])
+  end
+  return string.rep(table.concat(bytes), SPLASH_SCALE), #px
+end
+
+-- Draw the sprite centred in the visible area. Returns false when the file
+-- is missing or holds no art, so the caller can fall back to text.
+local function draw_sprite(name)
+  local colors, rows, width = {}, 0, 0
+  scan_sprite(name, function(row, key, value)
+    if row then
+      rows = rows + 1
+      width = #row * SPLASH_SCALE
+    else
+      colors[key] = value
+    end
+  end)
+  if rows == 0 then return false end
+
+  width = width + width % 2
+  local x = (SCREEN_W - width) // 2
+  local y = (VISIBLE_BOTTOM - rows * SPLASH_SCALE) // 2
+  scan_sprite(name, function(row)
+    if row then
+      local strip, w = pack_row(row, colors)
+      frame.display.bitmap(x, y, w, 16, 0, strip)
+      y = y + SPLASH_SCALE
+    end
+  end)
+  return true
+end
+
+-- '<glaz>' centred, with the brackets in a second colour: the fallback. Two
 -- overlapping draws, not three adjacent ones. The whole string goes down in
 -- the bracket colour first, so the firmware computes every advance; then the
 -- word alone is drawn over it in the text colour, offset by the width of
@@ -732,24 +784,16 @@ local function draw_splash_text()
   frame.display.text(SPLASH_TEXT, x + BRACKET_W, y, { color = SPLASH_COLOR })
 end
 
--- The sprite, centred in the visible area.
+-- The sprite, or the text if it cannot be drawn. Guarded: a missing or
+-- broken sprite file must not stop the app from starting.
 local function draw_splash()
   set_display(true)
-  local splash_rows = pack_splash()
-
-  if splash_rows then
-    local h = #splash_rows * SPLASH_SCALE
-    local x = (SCREEN_W - splash_w) // 2
-    local y = (VISIBLE_BOTTOM - h) // 2
-    for i, row in ipairs(splash_rows) do
-      pcall(frame.display.bitmap, x, y + (i - 1) * SPLASH_SCALE, splash_w, 16,
-            0, row)
-    end
-  else
-    draw_splash_text()
+  local ok, drawn = pcall(draw_sprite, SPLASH_SPRITE)
+  if not ok and string.find(tostring(drawn), 'break signal', 1, true) then
+    error(drawn, 0)
   end
+  if not (ok and drawn) then draw_splash_text() end
   frame.display.show()
-  splash_rows = nil
   collectgarbage('collect')
 end
 
@@ -924,7 +968,7 @@ function app_loop()
             -- Nothing launched yet. The tap is the sign of life: flash the
             -- banner, then fall back to blank on its own.
             draw_splash()
-            splash_until = now + SPLASH_SECONDS
+            splash_until = frame.time.utc() + SPLASH_SECONDS
             last_act = now   -- a tap postpones deep sleep
           elseif mods[running] and mods[running].on_tap then
             module_input(mods[running].on_tap)
@@ -1002,8 +1046,10 @@ function app_loop()
         end
       end
 
-      -- 7. the clock turns over a minute, or the battery level moves: the
-      --    top bar is out of date
+      -- 7. battery samples for the average, taken in every state; then, if
+      --    the clock turned over a minute or the average moved, the top bar
+      --    is out of date
+      sample_battery(now)
       if (visible or running) and now >= next_status then
         next_status = now + STATUS_PERIOD
         local status = status_text()
@@ -1053,7 +1099,7 @@ function app_loop()
         last_act = woke
 
         draw_splash()
-        splash_until = woke + SPLASH_SECONDS
+        splash_until = frame.time.utc() + SPLASH_SECONDS
 
       else
         frame.sleep(IDLE_PERIOD)
