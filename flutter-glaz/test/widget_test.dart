@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glaz/main.dart';
@@ -9,6 +8,8 @@ void main() {
 
     expect(find.text('GLASSES'), findsOneWidget);
     expect(find.text('Not connected'), findsOneWidget);
+    // The gestures card is below the fold of the 800x600 test screen.
+    await tester.scrollUntilVisible(find.text('3 taps'), 200);
     expect(find.text('3 taps'), findsOneWidget);
   });
 
