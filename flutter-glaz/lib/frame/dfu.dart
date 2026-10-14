@@ -5,6 +5,7 @@ import 'package:frame_ble/brilliant_dfu_device.dart';
 import 'package:frame_ble/frame_ble.dart';
 
 import 'firmware.dart';
+import 'link.dart';
 import 'upload.dart';
 
 /// Installing a firmware package over Bluetooth (Nordic Secure DFU), the
@@ -25,6 +26,7 @@ import 'upload.dart';
 /// bootloader never is, so a bad build is undone by installing an official
 /// one the same way (docs/FIRMWARE.md, docs/RECOVERY.md).
 Future<void> installFirmware(
+  FrameLink link,
   BrilliantDevice device,
   FirmwarePackage package,
   void Function(String step, [double? progress]) report,
@@ -38,6 +40,10 @@ Future<void> installFirmware(
     // no answer: the glasses reset before sending one
     await device.sendString('frame.update()', awaitResponse: false);
   } catch (_) {}
+
+  // Let go of the glasses as they were, auto-reconnect and all: it would
+  // hold the radio with 30 s connect attempts while the bootloader waits.
+  await link.release();
 
   report('Looking for Frame Update');
   final bootloader = await _findBootloader(const Duration(seconds: 60));
@@ -63,6 +69,30 @@ Future<void> installFirmware(
   try {
     await dfu.disconnect();
   } catch (_) {}
+
+  report('Connecting to the glasses again');
+  await link.reconnect(const Duration(seconds: 60));
+
+  // Their app answers STATUS with the firmware version. No answer means the
+  // firmware is in but the app did not start: Upload puts it back.
+  report('Checking the version');
+  link.firmware = null;
+  await link.requestStatus(duringTask: true);
+  final deadline = DateTime.now().add(const Duration(seconds: 10));
+  while (link.firmware == null && DateTime.now().isBefore(deadline)) {
+    await Future.delayed(const Duration(milliseconds: 250));
+  }
+  final now = link.firmware;
+  if (now == null) {
+    throw Exception(
+      'installed, but the app on the glasses does not answer; '
+      'Upload it again',
+    );
+  }
+  if (now != package.version) {
+    throw Exception('the glasses still report $now');
+  }
+  report('Installed ${package.version}', 1);
 }
 
 /// The first device advertising the DFU service. Not BrilliantBluetooth.scan:

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:frame_ble/frame_ble.dart';
 
 import 'protocol.dart';
@@ -51,31 +52,88 @@ class FrameLink extends ChangeNotifier {
   Future<void> connect() async {
     if (state != LinkState.disconnected) return;
     error = null;
-    _set(LinkState.scanning);
     try {
-      await BrilliantBluetooth.requestPermission();
-      final scanned = await BrilliantBluetooth.scan().first.timeout(
-        const Duration(seconds: 15),
-        onTimeout: () => throw TimeoutException('no glasses found'),
-      );
-      if (state != LinkState.scanning) return; // cancelled meanwhile
-      _set(LinkState.connecting);
-      final device = await BrilliantBluetooth.connect(scanned);
-      // frame_ble reconnects by itself on Android and reports it here
-      _conn = device.connectionState.listen((d) {
-        if (d.state == BrilliantConnectionState.connected) {
-          _attach(d);
-        } else {
-          _detach(LinkState.connecting);
-        }
-      });
-      _attach(device);
+      await _connect(const Duration(seconds: 15));
     } catch (e) {
       error = '$e';
-      try {
-        await BrilliantBluetooth.stopScan();
-      } catch (_) {}
       _set(LinkState.disconnected);
+    }
+  }
+
+  /// Connects again from inside a task, after [release]: the glasses come
+  /// back from a reboot (new firmware) and are looked for anew. Throws if
+  /// they do not show up within [timeout].
+  Future<void> reconnect(Duration timeout) async {
+    _set(LinkState.disconnected);
+    try {
+      await _connect(timeout);
+    } catch (_) {
+      _set(LinkState.disconnected);
+      rethrow;
+    }
+  }
+
+  /// Gives up the link entirely, auto-reconnect included, so the radio is
+  /// free for another connection -- the DFU bootloader. flutter_blue_plus
+  /// runs one connect at a time, and frame_ble's reconnect to glasses that
+  /// are gone ties it up for 30 s per attempt, over and over (seen: the
+  /// bootloader timed out waiting behind it).
+  Future<void> release() async {
+    await _conn?.cancel();
+    _conn = null;
+    final device = _device;
+    _detach(LinkState.disconnected);
+    try {
+      await device?.disconnect();
+    } catch (_) {}
+  }
+
+  /// Scan for the glasses running their app -- service 7a230001 only, so
+  /// the DFU bootloader (fe59) is never taken for them -- and connect.
+  Future<void> _connect(Duration timeout) async {
+    _set(LinkState.scanning);
+    await BrilliantBluetooth.requestPermission();
+    final scanned = await _scanForApp(timeout);
+    if (state != LinkState.scanning) return; // cancelled meanwhile
+    _set(LinkState.connecting);
+    final device = await BrilliantBluetooth.connect(scanned);
+    if (device.state != BrilliantConnectionState.connected) {
+      await device.disconnect();
+      throw Exception('the glasses are in update mode');
+    }
+    // frame_ble reconnects by itself on Android and reports it here
+    _conn = device.connectionState.listen((d) {
+      if (d.state == BrilliantConnectionState.connected) {
+        _attach(d);
+      } else {
+        _detach(LinkState.connecting);
+      }
+    });
+    _attach(device);
+  }
+
+  static Future<BrilliantScannedDevice> _scanForApp(Duration timeout) async {
+    final found = Completer<BrilliantScannedDevice>();
+    final sub = FlutterBluePlus.onScanResults.listen((results) {
+      if (results.isNotEmpty && !found.isCompleted) {
+        final r = results.reduce((a, b) => a.rssi >= b.rssi ? a : b);
+        found.complete(BrilliantScannedDevice(device: r.device, rssi: r.rssi));
+      }
+    });
+    try {
+      await FlutterBluePlus.startScan(
+        withServices: [Guid('7a230001-5475-a6a4-654c-8431f6ad49c4')],
+        timeout: timeout,
+      );
+      return await found.future.timeout(
+        timeout,
+        onTimeout: () => throw TimeoutException('no glasses found'),
+      );
+    } finally {
+      await sub.cancel();
+      try {
+        await FlutterBluePlus.stopScan();
+      } catch (_) {}
     }
   }
 
@@ -90,12 +148,12 @@ class FrameLink extends ChangeNotifier {
       _events.add(m);
     });
     _set(LinkState.connected);
-    if (busy) return; // a reset during Upload; the job carries on
-    _greet();
     _statusTimer?.cancel();
     _statusTimer = Timer.periodic(statusEvery, (_) {
       if (!busy) requestStatus();
     });
+    // during a task the app is stopped; runTask greets it when done
+    if (!busy) _greet();
   }
 
   void _greet() {
@@ -107,7 +165,8 @@ class FrameLink extends ChangeNotifier {
 
   /// Ask for battery and firmware; the answer comes as STATUS. One byte of
   /// payload, because frame_ble sends nothing for an empty one.
-  Future<void> requestStatus() => send(statusGet, [0]);
+  Future<void> requestStatus({bool duringTask = false}) =>
+      send(statusGet, [0], duringTask: duringTask);
 
   /// [0x1B, battery %, firmware version...]; 255 = not sampled yet.
   @visibleForTesting
@@ -179,12 +238,14 @@ class FrameLink extends ChangeNotifier {
   Future<void> _tail = Future.value();
   final _lastSent = <int, DateTime>{};
 
-  Future<void> send(int code, List<int> payload) {
+  /// [duringTask]: send even while a task has the glasses -- for a task
+  /// that has started the app again itself.
+  Future<void> send(int code, List<int> payload, {bool duringTask = false}) {
     final job = _tail.then((_) async {
       final device = _device;
       // nothing for the app while a task has stopped it: a data packet's
       // answer would be taken for the REPL's
-      if (device == null || busy) return;
+      if (device == null || (busy && !duringTask)) return;
       final last = _lastSent[code];
       if (last != null) {
         final wait = sameCodeGap - DateTime.now().difference(last);

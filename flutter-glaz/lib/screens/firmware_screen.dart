@@ -166,7 +166,7 @@ class _FirmwareScreenState extends State<FirmwareScreen> {
     if (ok != true) return;
     await link.runTask(
       'Firmware',
-      (device, report) => installFirmware(device, package, report),
+      (device, report) => installFirmware(link, device, package, report),
     );
   }
 }
