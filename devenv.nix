@@ -51,9 +51,11 @@ in
     venv.requirements = ./requirements.txt;
   };
 
-  # Flutter for the companion app, with an Android SDK to build it. The app
-  # runs on a real phone next to the glasses, so the emulator and its system
-  # images (several GB) are left out.
+  # Flutter for the companion app, with an Android SDK to build it and one
+  # emulator image to try it on. The image is the host's own architecture
+  # only -- arm64 on Apple Silicon and ARM Linux, x86_64 elsewhere -- since
+  # each extra one is well over a gigabyte. Talking to the glasses still
+  # needs a real phone: the emulator has no Bluetooth.
   android = {
     enable = true;
     flutter.enable = true;
@@ -61,14 +63,26 @@ in
     # compileSdk/targetSdk 36). The SDK lives in the read-only Nix store, so
     # Gradle cannot fetch missing parts itself; they must be listed here. The
     # NDK default (28.2.13676358) already matches.
-    platforms.version = [ "36" "35" ];
+    platforms.version = [ "36" ];
     buildTools.version = [ "36.0.0" "35.0.0" ];
-    emulator.enable = false;
-    systemImages.enable = false;
+    emulator.enable = true;
+    systemImages.enable = true;
+    systemImageTypes = [ "google_apis" ];
+    abis = if pkgs.stdenv.hostPlatform.isAarch64 then [ "arm64-v8a" ] else [ "x86_64" ];
     googleTVAddOns.enable = false;
   };
 
   scripts = {
+    # Create the emulator on first use, then boot it. The AVD lives in
+    # .android/avd (ignored); the system image is the one in the SDK above.
+    emulator-start.exec = ''
+      abi=${if pkgs.stdenv.hostPlatform.isAarch64 then "arm64-v8a" else "x86_64"}
+      if ! avdmanager list avd -c | grep -qx glaz; then
+        echo no | avdmanager create avd --force -n glaz -d pixel_6 \
+          -k "system-images;android-36;google_apis;$abi"
+      fi
+      emulator -avd glaz -no-snapshot-save "$@"
+    '';
     check.exec = ''./check.sh'';
     upload.exec = ''python host_test.py "$@"'';
     sprite.exec = ''python utils/show_sprite.py "$@"'';
@@ -88,6 +102,7 @@ in
     echo "  check            static checks for the Lua side"
     echo "  upload           upload the app to the glasses and listen"
     echo "  sprite NAME N    show sprites/NAME.lua at N x on the glasses"
+    echo "  emulator-start   boot the Android emulator (first run creates it)"
     echo "  cd flutter-glaz && flutter run    the companion app"
   '';
 }

@@ -39,6 +39,7 @@ Flutter with an Android SDK -- comes from [devenv](https://devenv.sh)
 devenv shell             # first run downloads the Android SDK
 check                    # ./check.sh
 upload                   # python host_test.py
+emulator-start &         # Android emulator for flutter-glaz/
 python utils/connect.py
 ```
 

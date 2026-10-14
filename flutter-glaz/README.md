@@ -21,14 +21,15 @@ Android SDK and JDK 17.
 ```sh
 cd ..                 # repository root
 devenv shell
+emulator-start &      # Android 16 emulator; first run creates the AVD
 cd flutter-glaz
-flutter run           # on a phone connected over USB
+flutter run           # on the emulator, or a phone connected over USB
 flutter test
 ```
 
 Platforms: Android, iOS, Linux, macOS. iOS and macOS builds need Xcode, which
-Nix cannot provide. There is no emulator in the devenv on purpose: the app
-needs a real phone next to the glasses.
+Nix cannot provide. The emulator is for the UI only: it has no Bluetooth, so
+talking to the glasses needs a real phone.
 
 ## Talking to the glasses
 
