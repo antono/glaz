@@ -25,12 +25,28 @@ The glasses run Lua; a laptop talks to them over Bluetooth using Python.
 - `host_test.py` — reference host: uploads everything, then listens
 - `utils/` — diagnostics, run individually
 - `check.sh` — static checks, no device needed
+- `sprites/` — pixel art for the splash, drawn by `frame_app.lua`
+- `flutter-glaz/` — the Flutter companion app (phone side)
+- `devenv.nix` — the development environment
 
 ## Setup
 
+Everything -- Lua 5.4, the Python host tools, the firmware toolchain and
+Flutter with an Android SDK -- comes from [devenv](https://devenv.sh)
+(`devenv.nix`, `devenv.yaml`). Linux first, macOS works too.
+
+```sh
+devenv shell             # first run downloads the Android SDK
+check                    # ./check.sh
+upload                   # python host_test.py
+python utils/connect.py
+```
+
+Without devenv, the host tools alone still work from a plain venv:
+
 ```sh
 python3 -m venv .venv
-.venv/bin/pip install frame-ble frame-msg
+.venv/bin/pip install -r requirements.txt
 .venv/bin/python utils/connect.py
 ```
 

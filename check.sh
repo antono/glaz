@@ -9,8 +9,15 @@ cd "$(dirname "$0")"
 
 fail=0
 
+# The lua on PATH if it is 5.4 (the devenv shell provides one), else Nix's.
+if command -v lua >/dev/null && lua -v 2>&1 | grep -q 'Lua 5\.4'; then
+  lua54=(lua)
+else
+  lua54=(nix run nixpkgs#lua5_4 --)
+fi
+
 for f in frame_app.lua modules/*.lua sprites/*.lua; do
-  if out=$(nix run nixpkgs#lua5_4 -- -e "assert(loadfile('$f'))" 2>&1); then
+  if out=$("${lua54[@]}" -e "assert(loadfile('$f'))" 2>&1); then
     echo "syntax ok   $f"
   else
     echo "SYNTAX FAIL $f"
