@@ -24,6 +24,29 @@ class Settings extends ChangeNotifier {
   bool netAllowed(String module) => _prefs.getBool('net.$module') ?? false;
   void setNetAllowed(String module, bool on) => _set('net.$module', on);
 
+  /// Whether a module may know where the phone is. Off until allowed.
+  bool locAllowed(String module) => _prefs.getBool('loc.$module') ?? false;
+  void setLocAllowed(String module, bool on) => _set('loc.$module', on);
+
+  /// The bottom bar's tabs, in the user's order (by id); null until they
+  /// rearrange it.
+  List<String>? get tabOrder => _prefs.getStringList('tabs');
+  set tabOrder(List<String>? ids) {
+    if (ids == null) {
+      _prefs.remove('tabs');
+    } else {
+      _prefs.setStringList('tabs', ids);
+    }
+    notifyListeners();
+  }
+
+  /// A module's setting (glasses_menu.dart, ModuleSetting); null = its
+  /// default.
+  String? config(String module, String key) =>
+      _prefs.getString('cfg.$module.$key');
+  void setConfig(String module, String key, String value) =>
+      _set('cfg.$module.$key', value);
+
   void _set(String key, Object value) {
     if (value is bool) _prefs.setBool(key, value);
     if (value is String) _prefs.setString(key, value);

@@ -8,6 +8,11 @@ const clockSet = 0x23;
 const notify = 0x24;
 const netResponse = 0x25;
 const statusGet = 0x26;
+const settingsSet = 0x27;
+const location = 0x28;
+const filesGet = 0x29;
+const fileGet = 0x2A;
+const input = 0x2B;
 
 // Frame -> Host
 const menuSelect = 0x11;
@@ -21,6 +26,9 @@ const appBackground = 0x18;
 const netRequest = 0x19;
 const photoFrom = 0x1A;
 const status = 0x1B;
+const locationGet = 0x1C;
+const files = 0x1D;
+const fileData = 0x1E;
 
 // The frame_msg camera library's own codes, used by Camera and Time series
 const photoChunk = 0x07;

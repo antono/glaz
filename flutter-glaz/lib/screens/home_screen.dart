@@ -7,6 +7,7 @@ import '../services/services.dart';
 import '../theme.dart';
 import '../widgets/pixel_logo.dart';
 import 'firmware_screen.dart';
+import 'glasses_files_screen.dart';
 
 /// The first tab: the glasses' status and how to drive them.
 class HomeScreen extends StatelessWidget {
@@ -218,6 +219,16 @@ class _GlassesAppCard extends StatelessWidget {
             title: const Text('Restart'),
             subtitle: const Text('Start the app on the glasses again'),
             onTap: () => link.runTask('Restart', restartApp),
+          ),
+          ListTile(
+            enabled: ready,
+            leading: const Icon(Icons.folder_open, color: FrameColors.skyBlue),
+            title: const Text('Files'),
+            subtitle: const Text('Look at what is stored on the glasses'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const GlassesFilesScreen()),
+            ),
           ),
           ListTile(
             leading: const Icon(Icons.memory, color: FrameColors.skyBlue),

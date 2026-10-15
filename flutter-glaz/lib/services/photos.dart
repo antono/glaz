@@ -74,6 +74,9 @@ class PhotoStore extends ChangeNotifier {
     r'^(\d{4})-(\d\d)-(\d\d) (\d\d)-(\d\d)-(\d\d)$',
   );
 
+  /// Read the folders again (after a permission change, say).
+  void refresh() => notifyListeners();
+
   Future<File> saveSingle(Uint8List jpeg, DateTime at) async {
     final dir = Directory('${root.path}/${_day(at)}');
     await dir.create(recursive: true);

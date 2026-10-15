@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:frame_ble/frame_ble.dart';
 
+import 'lua_min.dart';
+
 /// Putting the app on the glasses, the way ../../host_test.py does it:
 /// stop the running app, take main.lua out of the way, reset into a bare
 /// REPL with all memory free, upload, then start main.lua. See
@@ -28,9 +30,12 @@ String menuWithout(String source, Set<String> disabled) {
   return source.substring(0, start) + menu + source.substring(end);
 }
 
-/// Everything to upload, in order: libraries, sprites, modules, main.lua
-/// last -- a half-finished upload then leaves no main.lua to boot into.
-/// [installed] says which modules to send (by file name, no .lua).
+/// Everything to upload, in order: libraries, the splash sprite, modules,
+/// main.lua last -- a half-finished upload then leaves no main.lua to boot
+/// into. [installed] says which modules to send (by file name, no .lua).
+/// Only the sprite frame_app.lua draws (SPLASH_SPRITE) goes; the others in
+/// sprites/ are for utils/show_sprite.py. Every file is minified
+/// (lua_min.dart): half the time, and the memory main.lua needs to start.
 Future<List<LuaFile>> luaFiles(
   AssetBundle bundle,
   bool Function(String module) installed,
@@ -56,13 +61,53 @@ Future<List<LuaFile>> luaFiles(
         base(p).replaceAll('.lua', ''),
   };
   final app = await bundle.loadString('assets/lua/frame_app.lua', cache: false);
+  final splash = splashSprite(app);
   return [
-    ...await under('lib'),
-    ...await under('sprites'),
-    ...modules.where((f) => !disabled.contains(f.$1.replaceAll('.lua', ''))),
-    ('main.lua', menuWithout(app, disabled)),
+    for (final (name, text) in [
+      ...await under('lib'),
+      ...await under('sprites', (s) => s == splash),
+      ...modules.where((f) => !disabled.contains(f.$1.replaceAll('.lua', ''))),
+      ('main.lua', menuWithout(app, disabled)),
+    ])
+      (name, minifyLua(text)),
   ];
 }
+
+/// The sprite frame_app.lua shows on start: its SPLASH_SPRITE.
+String? splashSprite(String app) =>
+    RegExp(r"local SPLASH_SPRITE\s*=\s*'(\w+)'").firstMatch(app)?.group(1);
+
+/// Compiles a file on the glasses, in place, to bytecode without debug
+/// information. Uploaded for the duration of an upload and run from the
+/// bare REPL, with all the memory free; see [uploadApp].
+///
+/// It reads the file through load()'s reader a line at a time, so the
+/// source is never held whole; lines are under 512 bytes, the most one
+/// read() gives (lua_min.dart breaks longer ones).
+const compileHelper = r'''
+function glaz_compile(name)
+  local h = frame.file.open(name, 'read')
+  local f, err = load(function()
+    local l = h:read()
+    if l then return l .. '\n' end
+  end, '=' .. name)
+  h:close()
+  if not f then print('E ' .. err) return end
+  local b = string.dump(f, true)
+  f = nil
+  collectgarbage('collect')
+  local o = frame.file.open(name, 'write')
+  o:write(b)
+  o:close()
+  print('C ' .. #b)
+end
+print('glaz_compile ready')
+''';
+
+/// Files frame_app.lua reads as text instead of require()-ing them -- the
+/// splash sprite, scanned line by line -- so they must stay source.
+bool readAsText(String text) =>
+    RegExp(r'^_M\.art = \{', multiLine: true).hasMatch(text);
 
 /// Talks to the REPL: print() a token and wait for it to come back.
 class Repl {
@@ -75,6 +120,23 @@ class Repl {
         .timeout(timeout);
     await device.sendString(lua, awaitResponse: false, log: false);
     await seen;
+  }
+
+  /// Runs [lua] and collects every line it prints until [end].
+  Future<List<String>> lines(
+    String lua,
+    String end, {
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    final out = <String>[];
+    final done = device.stringResponse
+        .map((s) => s.trim())
+        .takeWhile((s) => s != end)
+        .forEach(out.add)
+        .timeout(timeout);
+    await device.sendString(lua, awaitResponse: false, log: false);
+    await done;
+    return out;
   }
 
   /// Runs [lua], which must end by printing [token].
@@ -100,11 +162,31 @@ class Repl {
   }
 
   /// require() the app and wait for the line it prints once running.
-  Future<void> start() => run(
-    "require('main')",
-    'Frame app is running',
-    timeout: const Duration(seconds: 30),
-  );
+  /// When it does not come up, the error says what the glasses printed
+  /// instead -- 'not enough memory', say.
+  Future<void> start() async {
+    final seen = <String>[];
+    final sub = device.stringResponse.listen((s) {
+      final t = s.trim();
+      if (t.isNotEmpty && t != '\x02') seen.add(t);
+    });
+    try {
+      await run(
+        "require('main')",
+        'Frame app is running',
+        timeout: const Duration(seconds: 30),
+      );
+    } catch (_) {
+      final said = seen.where((s) => s != 'Frame app is running').toList();
+      throw Exception(
+        said.isEmpty
+            ? 'the app on the glasses did not start, and said nothing'
+            : 'the app on the glasses did not start: ${said.join(' / ')}',
+      );
+    } finally {
+      await sub.cancel();
+    }
+  }
 }
 
 Future<void> uploadApp(
@@ -131,6 +213,30 @@ Future<void> uploadApp(
     'shown',
   );
 
+  // Lua files from earlier uploads that this one does not bring: modules
+  // switched off or gone, sprites no longer drawn. Anything else stays --
+  // settings.txt, and whatever is not Lua.
+  report('Clearing old files');
+  final keep = {for (final (name, _) in files) name};
+  final present = await repl.lines(
+    "for _,e in ipairs(frame.file.listdir('/')) do "
+        "if e.type ~= 2 then print(e.name) end end print('listed')",
+    'listed',
+  );
+  for (final name in present) {
+    // a name that would break the Lua string is left alone
+    if (name.endsWith('.lua') &&
+        !keep.contains(name) &&
+        !name.contains("'") &&
+        !name.contains('\\')) {
+      report('Removing $name');
+      await repl.run(
+        "pcall(frame.file.remove, '$name');print('removed')",
+        'removed',
+      );
+    }
+  }
+
   final total = files.fold<int>(0, (n, f) => n + f.$2.length);
   var done = 0;
   for (final (name, text) in files) {
@@ -138,6 +244,38 @@ Future<void> uploadApp(
     await device.uploadScript(name, text);
     done += text.length;
   }
+
+  // Compile everything require() loads, on the glasses, while their memory
+  // is free: at start they then load bytecode without debug information --
+  // about a third of the compiled source in memory, and no compiler and no
+  // whole-file buffer (FRAME.md, "require() holds the whole source"). With
+  // the source, the app ran out of memory starting.
+  await device.uploadScript('glaz_compile.lua', compileHelper);
+  await repl.run("require('glaz_compile')", 'glaz_compile ready');
+  final toCompile = [
+    for (final (name, text) in files)
+      if (!readAsText(text)) name,
+  ];
+  for (var i = 0; i < toCompile.length; i++) {
+    final name = toCompile[i];
+    report('Compiling $name', i / toCompile.length);
+    final said = await repl.lines(
+      "glaz_compile('$name');print('compiled')",
+      'compiled',
+      timeout: const Duration(seconds: 30),
+    );
+    final error = said.where((l) => l.startsWith('E ')).firstOrNull;
+    if (error != null || !said.any((l) => l.startsWith('C '))) {
+      throw Exception(
+        'compiling $name on the glasses: '
+        '${error?.substring(2) ?? said.join(' / ')}',
+      );
+    }
+  }
+  await repl.run(
+    "pcall(frame.file.remove, 'glaz_compile.lua');print('removed')",
+    'removed',
+  );
 
   report('Starting the app', 1);
   await repl.start();

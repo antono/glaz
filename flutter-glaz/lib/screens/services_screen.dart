@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../glasses_menu.dart';
+import '../services/location.dart';
 import '../services/service_list.dart';
 import '../services/services.dart';
 
@@ -17,6 +18,7 @@ class ServicesScreen extends StatelessWidget {
         s.link,
         s.network,
         s.notifications,
+        s.location,
       ]),
       builder: (context, _) => _build(context, s),
     );
@@ -124,6 +126,15 @@ class ServicesScreen extends StatelessWidget {
         return s.notifications.forwarded == 0
             ? service.description
             : '${s.notifications.forwarded} sent to the glasses';
+      case 'location':
+        final allowed = [
+          for (final sec in glassesMenu)
+            for (final a in sec.modules)
+              if (a.location && s.settings.locAllowed(a.id)) a.label,
+        ];
+        return allowed.isEmpty
+            ? 'No app allowed yet: Menu tab'
+            : 'Allowed: ${allowed.join(', ')}';
       case 'network':
         final allowed = [
           for (final sec in glassesMenu)
@@ -147,6 +158,10 @@ class ServicesScreen extends StatelessWidget {
     if (id == 'notifications' && on && !s.notifications.permission) {
       // the system page comes up; the switch stays off unless it is granted
       if (!await s.notifications.requestPermission()) return;
+    }
+    if (id == 'location' && on && !await LocationService.permitted()) {
+      // the phone's own permission, asked here and never from the glasses
+      if (!await s.location.requestPermission()) return;
     }
     s.settings.setService(id, on);
   }

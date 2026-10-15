@@ -29,5 +29,10 @@ const services = [
     'Saves photos from Camera and Time series, by date',
     true,
   ),
-  GlazService('location', 'Location', "Gives apps the phone's position", false),
+  GlazService(
+    'location',
+    'Location',
+    "Tells the apps you allow where the phone is",
+    true,
+  ),
 ];

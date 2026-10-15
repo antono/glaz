@@ -12,7 +12,9 @@ Tabs:
 - **Photos** -- photos from Camera and Time series, by date; a series is a
   folder named by when it started
 - **Menu** -- what the menu on the glasses contains, section by section;
-  which apps Upload sends, and which may use the Internet
+  which apps Upload sends; tap one marked with sliders for its settings
+  (Camera and Time series quality, Weather's place, Internet access), sent to
+  the glasses on connect and on change
 - **Services** -- what the phone does for the apps on the glasses: clock,
   notifications, Internet, photos (`../docs/PROTOCOL.md`, "Host services")
 - **About** -- version and open-source licences
@@ -53,11 +55,26 @@ eye drawn by `tool/logo.py` -- plain Python, no Pillow:
 ```sh
 python tool/logo.py preview          # assets/logo/preview.png: all variants
 python tool/logo.py icons bloodshot  # the app logo and every platform icon
+python tool/logo.py glasses          # ../sprites/logo.lua: the glasses' splash
 ```
+
+In the app the eye is drawn live, pixel by pixel (`lib/widgets/eye_art.dart`,
+the same algorithm), so a tap can make it twitch -- the pupil widens a little
+and the veins crawl. At rest it matches `assets/logo/logo.png` exactly; a
+test checks.
 
 Variants: `bloodshot` (the default), `oled`, `flipper`. `icons` rewrites the
 Android, iOS and macOS icons and both launch screens, so switching the logo is
 that one command.
+
+On Android 8+ the launcher icon is adaptive: the eye on a transparent layer
+over a black one, sized to the 72 dp circle Pixel masks it with, so it fills
+the circle rather than sitting small inside a square. To see it as Pixel
+does:
+
+```sh
+python tool/logo.py adaptive-preview bloodshot /tmp/icon.png
+```
 
 ## Keeping in step with the glasses
 

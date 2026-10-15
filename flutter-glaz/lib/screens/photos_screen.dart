@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../services/photo_dir.dart';
 import '../services/photos.dart';
 import '../services/services.dart';
 
@@ -46,11 +47,14 @@ class PhotosScreen extends StatelessWidget {
         builder: (context, snap) {
           final days = snap.data;
           if (days == null) return const SizedBox.shrink();
-          if (days.isEmpty) return const _Empty();
           final now = DateTime.now();
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            children: [for (final day in days) ..._day(context, day, now)],
+            children: [
+              _Access(onGranted: store.refresh),
+              if (days.isEmpty) const _Empty(),
+              for (final day in days) ..._day(context, day, now),
+            ],
           );
         },
       ),
@@ -84,6 +88,51 @@ class PhotosScreen extends StatelessWidget {
         ),
       if (day.photos.isNotEmpty) _Grid(day.photos),
     ];
+  }
+}
+
+/// Photos from an earlier install of the app stay in Pictures/Glaz, but
+/// reading them takes the photos permission; this asks for it. Nothing is
+/// shown once it is granted, or where it does not apply.
+class _Access extends StatefulWidget {
+  const _Access({required this.onGranted});
+  final VoidCallback onGranted;
+
+  @override
+  State<_Access> createState() => _AccessState();
+}
+
+class _AccessState extends State<_Access> {
+  late Future<bool> _granted = photoAccess();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: _granted,
+      builder: (context, snap) {
+        if (snap.data != false) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Card(
+            child: ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Photos from before a reinstall'),
+              subtitle: const Text(
+                'They are kept in Pictures/Glaz; allow access to show them.',
+              ),
+              trailing: TextButton(
+                onPressed: () async {
+                  final ok = await photoAccess(request: true);
+                  setState(() => _granted = Future.value(ok));
+                  if (ok) widget.onGranted();
+                },
+                child: const Text('Allow'),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 

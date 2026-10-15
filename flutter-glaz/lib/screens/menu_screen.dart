@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../glasses_menu.dart';
 import '../services/services.dart';
 import '../theme.dart';
+import 'module_settings_screen.dart';
 
 /// The second tab: what is in the menu on the glasses.
 class MenuScreen extends StatelessWidget {
@@ -19,7 +20,7 @@ class MenuScreen extends StatelessWidget {
           child: Text(
             'This is the menu the glasses show. It lives on the glasses; '
             'the phone describes it, and Upload (Glasses tab) sends the apps '
-            'switched on here.',
+            'switched on here. Tap one marked with sliders for its settings.',
             style: text.bodyMedium?.copyWith(color: FrameColors.grey),
           ),
         ),
@@ -45,6 +46,8 @@ class MenuScreen extends StatelessWidget {
 
 /// A module: what it is, whether Upload puts it on the glasses, and -- for
 /// one that uses the Internet -- whether the phone fetches for it.
+/// A module: what it is and whether Upload puts it on the glasses. One
+/// with settings (or an Internet permission) opens its page when tapped.
 class _ModuleTile extends StatelessWidget {
   const _ModuleTile(this.module);
   final GlassesModule module;
@@ -56,35 +59,34 @@ class _ModuleTile extends StatelessWidget {
       listenable: settings,
       builder: (context, _) {
         final on = settings.installed(module.id);
-        return Column(
-          children: [
-            ListTile(
-              leading: Icon(
-                module.icon,
-                color: on ? FrameColors.grey : FrameColors.outline,
-              ),
-              title: Row(
-                children: [
-                  Flexible(child: Text(module.label)),
-                  const SizedBox(width: 8),
-                  _KindChip(module.kind),
-                ],
-              ),
-              subtitle: Text(module.summary),
-              trailing: Switch(
-                value: on,
-                onChanged: (v) => settings.setInstalled(module.id, v),
-              ),
-            ),
-            if (module.network && on)
-              CheckboxListTile(
-                dense: true,
-                contentPadding: const EdgeInsets.only(left: 72, right: 16),
-                title: const Text('Allow Internet access'),
-                value: settings.netAllowed(module.id),
-                onChanged: (v) => settings.setNetAllowed(module.id, v ?? false),
-              ),
-          ],
+        return ListTile(
+          leading: Icon(
+            module.icon,
+            color: on ? FrameColors.grey : FrameColors.outline,
+          ),
+          title: Row(
+            children: [
+              Flexible(child: Text(module.label)),
+              const SizedBox(width: 8),
+              _KindChip(module.kind),
+              if (module.configurable) ...[
+                const SizedBox(width: 4),
+                const Icon(Icons.tune, size: 16, color: FrameColors.skyBlue),
+              ],
+            ],
+          ),
+          subtitle: Text(module.summary),
+          trailing: Switch(
+            value: on,
+            onChanged: (v) => settings.setInstalled(module.id, v),
+          ),
+          onTap: module.configurable
+              ? () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ModuleSettingsScreen(module),
+                  ),
+                )
+              : null,
         );
       },
     );

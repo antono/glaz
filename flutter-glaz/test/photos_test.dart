@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:glaz/frame/link.dart';
 import 'package:glaz/screens/photos_screen.dart';
+import 'package:glaz/services/photo_dir.dart';
 import 'package:glaz/services/photos.dart';
 import 'package:glaz/settings.dart';
 
@@ -120,6 +121,19 @@ void main() {
     );
     expect(photoTime(File('x/0001.jpg')), isNull);
     expect(stampLabel(DateTime(2026, 10, 14, 7, 5, 9)), '2026-10-14 07:05:09');
+  });
+
+  test('shared Pictures/Glaz next to the app folder', () {
+    expect(
+      sharedPictures('/storage/emulated/0/Android/data/dev.glaz.glaz/files'),
+      '/storage/emulated/0/Pictures/Glaz',
+    );
+    // a second user, or a removable card, keeps its own volume
+    expect(
+      sharedPictures('/storage/emulated/10/Android/data/dev.glaz.glaz/files'),
+      '/storage/emulated/10/Pictures/Glaz',
+    );
+    expect(sharedPictures('/data/user/0/dev.glaz.glaz/files'), isNull);
   });
 
   test('day labels', () {

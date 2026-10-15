@@ -39,12 +39,18 @@ local x = { 'weather' }
     final names = files.map((f) => f.$1).toList();
     expect(names.take(2), ['camera.min.lua', 'data.min.lua']);
     expect(names, contains('photo.lua'));
-    expect(names, contains('flipper.lua')); // a sprite
+    expect(names, contains('logo.lua')); // the splash sprite
+    expect(names, isNot(contains('flipper.lua'))); // not drawn: not sent
     expect(names, isNot(contains('weather.lua')));
     expect(names.last, 'main.lua');
     final main = files.last.$2;
     expect(main, contains('function app_loop()'));
+    // minified: no comment lines left, under half the size
+    expect(main, isNot(contains('-- Startup banner')));
     expect(main, isNot(contains("'weather'")));
+    // compiled on the glasses during Upload, all but the sprite, which
+    // frame_app.lua reads as text
+    expect(files.where((f) => readAsText(f.$2)).map((f) => f.$1), ['logo.lua']);
     // Frame-side Lua must be ASCII (AGENTS.md)
     for (final (name, text) in files) {
       expect(text.codeUnits.every((c) => c < 128), isTrue, reason: name);

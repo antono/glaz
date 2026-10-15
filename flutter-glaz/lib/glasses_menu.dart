@@ -15,6 +15,59 @@ enum ModuleKind {
   final String label;
 }
 
+/// One setting of a module, edited on the phone and read on the glasses
+/// with _M.host.setting(key, default) (docs/PROTOCOL.md, "Settings").
+/// Values travel as text; [initial] is the module's own default.
+class ModuleSetting {
+  /// One of [options], shown with [optionLabels] when given.
+  const ModuleSetting.choice(
+    this.key,
+    this.label,
+    this.initial,
+    this.options, {
+    this.optionLabels,
+    this.help,
+  }) : text = false;
+
+  /// Free text, e.g. a city.
+  const ModuleSetting.text(this.key, this.label, {this.initial = '', this.help})
+    : text = true,
+      options = const [],
+      optionLabels = null;
+
+  final String key;
+  final String label;
+  final String initial;
+  final bool text;
+  final List<String> options;
+  final List<String>? optionLabels;
+  final String? help;
+
+  String labelOf(String option) {
+    final i = options.indexOf(option);
+    return i < 0 || optionLabels == null ? option : optionLabels![i];
+  }
+}
+
+const _photoSettings = [
+  ModuleSetting.choice(
+    'resolution',
+    'Resolution',
+    '512',
+    ['256', '512', '720'],
+    optionLabels: ['256 px', '512 px', '720 px'],
+    help: 'Square. Bigger takes longer to send.',
+  ),
+  ModuleSetting.choice(
+    'quality',
+    'Quality',
+    'MEDIUM',
+    ['VERY_LOW', 'LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH'],
+    optionLabels: ['Very low', 'Low', 'Medium', 'High', 'Very high'],
+    help: 'JPEG quality. Higher is sharper and slower to send.',
+  ),
+];
+
 class GlassesModule {
   const GlassesModule(
     this.id,
@@ -23,7 +76,19 @@ class GlassesModule {
     this.icon,
     this.summary, {
     this.network = false,
+    this.location = false,
+    this.settings = const [],
   });
+
+  /// Asks where the phone is (docs/PROTOCOL.md, "Location"), so it needs
+  /// the user's permission, on its settings page.
+  final bool location;
+
+  /// What can be set for it on the phone.
+  final List<ModuleSetting> settings;
+
+  /// Opens a settings page in the Menu tab.
+  bool get configurable => settings.isNotEmpty || network || location;
 
   /// File name in ../modules/, without .lua.
   final String id;
@@ -58,6 +123,7 @@ const glassesMenu = <MenuSection>[
       ModuleKind.app,
       Icons.photo_camera,
       'Tap to take a photo; it is sent to the phone.',
+      settings: _photoSettings,
     ),
     GlassesModule(
       'timeseries',
@@ -65,6 +131,27 @@ const glassesMenu = <MenuSection>[
       ModuleKind.background,
       Icons.burst_mode,
       'A photo every 1 to 60 seconds, sent to the phone.',
+      settings: [
+        ModuleSetting.choice(
+          'interval',
+          'Interval',
+          '4',
+          ['1', '2', '4', '8', '10', '20', '30', '40', '60'],
+          optionLabels: [
+            '1 s',
+            '2 s',
+            '4 s',
+            '8 s',
+            '10 s',
+            '20 s',
+            '30 s',
+            '40 s',
+            '60 s',
+          ],
+          help: 'Where a new series starts; tilt changes it while shooting.',
+        ),
+        ..._photoSettings,
+      ],
     ),
     GlassesModule(
       'stopwatch',
@@ -87,6 +174,21 @@ const glassesMenu = <MenuSection>[
       Icons.cloud,
       'The weather where the phone is, fetched by the phone.',
       network: true,
+      location: true,
+      settings: [
+        ModuleSetting.text(
+          'city',
+          'City',
+          help:
+              "Empty: wherever the phone is -- its GPS with Location "
+              'access, else a guess from its Internet address.',
+        ),
+        ModuleSetting.text(
+          'country',
+          'Country',
+          help: 'Optional, to tell same-named cities apart.',
+        ),
+      ],
     ),
   ]),
   MenuSection('Sensors', Icons.sensors, [

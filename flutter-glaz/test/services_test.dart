@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -7,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:glaz/frame/ascii.dart';
 import 'package:glaz/frame/link.dart';
+import 'package:glaz/services/location.dart';
+import 'package:glaz/services/module_settings.dart';
 import 'package:glaz/services/network.dart';
 import 'package:glaz/services/notifications.dart';
 import 'package:glaz/settings.dart';
@@ -140,6 +143,81 @@ void main() {
       expect(net.log.single.module, 'weather');
       expect(net.log.single.url, 'https://wttr.in/?format=%t');
       expect(net.log.single.status, 200);
+    });
+  });
+
+  test(
+    'settings go to the glasses as one line each, defaults filled in',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final settings = await Settings.load();
+      settings.setConfig('weather', 'city', 'Minsk\nBY');
+      settings.setConfig('photo', 'quality', 'HIGH');
+      final lines = settingsText(settings).split('\n');
+      expect(lines, contains('photo.quality=HIGH'));
+      expect(lines, contains('photo.resolution=512'));
+      expect(lines, contains('timeseries.interval=4'));
+      expect(lines, contains('weather.city=Minsk BY'));
+      expect(lines, contains('weather.country='));
+    },
+  );
+
+  group('location', () {
+    final fix = (
+      lat: 53.902735,
+      lon: 27.555691,
+      accuracy: 137.0,
+      at: DateTime(2026, 10, 15, 12),
+    );
+
+    test('the answer packs into 14 bytes, microdegrees, big-endian', () {
+      final b = ByteData.sublistView(
+        encodeFix(7, fixOk, fix, DateTime(2026, 10, 15, 12, 0, 42)),
+      );
+      expect(b.lengthInBytes, 14);
+      expect(b.getUint8(0), 7);
+      expect(b.getUint8(1), fixOk);
+      expect(b.getInt32(2), 53902735);
+      expect(b.getInt32(6), 27555691);
+      expect(b.getUint16(10), 137);
+      expect(b.getUint16(12), 42);
+      // a refusal carries no position at all
+      expect(encodeFix(7, fixNotAllowed, fix).sublist(2), everyElement(0));
+    });
+
+    test('only the modules allowed, only with the service on', () async {
+      SharedPreferences.setMockInitialValues({});
+      final settings = await Settings.load();
+      var asked = 0;
+      final loc = LocationService(
+        FrameLink(),
+        settings,
+        locate: () async {
+          asked++;
+          return fix;
+        },
+      );
+      expect((await loc.answer('weather')).$1, fixNotAllowed);
+      settings.setLocAllowed('weather', true);
+      expect((await loc.answer('weather')).$1, fixOk);
+      expect((await loc.answer('files')).$1, fixNotAllowed);
+      settings.setService('location', false);
+      expect((await loc.answer('weather')).$1, fixNotAllowed);
+      expect(asked, 1, reason: 'the phone is not asked for a refusal');
+    });
+
+    test('no fix on the phone is reported as such', () async {
+      SharedPreferences.setMockInitialValues({});
+      final settings = await Settings.load()
+        ..setLocAllowed('weather', true);
+      final loc = LocationService(
+        FrameLink(),
+        settings,
+        locate: () async => null,
+      );
+      await loc.onRequest([0x1C, 3, ...utf8.encode('weather')]);
+      expect(loc.log.single.module, 'weather');
+      expect(loc.log.single.status, fixUnavailable);
     });
   });
 }

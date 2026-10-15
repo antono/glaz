@@ -14,10 +14,12 @@ dependencies:
     sdk: flutter
   flutter_blue_plus: ^1.36.8
   frame_ble: ^3.0.0
+  geolocator: ^14.1.1
   http: ^1.6.0
   image: ^4.12.0
   notification_listener_service: ^1.0.0
   path_provider: ^2.1.6
+  permission_handler: ^12.0.1
   shared_preferences: ^2.5.6
 
 dev_dependencies:

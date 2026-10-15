@@ -258,6 +258,15 @@ class FrameLink extends ChangeNotifier {
     return job;
   }
 
+  /// The remote: [count] taps (1 select, 2 back, 3 the menu), as if on the
+  /// arm (docs/PROTOCOL.md, "Remote").
+  Future<void> remoteTaps(int count) => send(input, [1, count]);
+
+  /// The remote: a tilt, as if toward a shoulder; [next] is right, the
+  /// cursor down.
+  Future<void> remoteTilt({required bool next}) =>
+      send(input, [2, next ? 1 : 255]);
+
   /// The wall clock for the top bar: unix time and the UTC offset.
   Future<void> sendClock() {
     final now = DateTime.now();
