@@ -153,6 +153,10 @@ local INFO_TIMEOUT    = 5     -- seconds an 'info' module stays on screen
 local APP_TIMEOUT     = 60    -- seconds of inactivity before closing an 'app'
 local SLEEP_AFTER     = 30    -- idle seconds before parking in frame.sleep()
                               -- (never while a module runs in the background)
+-- What the accelerometer wakes the glasses with: the firmware's defaults,
+-- the ones known to wake them with one tap. See docs/FIRMWARE.md.
+local WAKE_TAPS = { threshold = 7, quiet = 0, duration = 0, latch = true,
+                    axes = 0x08, rate = 256 }
 
 -- Host services (docs/PROTOCOL.md). A notification pops up over whatever is
 -- on screen and goes away by itself, or with a tap; the last few are kept
@@ -1415,6 +1419,14 @@ function app_loop()
         if bg then quit(bg) end
         sleep_requested = false
         set_display(false)
+        -- A tap is all that wakes the glasses, and the accelerometer goes to
+        -- sleep with whatever it was last set to: Tap tune's harder
+        -- threshold or longer duration, and it took many taps or none woke
+        -- them (firmware okulo/tap-tuning). The stock settings go back first;
+        -- setting them also clears a tap still latched, which would hold the
+        -- wake-up line where no tap can move it. Stock firmware has no
+        -- tap_config, and needs neither.
+        if frame.imu.tap_config then pcall(frame.imu.tap_config, WAKE_TAPS) end
         frame.sleep()
 
         local woke = frame.time.utc()

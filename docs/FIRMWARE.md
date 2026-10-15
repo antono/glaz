@@ -113,6 +113,14 @@ Suggested order:
 Once a setting works, move it into the `tap_settings` defaults in `imu.c` so it
 survives a reboot — runtime changes are not persisted.
 
+**Tap tune settings also decide how the glasses wake.** `frame.sleep()` leaves
+the accelerometer powered, as it was last set, and its interrupt is the only
+thing that wakes them. With a harder `threshold` or a long `duration` it took
+many taps to wake them, or none did. So before `frame.sleep()` the app puts
+back the stock settings (`WAKE_TAPS` in `frame_app.lua`). That also clears a
+latched tap, which would hold the wake-up line where no new tap can move it.
+The boot after waking programs the `imu.c` defaults again.
+
 ---
 
 ## Building and flashing
