@@ -32,8 +32,11 @@ _M.label = 'Time series'
 _M.mode = 'app'
 
 local INTERVALS  = { 1, 2, 4, 8, 10, 20, 30, 40, 60 }   -- seconds
+-- Defaults; the phone may set others (Glaz > Menu > Time series).
 local RESOLUTION = 512       -- px, square; same as modules/photo.lua
 local QUALITY    = 'MEDIUM'
+local QUALITIES  = { VERY_LOW = true, LOW = true, MEDIUM = true, HIGH = true,
+                     VERY_HIGH = true }
 local WARMUP     = 1.5       -- seconds of auto exposure before the first shot
 local PHOTO_FROM = 0x1A
 
@@ -80,8 +83,12 @@ local function shoot()
     end
     frame.sleep(0.01)
   end
+  local res = _M.host.setting('resolution', RESOLUTION)
+  if res % 2 == 1 or res < 100 or res > 720 then res = RESOLUTION end
+  local q = _M.host.setting('quality', QUALITY)
+  if not QUALITIES[q] then q = QUALITY end
   local ok = pcall(camera.capture_and_send, {
-    resolution = RESOLUTION, quality = QUALITY, pan = 0, raw = false,
+    resolution = res, quality = q, pan = 0, raw = false,
   })
   if ok then
     sent = sent + 1
@@ -114,7 +121,16 @@ function _M.on_tap()
   else
     shooting = true
     sent, failed = 0, 0
-    series = series % 255 + 1
+    -- the phone's interval, if set, is where a new series starts; tilt
+    -- still changes it while shooting
+    local want = _M.host.setting('interval', 0)
+    for i, v in ipairs(INTERVALS) do
+      if v == want then idx = i end
+    end
+    -- from the clock, not a counter: frame_app.lua drops this module when
+    -- it stops, and a counter would start at 1 again and run into the
+    -- previous series on the phone
+    series = math.floor(frame.time.utc()) % 255 + 1
     pcall(frame.camera.power_save, false)
     next_at = frame.time.utc() + WARMUP   -- exposure settles first
   end

@@ -28,8 +28,21 @@ _M.label = 'Camera'
 _M.mode = 'app'
 _M.background = false  -- sleeps: stopped as soon as it leaves the screen
 
+-- Defaults; the phone may set others (Glaz > Menu > Camera, _M.host.setting).
 local RESOLUTION = 512       -- px, square; any even number 100..720
 local QUALITY    = 'MEDIUM'  -- VERY_LOW .. VERY_HIGH; bigger = slower to send
+local QUALITIES  = { VERY_LOW = true, LOW = true, MEDIUM = true, HIGH = true,
+                     VERY_HIGH = true }
+
+-- The capture settings, as the phone last set them, checked: a bad value
+-- falls back to the default rather than failing the shot.
+local function capture_args()
+  local res = _M.host.setting('resolution', RESOLUTION)
+  if res % 2 == 1 or res < 100 or res > 720 then res = RESOLUTION end
+  local q = _M.host.setting('quality', QUALITY)
+  if not QUALITIES[q] then q = QUALITY end
+  return { resolution = res, quality = q, pan = 0, raw = false }
+end
 -- Auto exposure needs to run for a while before the first shot, or the
 -- picture comes out dark. It is run on every tick while the module is open;
 -- a tap that comes sooner runs it here until this much time has passed.
@@ -81,9 +94,7 @@ function _M.on_tap()
   -- Blocks the app loop for the length of the transfer, about 1-3 s at this
   -- size. Taps that arrive meanwhile are counted by the callback and handled
   -- afterwards.
-  local ok = pcall(camera.capture_and_send, {
-    resolution = RESOLUTION, quality = QUALITY, pan = 0, raw = false,
-  })
+  local ok = pcall(camera.capture_and_send, capture_args())
   if not ok then
     return 'send failed'
   end

@@ -206,6 +206,25 @@ Everything below follows from that.
    nothing. Run `bluetoothctl disconnect E0:EF:CE:1C:08:15` first.
 9. **`GATT Protocol Error: Unlikely Error` on the reset signal** -- the
    glasses reboot before acknowledging the write. Just run the upload again.
+10. **The app ran the glasses out of memory on start** ("not enough memory",
+    or a reboot to "Frame is paired" right after Upload). Three causes,
+    measured on a laptop with the same code:
+    - `require()` holds the whole source while compiling it: the firmware
+      reads the file into one buffer, a byte at a time, and frees it only
+      after `luaL_loadbuffer` (`lua_file_require` in `file.c`).
+      `frame_app.lua` is 60 KB, two thirds comments.
+    - Compiled code keeps debug information: `frame_app.lua` loaded is
+      66 KB, without it 19 KB.
+    - All fifteen modules stayed loaded: 70 KB, more than the app.
+
+    The Glaz app's Upload now minifies every file (comments and indentation
+    out, line breaks kept: `flutter-glaz/lib/frame/lua_min.dart`), then has
+    the glasses compile each one to bytecode without debug information while
+    their memory is free (`glaz_compile` in `upload.dart`); and
+    `frame_app.lua` loads a module only while it is on screen or in the
+    background (`load_module`). Start went from 168 KB to 105 KB. Errors on
+    the glasses lose their line numbers. `host_test.py` still sends source
+    as it is.
 
 The working recipe used both workarounds: find Frame by address with a long
 scan, and pair on connect. Both are monkey-patches around frame_ble 1.1.1, which

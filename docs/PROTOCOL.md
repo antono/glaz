@@ -293,6 +293,11 @@ which splits long messages into MTU-sized packets and reassembles them.
 | `0x24` | `NOTIFY` | ASCII text `app\ntitle\ntext` — see [Host services](#host-services) |
 | `0x25` | `NET_RESPONSE` | `uint8` request id, `uint16` HTTP status (big-endian), then the body |
 | `0x26` | `STATUS_GET` | any one byte — ask for `STATUS`; see [Status](#status) |
+| `0x27` | `SETTINGS_SET` | text, `module.key=value` per line — every module's settings; see [Settings](#settings) |
+| `0x28` | `LOCATION` | 14 bytes `>BBi4i4I2I2`: id, status, lat and lon in microdegrees, accuracy m, age s — see [Location](#location) |
+| `0x29` | `FILES_GET` | `[id]` + path (`''` the root): list a folder — see [Files](#files) |
+| `0x2A` | `FILE_GET` | `[id]` + path: read a file — see [Files](#files) |
+| `0x2B` | `INPUT` | `[kind, value]`: the phone's remote — `[1, n]` n taps, `[2, 1]` tilt right, `[2, 255]` tilt left; see [Remote](#remote) |
 
 `MENU_SET` is an **override**: it replaces the module-defined menu with
 host-supplied labels and resets the cursor. Those items have no module behind
@@ -326,6 +331,9 @@ Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 | `0x19` | `NET_REQUEST` | `[0x19, id, more, bytes...]` | part of a module's HTTP request — see [Host services](#host-services) |
 | `0x1A` | `PHOTO_FROM` | `[0x1A, series]` | the next photo is a single shot (`0`) or part of series `series` — see [Photos](#photos) |
 | `0x1B` | `STATUS` | `[0x1B, battery, version...]` | answer to `STATUS_GET` — see [Status](#status) |
+| `0x1C` | `LOCATION_GET` | `[0x1C, id, module...]` | a module asks where the phone is — see [Location](#location) |
+| `0x1D` | `FILES` | `[0x1D, id, more, bytes...]` | a folder listing, in packets — see [Files](#files) |
+| `0x1E` | `FILE_DATA` | `[0x1E, id, more, bytes...]` | a file's contents, in packets — see [Files](#files) |
 | `0x07` | photo chunk | `[0x07, jpeg bytes...]` | part of a photo (Camera module) |
 | `0x08` | photo end | `[0x08]` | last chunk; the photo is complete |
 
@@ -445,6 +453,10 @@ photos/2026-10-14/2026-10-14 17-52-10/          a series, by time started
 Every name is a date and time, down to the millisecond for photos, so the
 names alone sort them and say when each was taken.
 
+On Android `photos/` is the shared `Pictures/Glaz`, so the photos outlive the
+app and show in the phone's gallery; elsewhere it is the app's own documents
+folder (`flutter-glaz/lib/services/photo_dir.dart`).
+
 A photo with the same `series` as the previous one, less than 10 minutes
 after it, goes into the same folder; anything else starts a new one. The
 counter lives on the glasses and restarts at 1 when they do, so the gap is
@@ -462,6 +474,116 @@ and every minute after. The payload is ignored, but it must not be empty:
 The glasses answer `[0x1B, battery, version...]`: the battery as the same
 smoothed percentage the top bar shows (255 before the first sample), then
 `frame.FIRMWARE_VERSION` as text, for example `v25.080.0838`.
+
+### Location
+
+A module asks where the phone is:
+
+```lua
+local id = _M.host.locate()
+-- later, from tick():
+local fix, why = _M.host.location(id)   -- nil, nil while pending
+-- fix = { lat, lon, accuracy, age }: degrees, metres, seconds since measured
+```
+
+On the wire `LOCATION_GET` (`0x1C`) is `[0x1C, id, module]`, the module's
+file name, which the phone checks the permission against: Location access on
+the module's page in Glaz > Menu, and the Location service in Services. The
+phone answers one `LOCATION` (`0x28`), 14 bytes big-endian:
+
+| Bytes | Field |
+| --- | --- |
+| 1 | `id` |
+| 1 | status: `0` a fix, `1` not allowed, `2` no fix (location off, no permission on the phone, nothing within 10 s) |
+| 4 + 4 | latitude, longitude, signed, in microdegrees |
+| 2 | accuracy, metres |
+| 2 | age of the fix, seconds |
+
+Coordinates are zero unless status is `0`. `location()` turns the status
+into `why`: `'not allowed'` or `'no fix'`; with no answer in `NET_TIMEOUT`
+it is `'timeout'`. A module's requests are dropped when it stops.
+
+The phone's own location permission is asked for when the Location service
+is switched on in Services, never because of a request from the glasses:
+those come when the phone may be in a pocket.
+
+Weather uses it: with no city set it asks, and fetches the weather for
+`lat,lon`; refused or without a fix, it lets wttr.in guess from the phone's
+Internet address.
+
+### Files
+
+The phone can look at the files on the glasses while their app runs (Glaz >
+Glasses > Files) -- the REPL is blocked then, so `frame_app.lua` answers:
+
+- `FILES_GET` (`0x29`), `[id]` and a path, `''` for the root, is answered
+  with `FILES` (`0x1D`): one line per entry, `d\tname` for a folder,
+  `f\tsize\tname` for a file; `.` and `..` left out.
+- `FILE_GET` (`0x2A`), `[id]` and a path, is answered with `FILE_DATA`
+  (`0x1E`): the file's text.
+
+Both answers come in packets `[code, id, more, bytes...]`, `more = 0` on the
+last, and start with `+`, or with `-` and the error (no such file, say).
+
+The firmware reads files a line at a time and drops the `\n`; the glasses
+send each line with a `\n` after it, as they read it, never holding the
+whole file -- `frame_app.lua` alone is over 50 KB. The main loop waits while
+a file goes out, so a file stops at `FILE_MAX` (64 KB) with a
+`... cut at 65536 bytes` line. Viewing only: nothing is written or removed.
+
+### Remote
+
+The phone has a remote for the glasses (Glaz > Remote): arrows, OK, Back
+and Menu. Each press is one `INPUT` (`0x2B`), and the glasses take it as the
+wearer's own gesture, through the same code:
+
+| Press | `INPUT` | Same as |
+| --- | --- | --- |
+| up, left | `[2, 255]` | a tilt toward the left shoulder: previous item |
+| down, right | `[2, 1]` | a tilt toward the right shoulder: next item |
+| OK | `[1, 1]` | a single tap: select, or bring back the last app |
+| Back | `[1, 2]` | a double tap |
+| Menu | `[1, 3]` | a triple tap: show or hide the menu |
+
+Taps go into the tap counter as a finished gesture, classified at once
+(no waiting out the multi-tap window), and do not fall under the mute that
+follows a triple tap. A tilt reaches the menu's cursor, or the running
+module's `on_roll`, exactly where a head tilt would; with neither on screen
+it does nothing. Either counts as activity, keeping the menu or an app up.
+
+### Settings
+
+Some modules have settings the user picks on the phone (Glaz > Menu, tap a
+module): Camera's resolution and quality, Time series' starting interval,
+Weather's city and country. The phone sends **all** of them in one
+`SETTINGS_SET` (`0x27`) on every connect and shortly after each change, one
+line each, defaults filled in:
+
+```
+photo.resolution=512
+photo.quality=HIGH
+timeseries.interval=4
+weather.city=Minsk
+weather.country=BY
+```
+
+The glasses replace what they had with it and write the text to
+`settings.txt`, so the settings hold after a reboot without the phone. A
+module reads one with `_M.host.setting(key, default)`: the default when it
+is unset or empty, converted to a number when the default is one. Modules
+read them when they need them -- at a shot, at a fetch -- so a change
+applies from the next one and nothing restarts. Values are UTF-8 (a city may
+be in Cyrillic); a module that shows one must make it ASCII first.
+
+### Codes the glasses do not know
+
+`frame_app.lua` drops a message with a code it has no parser for. Without
+that, `data.lua` prints `Error: No parser for flag` and keeps the message,
+so the print repeats on every pass of the main loop and each one goes out
+over Bluetooth -- a phone newer than the app on the glasses flooded the link
+that way (seen: thousands of notifications a minute after `SETTINGS_SET`
+reached an older app), and its own requests drowned. The phone also stops
+waiting for a folder listing after 8 s and says to Upload.
 
 ### One message per code at a time
 
