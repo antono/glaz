@@ -58,7 +58,14 @@ python3 -m venv .venv
 - Run `./check.sh` after changing any `.lua` file.
 - Adding a menu item: add a file in `modules/` and list it in the `MENU` tree
   in `frame_app.lua`. See `docs/PROTOCOL.md`.
-- Every commit that changes the glasses side (`frame_app.lua`, `modules/`,
-  `sprites/`) bumps `VERSION` in `modules/about.lua` in the same commit:
-  minor for a feature, patch for a fix. Info > About on the glasses must
-  always show the version that is running.
+- Every commit that changes an app bumps its version in the same commit,
+  by [SemVer](https://semver.org): major for a breaking change (the other
+  side or saved data no longer works with it), minor for a feature, patch
+  for a fix. Docs, tests and tooling alone bump nothing. While a version
+  is `0.x`, a breaking change bumps the minor.
+  - Glasses (`frame_app.lua`, `app/`, `modules/`, `sprites/`): `VERSION` in
+    `modules/about.lua`, shown in Info > About.
+  - Phone (`flutter-glaz/`): `version` in `flutter-glaz/pubspec.yaml` and
+    `appVersion` in `lib/screens/about_screen.dart` (a test keeps them
+    equal); the `+N` build number goes up by one with every bump.
+  - A commit that changes both bumps both.
