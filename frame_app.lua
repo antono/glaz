@@ -243,7 +243,7 @@ data.parsers[STATUS_GET] = function(block) return block end
 
 -- Services the phone provides to modules. Each module is handed its own
 -- copy as _M.host, bound to its file name: that name is what the phone
--- checks the Internet permission against (Glaz > Apps).
+-- checks the Internet permission against (Glaz > Menu).
 --
 --   local id, err = _M.host.http('GET', url[, body])  -- nil, why on failure
 --   local status, body = _M.host.result(id)  -- nil while pending; then once

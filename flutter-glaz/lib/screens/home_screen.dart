@@ -1,0 +1,321 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../frame/link.dart';
+import '../frame/upload.dart';
+import '../services/services.dart';
+import '../theme.dart';
+import '../widgets/pixel_logo.dart';
+import 'firmware_screen.dart';
+
+/// The first tab: the glasses' status and how to drive them.
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+      children: [
+        const Center(child: PixelLogo()),
+        const SizedBox(height: 12),
+        Center(child: Text('[ glaz ]', style: text.headlineMedium)),
+        const SizedBox(height: 4),
+        Center(
+          child: Text(
+            'companion for Frame glasses',
+            style: text.bodyMedium?.copyWith(color: FrameColors.grey),
+          ),
+        ),
+        const SizedBox(height: 28),
+        const _ConnectionCard(),
+        const SizedBox(height: 16),
+        const _GlassesAppCard(),
+        const SizedBox(height: 16),
+        const _GesturesCard(),
+      ],
+    );
+  }
+}
+
+class _ConnectionCard extends StatelessWidget {
+  const _ConnectionCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final link = Services.instance.link;
+    return ListenableBuilder(
+      listenable: link,
+      builder: (context, _) => _build(context, link),
+    );
+  }
+
+  static (IconData, Color, String) _state(FrameLink link) =>
+      switch (link.state) {
+        LinkState.connected => (
+          Icons.bluetooth_connected,
+          FrameColors.lightGreen,
+          link.name ?? 'Connected',
+        ),
+        LinkState.connecting => (
+          Icons.bluetooth_searching,
+          FrameColors.yellow,
+          'Connecting...',
+        ),
+        LinkState.scanning => (
+          Icons.bluetooth_searching,
+          FrameColors.yellow,
+          'Looking for the glasses...',
+        ),
+        LinkState.disconnected => (
+          Icons.bluetooth_disabled,
+          FrameColors.grey,
+          'Not connected',
+        ),
+      };
+
+  Widget _build(BuildContext context, FrameLink link) {
+    final text = Theme.of(context).textTheme;
+    final muted = text.bodyMedium?.copyWith(color: FrameColors.grey);
+    final (icon, color, title) = _state(link);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: color),
+                const SizedBox(width: 12),
+                Expanded(child: Text(title, style: text.titleMedium)),
+                _StatusDot(color: color),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (link.connected)
+              Row(
+                children: [
+                  _Reading(
+                    Icons.battery_std,
+                    link.battery == null ? '--' : '${link.battery}%',
+                    color: (link.battery ?? 100) <= 15
+                        ? FrameColors.red
+                        : FrameColors.skyBlue,
+                  ),
+                  const SizedBox(width: 24),
+                  _Reading(Icons.memory, link.firmware ?? '--'),
+                ],
+              )
+            else
+              Text(
+                link.error != null
+                    ? 'Failed: ${link.error}'
+                    : 'The glasses work on their own; connected, they also '
+                          'get the time, phone notifications, the Internet for '
+                          'the apps you allow, and send their photos here.',
+                style: link.error != null
+                    ? muted?.copyWith(color: FrameColors.red)
+                    : muted,
+              ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: link.state == LinkState.disconnected
+                  ? FilledButton.icon(
+                      onPressed: link.connect,
+                      icon: const Icon(Icons.bluetooth_searching),
+                      label: const Text('Connect'),
+                    )
+                  : OutlinedButton.icon(
+                      onPressed: link.busy ? null : link.disconnect,
+                      icon: const Icon(Icons.bluetooth_disabled),
+                      label: Text(link.connected ? 'Disconnect' : 'Cancel'),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Reading extends StatelessWidget {
+  const _Reading(this.icon, this.value, {this.color = FrameColors.skyBlue});
+  final IconData icon;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Icon(icon, size: 18, color: color),
+      const SizedBox(width: 6),
+      Text(
+        value,
+        style: Theme.of(context).textTheme.bodyLarge
+            ?.copyWith(fontFamily: monoFamily),
+      ),
+    ],
+  );
+}
+
+/// The app on the glasses (main.lua) and their firmware: what the phone
+/// can put on them.
+class _GlassesAppCard extends StatelessWidget {
+  const _GlassesAppCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final link = Services.instance.link;
+    return ListenableBuilder(
+      listenable: link,
+      builder: (context, _) => _build(context, link),
+    );
+  }
+
+  Widget _build(BuildContext context, FrameLink link) {
+    final text = Theme.of(context).textTheme;
+    final ready = link.connected && !link.busy;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: Text('On the glasses', style: text.titleMedium),
+          ),
+          if (link.busy && link.task != 'Firmware')
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${link.task}: ${link.taskStep}'),
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(value: link.taskProgress),
+                ],
+              ),
+            ),
+          if (!link.busy && link.taskError != null)
+            ListTile(
+              leading: const Icon(Icons.error_outline, color: FrameColors.red),
+              title: const Text('Last attempt failed'),
+              subtitle: Text(link.taskError!),
+            ),
+          ListTile(
+            enabled: ready,
+            leading: const Icon(Icons.upload, color: FrameColors.skyBlue),
+            title: const Text('Upload'),
+            subtitle: const Text('main.lua and the apps switched on in Menu'),
+            onTap: () => _upload(context, link),
+          ),
+          ListTile(
+            enabled: ready,
+            leading: const Icon(Icons.restart_alt, color: FrameColors.skyBlue),
+            title: const Text('Restart'),
+            subtitle: const Text('Start the app on the glasses again'),
+            onTap: () => link.runTask('Restart', restartApp),
+          ),
+          ListTile(
+            leading: const Icon(Icons.memory, color: FrameColors.skyBlue),
+            title: const Text('Firmware'),
+            subtitle: Text(link.firmware ?? 'Install another version'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const FirmwareScreen())),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _upload(BuildContext context, FrameLink link) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Upload to the glasses?'),
+        content: const Text(
+          'The app on the glasses stops, the glasses restart, and main.lua '
+          'with the apps switched on in Menu is written to them. Takes a '
+          'minute or two; keep the glasses close.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Upload'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final files = await luaFiles(
+      rootBundle,
+      Services.instance.settings.installed,
+    );
+    await link.runTask(
+      'Upload',
+      (device, report) => uploadApp(device, files, report),
+    );
+  }
+}
+
+class _StatusDot extends StatelessWidget {
+  const _StatusDot({required this.color});
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 10,
+    height: 10,
+    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+  );
+}
+
+/// Frame has no buttons: everything is a tap on the arm or a head tilt.
+class _GesturesCard extends StatelessWidget {
+  const _GesturesCard();
+
+  static const _gestures = [
+    (Icons.looks_one_outlined, '1 tap', 'select, or open the last app'),
+    (Icons.looks_two_outlined, '2 taps', 'back, one level up'),
+    (Icons.looks_3_outlined, '3 taps', 'show or hide the menu'),
+    (Icons.swap_horiz, 'tilt head', 'toward a shoulder to scroll'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Text('On the glasses', style: text.titleMedium),
+            ),
+            for (final (icon, gesture, meaning) in _gestures)
+              ListTile(
+                dense: true,
+                leading: Icon(icon, color: FrameColors.skyBlue),
+                title: Text(
+                  gesture,
+                  style: text.bodyLarge?.copyWith(fontFamily: monoFamily),
+                ),
+                subtitle: Text(meaning),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}

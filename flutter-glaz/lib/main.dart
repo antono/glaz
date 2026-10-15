@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-import 'screens/apps_screen.dart';
-import 'screens/glasses_screen.dart';
+import 'screens/about_screen.dart';
+import 'screens/home_screen.dart';
+import 'screens/menu_screen.dart';
 import 'screens/photos_screen.dart';
 import 'screens/services_screen.dart';
-import 'screens/settings_screen.dart';
 import 'services/services.dart';
 import 'theme.dart';
 
@@ -19,72 +19,60 @@ class GlazApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = Services.instance.settings;
-    return ListenableBuilder(
-      listenable: settings,
-      builder: (context, _) => MaterialApp(
-        title: 'Glaz',
-        debugShowCheckedModeBanner: false,
-        theme: lightTheme,
-        darkTheme: darkTheme,
-        themeMode: settings.themeMode,
-        home: const HomePage(),
-      ),
+    return MaterialApp(
+      title: 'glaz',
+      debugShowCheckedModeBanner: false,
+      theme: glazTheme(),
+      home: const HomeShell(),
     );
   }
 }
 
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+/// Bottom navigation between the tabs.
+class HomeShell extends StatefulWidget {
+  const HomeShell({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomePageState extends State<HomePage> {
-  int _tab = 0;
-
-  static const _screens = [
-    GlassesScreen(),
-    PhotosScreen(),
-    AppsScreen(),
-    ServicesScreen(),
-    SettingsScreen(),
+class _HomeShellState extends State<HomeShell> {
+  static const _tabs = [
+    (Icons.visibility_outlined, Icons.visibility, 'Glasses', HomeScreen()),
+    (
+      Icons.photo_library_outlined,
+      Icons.photo_library,
+      'Photos',
+      PhotosScreen(),
+    ),
+    (Icons.menu_outlined, Icons.menu, 'Menu', MenuScreen()),
+    (Icons.hub_outlined, Icons.hub, 'Services', ServicesScreen()),
+    (Icons.info_outline, Icons.info, 'About', AboutScreen()),
   ];
+
+  int _index = 0;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _tab, children: _screens),
+      appBar: AppBar(title: Text(_tabs[_index].$3.toUpperCase())),
+      body: SafeArea(
+        top: false,
+        child: IndexedStack(
+          index: _index,
+          children: [for (final tab in _tabs) tab.$4],
+        ),
+      ),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.visibility_outlined),
-            selectedIcon: Icon(Icons.visibility),
-            label: 'Glasses',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.photo_library_outlined),
-            selectedIcon: Icon(Icons.photo_library),
-            label: 'Photos',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.apps_outlined),
-            selectedIcon: Icon(Icons.apps),
-            label: 'Apps',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.hub_outlined),
-            selectedIcon: Icon(Icons.hub),
-            label: 'Services',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
+        selectedIndex: _index,
+        onDestinationSelected: (i) => setState(() => _index = i),
+        destinations: [
+          for (final (icon, selected, label, _) in _tabs)
+            NavigationDestination(
+              icon: Icon(icon),
+              selectedIcon: Icon(selected),
+              label: label,
+            ),
         ],
       ),
     );

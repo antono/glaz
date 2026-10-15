@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../catalog.dart';
+import '../glasses_menu.dart';
+import '../services/service_list.dart';
 import '../services/services.dart';
 
 /// What the phone does for Lua apps on the glasses.
@@ -25,94 +26,91 @@ class ServicesScreen extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Services')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        children: [
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Text(
+            s.link.connected
+                ? 'The phone does these for apps on the glasses.'
+                : 'The phone does these for apps on the glasses, '
+                      'while they are connected.',
+            style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+        ),
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              for (final service in services)
+                SwitchListTile(
+                  title: Row(
+                    children: [
+                      Text(service.label),
+                      if (!service.ready) ...[
+                        const SizedBox(width: 8),
+                        const _Badge('Planned'),
+                      ],
+                    ],
+                  ),
+                  subtitle: Text(_subtitle(s, service)),
+                  value: service.ready && s.settings.serviceOn(service.id),
+                  onChanged: service.ready
+                      ? (v) => _toggle(context, s, service.id, v)
+                      : null,
+                ),
+            ],
+          ),
+        ),
+        if (s.notifications.supported) ...[
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: s.link.connected ? s.notifications.sendTest : null,
+              icon: const Icon(Icons.notifications_active_outlined),
+              label: const Text('Send a test notification'),
+            ),
+          ),
+        ],
+        if (s.network.log.isNotEmpty) ...[
           Padding(
-            padding: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.fromLTRB(4, 24, 4, 8),
             child: Text(
-              s.link.connected
-                  ? 'The phone does these for apps on the glasses.'
-                  : 'The phone does these for apps on the glasses, '
-                        'while they are connected.',
-              style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+              'Recent Internet requests',
+              style: text.titleSmall?.copyWith(color: scheme.primary),
             ),
           ),
           Card(
             clipBehavior: Clip.antiAlias,
             child: Column(
               children: [
-                for (final service in services)
-                  SwitchListTile(
-                    title: Row(
-                      children: [
-                        Text(service.label),
-                        if (!service.ready) ...[
-                          const SizedBox(width: 8),
-                          const _Badge('Planned'),
-                        ],
-                      ],
+                for (final e in s.network.log)
+                  ListTile(
+                    dense: true,
+                    leading: Icon(
+                      e.status >= 200 && e.status < 300
+                          ? Icons.check_circle_outline
+                          : Icons.error_outline,
+                      color: e.status >= 200 && e.status < 300
+                          ? scheme.primary
+                          : scheme.error,
                     ),
-                    subtitle: Text(_subtitle(s, service)),
-                    value: service.ready && s.settings.serviceOn(service.id),
-                    onChanged: service.ready
-                        ? (v) => _toggle(context, s, service.id, v)
-                        : null,
+                    title: Text(
+                      '${e.module}: ${e.method} ${e.url}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      e.status == 0 ? 'no answer' : 'status ${e.status}',
+                    ),
                   ),
               ],
             ),
           ),
-          if (s.notifications.supported) ...[
-            const SizedBox(height: 16),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: s.link.connected ? s.notifications.sendTest : null,
-                icon: const Icon(Icons.notifications_active_outlined),
-                label: const Text('Send a test notification'),
-              ),
-            ),
-          ],
-          if (s.network.log.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 24, 4, 8),
-              child: Text(
-                'Recent Internet requests',
-                style: text.titleSmall?.copyWith(color: scheme.primary),
-              ),
-            ),
-            Card(
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                children: [
-                  for (final e in s.network.log)
-                    ListTile(
-                      dense: true,
-                      leading: Icon(
-                        e.status >= 200 && e.status < 300
-                            ? Icons.check_circle_outline
-                            : Icons.error_outline,
-                        color: e.status >= 200 && e.status < 300
-                            ? scheme.primary
-                            : scheme.error,
-                      ),
-                      title: Text(
-                        '${e.module}: ${e.method} ${e.url}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        e.status == 0 ? 'no answer' : 'status ${e.status}',
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
         ],
-      ),
+      ],
     );
   }
 
@@ -128,12 +126,12 @@ class ServicesScreen extends StatelessWidget {
             : '${s.notifications.forwarded} sent to the glasses';
       case 'network':
         final allowed = [
-          for (final sec in sections)
-            for (final a in sec.apps)
+          for (final sec in glassesMenu)
+            for (final a in sec.modules)
               if (a.network && s.settings.netAllowed(a.id)) a.label,
         ];
         return allowed.isEmpty
-            ? 'No app allowed yet: Apps tab'
+            ? 'No app allowed yet: Menu tab'
             : 'Allowed: ${allowed.join(', ')}';
       default:
         return service.description;

@@ -1,29 +1,23 @@
-# Glaz
+# glaz companion
 
 The phone side of glaz. The menu and the apps live on the glasses
 (`../frame_app.lua`); this app is the host that talks to them over
 Bluetooth -- the role `../host_test.py` plays on a laptop today.
 
-It connects to the glasses over Bluetooth (Glasses tab) and provides
-services to the Lua apps on them (docs/PROTOCOL.md, "Host services"):
+Tabs:
 
-- **Clock** -- sets the time in the top bar on every connect
-- **Notifications** -- forwards the phone's notifications; they pop up on
-  the glasses and are kept under Info > Notifications. Android only, needs
-  the notification-access permission, and only while Glaz runs
-- **Internet** -- fetches web pages for the apps the user allowed in the
-  Apps tab (`modules/weather.lua` is the example)
+- **Glasses** -- connect over Bluetooth; battery and firmware; Upload
+  (`main.lua` and the apps switched on in Menu), Restart, Firmware (install
+  another version over the air); the gestures that drive the glasses
+- **Photos** -- photos from Camera and Time series, by date; a series is a
+  folder named by when it started
+- **Menu** -- what the menu on the glasses contains, section by section;
+  which apps Upload sends, and which may use the Internet
+- **Services** -- what the phone does for the apps on the glasses: clock,
+  notifications, Internet, photos (`../docs/PROTOCOL.md`, "Host services")
+- **About** -- version and open-source licences
 
-Four tabs:
-
-- **Glasses** -- connect; battery, firmware and upload are not wired yet
-- **Apps** -- the modules in `../modules/`, grouped like the menu on the
-  glasses, with the Internet permission for those that use it
-- **Services** -- the above, plus a test notification and recent requests
-- **Settings** -- theme: System, Light or Dark
-
-Choices are kept across restarts. The app list in `lib/catalog.dart`
-mirrors the `MENU` tree in `../frame_app.lua` by hand for now.
+![logo variants](assets/logo/preview.png)
 
 ## Plain-language summary
 
@@ -40,14 +34,37 @@ Android SDK and JDK 17.
 ```sh
 cd ..                 # repository root
 devenv shell
+emulator-start &      # Android 16 emulator; first run creates the AVD
 cd flutter-glaz
-flutter run           # on a phone connected over USB
+flutter run           # on the emulator, or a phone connected over USB
 flutter test
 ```
 
 Platforms: Android, iOS, Linux, macOS. iOS and macOS builds need Xcode, which
-Nix cannot provide. There is no emulator in the devenv on purpose: the app
-needs a real phone next to the glasses.
+Nix cannot provide. The emulator is for the UI only: it has no Bluetooth, so
+talking to the glasses needs a real phone.
+
+## Look
+
+Dark only, in Frame's own palette (`lib/theme.dart`): the glasses' display is
+an OLED, black is "off", so the phone is black too. The logo is a pixel-art
+eye drawn by `tool/logo.py` -- plain Python, no Pillow:
+
+```sh
+python tool/logo.py preview          # assets/logo/preview.png: all variants
+python tool/logo.py icons bloodshot  # the app logo and every platform icon
+```
+
+Variants: `bloodshot` (the default), `oled`, `flipper`. `icons` rewrites the
+Android, iOS and macOS icons and both launch screens, so switching the logo is
+that one command.
+
+## Keeping in step with the glasses
+
+The Menu tab describes `../frame_app.lua`'s `MENU` tree by hand
+(`lib/glasses_menu.dart`). `flutter test` reads the Lua and fails when the
+sections, items or labels drift apart -- update the Dart list after adding a
+module.
 
 ## Talking to the glasses
 
@@ -55,3 +72,11 @@ needs a real phone next to the glasses.
 transport the Python host uses. Connecting sends no break or reset, so
 `main.lua` keeps running; the message codes are in `lib/frame/protocol.dart`
 and match `../docs/PROTOCOL.md`.
+
+Upload takes the Lua from `assets/lua/`, which links to the repository's
+`frame_app.lua`, `modules/` and `sprites/`. Firmware offers the zips in
+`assets/firmware/`, which are not committed:
+
+```sh
+tool/fetch_firmware.sh    # three newest official releases + a custom build
+```

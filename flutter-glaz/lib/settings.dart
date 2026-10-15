@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Everything the user picks, kept across restarts.
@@ -9,11 +9,6 @@ class Settings extends ChangeNotifier {
 
   static Future<Settings> load() async =>
       Settings(await SharedPreferences.getInstance());
-
-  ThemeMode get themeMode =>
-      ThemeMode.values.asNameMap()[_prefs.getString('theme')] ??
-      ThemeMode.system;
-  set themeMode(ThemeMode mode) => _set('theme', mode.name);
 
   /// A phone service. Notifications start off: they need a permission first.
   bool serviceOn(String id) =>

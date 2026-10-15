@@ -39,23 +39,20 @@ class PhotosScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = Services.instance.photos.store;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Photos')),
-      body: ListenableBuilder(
-        listenable: store,
-        builder: (context, _) => FutureBuilder<List<PhotoDay>>(
-          future: store.days(),
-          builder: (context, snap) {
-            final days = snap.data;
-            if (days == null) return const SizedBox.shrink();
-            if (days.isEmpty) return const _Empty();
-            final now = DateTime.now();
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              children: [for (final day in days) ..._day(context, day, now)],
-            );
-          },
-        ),
+    return ListenableBuilder(
+      listenable: store,
+      builder: (context, _) => FutureBuilder<List<PhotoDay>>(
+        future: store.days(),
+        builder: (context, snap) {
+          final days = snap.data;
+          if (days == null) return const SizedBox.shrink();
+          if (days.isEmpty) return const _Empty();
+          final now = DateTime.now();
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            children: [for (final day in days) ..._day(context, day, now)],
+          );
+        },
       ),
     );
   }

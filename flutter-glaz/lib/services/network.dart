@@ -21,7 +21,7 @@ class NetLogEntry {
 }
 
 /// Fetches web pages for modules on the glasses (docs/PROTOCOL.md,
-/// "Internet"). Only for modules the user allowed, in Glaz > Apps.
+/// "Internet"). Only for modules the user allowed, in Glaz > Menu.
 class NetworkService extends ChangeNotifier {
   NetworkService(this.link, this.settings, {http.Client? client})
     : _client = client ?? http.Client() {
@@ -79,7 +79,7 @@ class NetworkService extends ChangeNotifier {
     String body,
   ) async {
     if (!settings.serviceOn('network') || !settings.netAllowed(module)) {
-      return (403, ascii.encode('not allowed: Glaz > Apps'));
+      return (403, ascii.encode('not allowed: Glaz > Menu'));
     }
     final uri = Uri.tryParse(url);
     if ((method != 'GET' && method != 'POST') ||

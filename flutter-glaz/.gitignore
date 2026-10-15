@@ -47,5 +47,8 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 
+# Written by devenv with local Android SDK paths
+/local.properties
+
 # firmware zips, fetched by tool/fetch_firmware.sh
 /assets/firmware/*.zip

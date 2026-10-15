@@ -6,7 +6,7 @@
 --
 -- The example of a module using the Internet through the phone (_M.host, see
 -- frame_app.lua). The phone answers only if this module is allowed the
--- Internet in Glaz > Apps; otherwise the status is 403.
+-- Internet in Glaz > Menu; otherwise the status is 403.
 --
 -- wttr.in places the request by the phone's IP address. format= picks the
 -- fields, '|' separated: location, temperature, conditions. The answer has a

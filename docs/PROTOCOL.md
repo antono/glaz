@@ -366,7 +366,7 @@ The glasses have no Internet and no phone of their own. While the Glaz app
 on the phone is connected, it lends them both: notifications from the phone
 pop up on the glasses, and an app on the glasses can ask the phone to fetch
 a web page for it. Which apps may do that is up to the user, per app, in
-Glaz > Apps.
+Glaz > Menu.
 
 ### Notifications
 
@@ -409,7 +409,7 @@ why, as text:
 
 | Status | Body | When |
 | --- | --- | --- |
-| `403` | `not allowed: Glaz > Apps` | the module has no Internet permission, or the service is off |
+| `403` | `not allowed: Glaz > Menu` | the module has no Internet permission, or the service is off |
 | `400` | `bad request` | not `GET` or `POST`, or not an `http(s)` URL |
 | `0` | the error | network error, or no answer within 15 s |
 

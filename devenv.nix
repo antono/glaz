@@ -9,7 +9,7 @@
 #   lua 5.4         check.sh -- Frame runs Lua 5.4, older versions reject
 #                   valid code (docs/PROTOCOL.md)
 #   python + venv   host_test.py and utils/ (frame-ble, frame-msg), from
-#                   requirements.txt; libstdc++ and zlib for numpy's wheel
+#                   requirements.txt
 #   gcc-arm-embedded, make
 #                   building the firmware in ../frame-codebase
 #   nrfutil         packaging the firmware as a DFU zip (docs/FIRMWARE.md)
@@ -19,7 +19,7 @@
 #
 # macOS gaps: iOS builds need Xcode, which Nix cannot provide; and there is
 # no command-line DFU path on macOS (docs/FIRMWARE.md) -- use nRF Connect.
-{ pkgs, lib, config, inputs, ... }:
+{ pkgs, lib, inputs, ... }:
 
 let
   available = lib.meta.availableOn pkgs.stdenv.hostPlatform;
@@ -49,36 +49,40 @@ in
     enable = true;
     venv.enable = true;
     venv.requirements = ./requirements.txt;
-    # pip wheels with native code (numpy, pulled in by frame-msg) link
-    # against libstdc++ and libz, which NixOS has no global copy of. Without
-    # these, host_test.py dies with "libstdc++.so.6: cannot open shared
-    # object file". The first entry is the module's default, kept.
-    libraries = [
-      "${config.devenv.dotfile}/profile"
-      pkgs.stdenv.cc.cc.lib
-      pkgs.zlib
-    ];
   };
 
-  # Flutter for the companion app, with an Android SDK to build it. The app
-  # runs on a real phone next to the glasses, so the emulator and its system
-  # images (several GB) are left out.
+  # Flutter for the companion app, with an Android SDK to build it and one
+  # emulator image to try it on. The image is the host's own architecture
+  # only -- arm64 on Apple Silicon and ARM Linux, x86_64 elsewhere -- since
+  # each extra one is well over a gigabyte. Talking to the glasses still
+  # needs a real phone: the emulator has no Bluetooth.
   android = {
     enable = true;
     flutter.enable = true;
     # What Flutter 3.47's Gradle plugin builds against (FlutterExtension.kt:
     # compileSdk/targetSdk 36). The SDK lives in the read-only Nix store, so
     # Gradle cannot fetch missing parts itself; they must be listed here. The
-    # NDK default (28.2.13676358) already matches. 34 is for plugins that
-    # still compile against it (notification_listener_service).
-    platforms.version = [ "36" "35" "34" ];
+    # NDK default (28.2.13676358) already matches.
+    platforms.version = [ "36" ];
     buildTools.version = [ "36.0.0" "35.0.0" ];
-    emulator.enable = false;
-    systemImages.enable = false;
+    emulator.enable = true;
+    systemImages.enable = true;
+    systemImageTypes = [ "google_apis" ];
+    abis = if pkgs.stdenv.hostPlatform.isAarch64 then [ "arm64-v8a" ] else [ "x86_64" ];
     googleTVAddOns.enable = false;
   };
 
   scripts = {
+    # Create the emulator on first use, then boot it. The AVD lives in
+    # .android/avd (ignored); the system image is the one in the SDK above.
+    emulator-start.exec = ''
+      abi=${if pkgs.stdenv.hostPlatform.isAarch64 then "arm64-v8a" else "x86_64"}
+      if ! avdmanager list avd -c | grep -qx glaz; then
+        echo no | avdmanager create avd --force -n glaz -d pixel_6 \
+          -k "system-images;android-36;google_apis;$abi"
+      fi
+      emulator -avd glaz -no-snapshot-save "$@"
+    '';
     check.exec = ''./check.sh'';
     upload.exec = ''python host_test.py "$@"'';
     sprite.exec = ''python utils/show_sprite.py "$@"'';
@@ -98,6 +102,7 @@ in
     echo "  check            static checks for the Lua side"
     echo "  upload           upload the app to the glasses and listen"
     echo "  sprite NAME N    show sprites/NAME.lua at N x on the glasses"
+    echo "  emulator-start   boot the Android emulator (first run creates it)"
     echo "  cd flutter-glaz && flutter run    the companion app"
   '';
 }

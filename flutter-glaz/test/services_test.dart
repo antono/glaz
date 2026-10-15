@@ -71,7 +71,7 @@ void main() {
         '',
       );
       expect(status, 403);
-      expect(ascii.decode(body), 'not allowed: Glaz > Apps');
+      expect(ascii.decode(body), 'not allowed: Glaz > Menu');
       expect(seen, isEmpty);
     });
 
