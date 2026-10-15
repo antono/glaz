@@ -16,6 +16,8 @@
 #   bluez           Linux only: BLE tools for flashing from the command line
 #   flutter + Android SDK + JDK 17
 #                   the companion app in flutter-glaz/
+#   gstreamer, libunwind
+#                   Linux only: the companion app as a desktop app
 #
 # macOS gaps: iOS builds need Xcode, which Nix cannot provide; and there is
 # no command-line DFU path on macOS (docs/FIRMWARE.md) -- use nRF Connect.
@@ -34,6 +36,16 @@ let
       segger-jlink.acceptLicense = true;
     };
   };
+
+  # What the phone app carries but git does not: the Lua compiled to
+  # bytecode -- the glasses cannot compile main.lua themselves any more --
+  # and the firmware for Update. Built without them, the app had no
+  # firmware to offer.
+  appAssets = ''
+    cd "$DEVENV_ROOT/flutter-glaz"
+    tool/compile_lua.sh
+    tool/fetch_firmware.sh || echo "firmware not fetched; Update offers what is in assets/firmware" >&2
+  '';
 in
 {
   packages = [
@@ -43,7 +55,16 @@ in
   ]
   ++ lib.optional (available pkgs.gcc-arm-embedded) pkgs.gcc-arm-embedded
   ++ lib.optional (available nordic.nrfutil) nordic.nrfutil
-  ++ lib.optionals pkgs.stdenv.isLinux [ pkgs.bluez ];
+  ++ lib.optionals pkgs.stdenv.isLinux [ pkgs.bluez ]
+  # The companion app as a Linux desktop app: audioplayers plays through
+  # GStreamer, and its plugin will not configure without the headers.
+  # Flutter's wrapper already brings GTK, clang, cmake and ninja.
+  ++ lib.optionals pkgs.stdenv.isLinux (with pkgs.gst_all_1; [
+    pkgs.libunwind  # gstreamer-1.0.pc requires it
+    gstreamer
+    gst-plugins-base
+    gst-plugins-good
+  ]);
 
   languages.python = {
     enable = true;
@@ -86,15 +107,22 @@ in
     check.exec = ''./check.sh'';
     upload.exec = ''python host_test.py "$@"'';
     sprite.exec = ''python utils/show_sprite.py "$@"'';
-    # The phone app, with what it carries but git does not: the Lua compiled
-    # to bytecode -- the glasses cannot compile main.lua themselves any
-    # more -- and the firmware for Update. Built without them, the app had
-    # no firmware to offer.
+    # The phone app, with its bytecode and firmware (appAssets above).
     apk.exec = ''
-      cd "$DEVENV_ROOT/flutter-glaz"
-      tool/compile_lua.sh
-      tool/fetch_firmware.sh || echo "firmware not fetched; Update offers what is in assets/firmware" >&2
+      ${appAssets}
       flutter build apk --debug "$@"
+    '';
+    # The same app for the Linux desktop, talking to the glasses through
+    # the laptop's own Bluetooth (BlueZ). A failed first configure leaves
+    # /usr/local cached as the install prefix, and every later build then
+    # fails to install; a fresh build directory clears it.
+    linux-app.exec = ''
+      ${appAssets}
+      if grep -qs '^CMAKE_INSTALL_PREFIX:PATH=/usr/local$' build/linux/*/*/CMakeCache.txt; then
+        rm -rf build/linux
+      fi
+      flutter build linux --debug "$@"
+      ls -d "$PWD"/build/linux/*/*/bundle/glaz
     '';
   };
 
@@ -114,6 +142,7 @@ in
     echo "  sprite NAME N    show sprites/NAME.lua at N x on the glasses"
     echo "  emulator-start   boot the Android emulator (first run creates it)"
     echo "  apk              build the phone app (Lua bytecode and firmware first)"
+    echo "  linux-app        the same app for the Linux desktop"
     echo "  cd flutter-glaz && tool/compile_lua.sh && flutter run    the companion app"
   '';
 }

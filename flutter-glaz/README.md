@@ -44,12 +44,24 @@ flutter test
 
 Platforms: Android, iOS, Linux, macOS. iOS and macOS builds need Xcode, which
 Nix cannot provide. The emulator is for the UI only: it has no Bluetooth, so
-talking to the glasses needs a real phone.
+talking to the glasses needs a real phone -- or the Linux desktop app, which
+uses the laptop's own Bluetooth (BlueZ):
+
+```sh
+linux-app             # from the devenv shell: bytecode, firmware, then the build
+flutter-glaz/build/linux/x64/debug/bundle/glaz
+```
+
+On Linux the phone-only services stay off: notifications (Android's
+notification listener) and the shared Pictures folder -- photos and
+recordings go to `~/Documents/photos` and `~/Documents/recordings`.
 
 ## Look
 
 Dark only, in Frame's own palette (`lib/theme.dart`): the glasses' display is
-an OLED, black is "off", so the phone is black too. The logo is a pixel-art
+an OLED, black is "off", so the phone is black too. On the Linux desktop the
+window frame asks GTK for its dark variant to match
+(`linux/runner/my_application.cc`). The logo is a pixel-art
 eye drawn by `tool/logo.py` -- plain Python, no Pillow:
 
 ```sh

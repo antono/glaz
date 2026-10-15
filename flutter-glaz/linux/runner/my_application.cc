@@ -25,6 +25,12 @@ static void my_application_activate(GApplication* application) {
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
+  // The app is dark only (lib/theme.dart), so its frame is dark too: the
+  // header bar GTK draws, and -- through the _GTK_THEME_VARIANT hint -- the
+  // title bar of window managers that honour it.
+  g_object_set(gtk_settings_get_default(),
+               "gtk-application-prefer-dark-theme", TRUE, nullptr);
+
   // Use a header bar when running in GNOME as this is the common style used
   // by applications and is the setup most users will be using (e.g. Ubuntu
   // desktop).
