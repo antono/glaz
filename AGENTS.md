@@ -58,3 +58,7 @@ python3 -m venv .venv
 - Run `./check.sh` after changing any `.lua` file.
 - Adding a menu item: add a file in `modules/` and list it in the `MENU` tree
   in `frame_app.lua`. See `docs/PROTOCOL.md`.
+- Every commit that changes the glasses side (`frame_app.lua`, `modules/`,
+  `sprites/`) bumps `VERSION` in `modules/about.lua` in the same commit:
+  minor for a feature, patch for a fix. Info > About on the glasses must
+  always show the version that is running.
