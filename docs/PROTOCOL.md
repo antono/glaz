@@ -111,6 +111,10 @@ hardware.
   Without `on_roll` tilt is ignored and the IMU is not even polled.
 - `on_tap()` — a single tap. Without it a single tap only keeps the module
   alive.
+- `on_hit(n)` — `n` raw hits from the accelerometer since the last call,
+  bounces and the taps of a double or triple included. For measuring taps
+  (`modules/taptune.lua`); a module never takes `frame.imu.tap_callback`
+  over, which would leave the app without taps.
 
 Each returns the text to show (`nil` keeps the current text) and, optionally,
 `true` as a second value meaning "done": the module is stopped — even a

@@ -548,6 +548,8 @@ local notice_until = 0  -- utc() when it goes away by itself
 local tap_n     = 0   -- taps in the current multi-tap window (set in callback)
 local tap_at    = 0   -- utc() of the last accepted tap (set in callback)
 local tap_shake = 0   -- utc() of the last hit of any kind, bounces included
+local tap_hits  = 0   -- every hit counted, bounces included: on_hit(n)
+local hits_seen = 0   -- tap_hits already handed to a module
 local tap_mute  = 0   -- swallow taps until this time, after a toggle
 local remote_dir = 0  -- a tilt from the phone's remote, taken as if by roll
 
@@ -1047,6 +1049,7 @@ end
 frame.imu.tap_callback(function()
   local t = frame.time.utc()
   tap_shake = t                       -- every hit shakes the glasses
+  tap_hits = tap_hits + 1
   if t - tap_at < TAP_BOUNCE then return end   -- bounce, not a new tap
   if t - tap_at > TAP_WINDOW then
     tap_n = 1
@@ -1527,6 +1530,9 @@ function app_loop()
       -- 3. the running module. Tilt only reaches a module that takes it
       --    (on_roll), and only moves its cursor -- it never leaves the
       --    module. A module without on_roll does not poll the IMU at all.
+      --    Raw hits, bounces included, go to on_hit(n): Tap tune counts them.
+      local hits = tap_hits - hits_seen
+      hits_seen = tap_hits
       if running then
         local mod = mods[running]
         local dir = (mod and mod.on_roll) and roll_step(now) or 0
@@ -1537,6 +1543,9 @@ function app_loop()
 
         if dir ~= 0 then
           module_input(mod.on_roll, dir)
+
+        elseif hits > 0 and mod and mod.on_hit then
+          module_input(mod.on_hit, hits)
 
         elseif mod and mod.mode == 'app' then
           -- keep refreshing until closed or left alone for APP_TIMEOUT;

@@ -10,26 +10,33 @@
 --                     control, and stock firmware leaves it at 0
 --   duration  0..15   minimum length of the impulse
 --
--- Tilt moves between fields, tap cycles the selected field's value. The hit
--- counter shows taps seen since the last change, which is the whole point:
--- knock once and watch whether the count goes up by one or by five.
+-- Tilt moves the cursor: threshold, quiet, duration, test. A tap on a
+-- setting steps it to its next value and reprograms the accelerometer; on
+-- test a tap changes nothing, so knock there and watch the hit count --
+-- one knock should add one, not five. The count restarts with every change.
+-- Hits come from the app (on_hit), bounces included: a module must not take
+-- frame.imu.tap_callback over, or the app loses its taps for good.
 local _M = {}
 
 _M.label = 'Tap tune'
 _M.mode = 'app'
 
 local FIELDS = {
-  { name = 'threshold', values = { 3, 5, 7, 10, 15, 20, 30, 50 } },
-  { name = 'quiet',     values = { 0, 1, 2, 3, 4, 6, 8, 12, 15 } },
-  { name = 'duration',  values = { 0, 1, 2, 3, 4, 6, 8, 12, 15 } },
+  { name = 'threshold', short = 'thr',
+    values = { 3, 5, 7, 10, 15, 20, 30, 50 } },
+  { name = 'quiet',     short = 'quiet',
+    values = { 0, 1, 2, 3, 4, 6, 8, 12, 15 } },
+  { name = 'duration',  short = 'dur',
+    values = { 0, 1, 2, 3, 4, 6, 8, 12, 15 } },
 }
+local TEST = #FIELDS + 1
 
 local supported = false
-local sel = 1
+local sel = TEST
 local hits = 0
 local cfg = {}
 
-local function cycle(field)
+local function next_value(field)
   local current = cfg[field.name]
   for i, v in ipairs(field.values) do
     if v == current then
@@ -41,58 +48,61 @@ end
 
 function _M.start()
   supported = (type(frame.imu.tap_config) == 'function')
-  if not supported then return end
-
-  cfg = frame.imu.tap_config()
+  if supported then cfg = frame.imu.tap_config() end
   hits = 0
-
-  -- Count every tap the hardware reports. The app framework also sees these
-  -- taps, so a double tap still leaves the module; that is deliberate --
-  -- there has to be a way out while the settings are bad.
-  frame.imu.tap_callback(function() hits = hits + 1 end)
 end
 
 function _M.stop()
   hits = 0
 end
 
+-- Three rows, each well under the screen's width: every setting with the
+-- cursor's in brackets, what a tap does here, the hit count.
 local function screen()
   if not supported then
-    return 'needs okulo/tap-tuning firmware'
+    return 'needs the okulo/tap-tuning\nfirmware'
   end
 
-  local out = {}
+  local parts = {}
   for i, field in ipairs(FIELDS) do
-    out[#out + 1] = string.format('%s%s %d',
-                                  (i == sel) and '>' or ' ',
-                                  field.name, cfg[field.name])
+    local s = field.short .. ' ' .. cfg[field.name]
+    parts[i] = (i == sel) and ('[' .. s .. ']') or s
   end
-  out[#out + 1] = string.format('hits %d', hits)
-  return table.concat(out, '  ')
+
+  local hint
+  if sel == TEST then
+    hint = '[test] knock to count'
+  else
+    local field = FIELDS[sel]
+    hint = string.format('tap: %s %d > %d', field.name, cfg[field.name],
+                         next_value(field))
+  end
+  return table.concat(parts, ' ') .. '\n' .. hint .. '\nhits ' .. hits
 end
 
--- Tilt moves between fields. Returns the text to show, per the module_input
--- contract in frame_app.lua.
 function _M.on_roll(direction)
-  if not supported then return screen() end
-  sel = sel + direction
-  if sel < 1 then sel = #FIELDS end
-  if sel > #FIELDS then sel = 1 end
+  sel = (sel - 1 + direction) % TEST + 1
   return screen()
 end
 
--- A single tap cycles the selected field and reprograms the accelerometer.
--- The hit counter resets so the next knocks measure the new settings.
+-- A tap on a setting steps it and reprograms the accelerometer; the count
+-- restarts so the next knocks measure the new settings. On test it only
+-- counts, through on_hit.
 function _M.on_tap()
-  if not supported then return screen() end
-  local field = FIELDS[sel]
-  cfg[field.name] = cycle(field)
-  frame.imu.tap_config(cfg)
-  hits = 0
+  if supported and sel ~= TEST then
+    local field = FIELDS[sel]
+    cfg[field.name] = next_value(field)
+    frame.imu.tap_config(cfg)
+    hits = 0
+  end
   return screen()
 end
 
--- Also refreshed on a timer, so the hit counter moves without any input.
+function _M.on_hit(n)
+  hits = hits + n
+  return screen()
+end
+
 function _M.tick()
   return screen()
 end

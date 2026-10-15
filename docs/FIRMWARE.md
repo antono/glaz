@@ -92,14 +92,17 @@ app can display and round-trip them.
 ## Calibrating
 
 [`modules/taptune.lua`](../modules/taptune.lua) is a menu module for tuning in
-place. Tilt selects a field, a single tap cycles its value and reprograms the
-chip, and a hit counter shows taps seen since the last change.
+place. Tilt moves the cursor over `threshold`, `quiet`, `duration` and
+`test`; a single tap on a setting steps it to its next value (the screen says
+which) and reprograms the chip. On `test` a tap changes nothing. A hit
+counter shows every hit since the last change, bounces included.
 
-The counter is the actual measurement: knock **once** and watch whether it
-advances by one or by five. Raise `quiet` until one knock reads as one tap.
+The counter is the actual measurement: on `test`, knock **once** and watch
+whether it advances by one or by five. Raise `quiet` until one knock reads as
+one tap.
 
 The module checks for `frame.imu.tap_config` and shows
-`needs okulo/tap-tuning firmware` on stock firmware rather than failing.
+`needs the okulo/tap-tuning firmware` on stock firmware rather than failing.
 
 Suggested order:
 
