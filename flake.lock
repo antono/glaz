@@ -1,0 +1,44 @@
+{
+  "nodes": {
+    "frame-codebase": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1759663654,
+        "narHash": "sha256-oNJh/aiXjVYzMqOorC2liVF2Gi5KHOM5ZQEwvpKN2uQ=",
+        "owner": "brilliantlabsAR",
+        "repo": "frame-codebase",
+        "rev": "d3096344a8135385b5f1f4c92962d55e5c77d8d2",
+        "type": "github"
+      },
+      "original": {
+        "owner": "brilliantlabsAR",
+        "repo": "frame-codebase",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1791487292,
+        "narHash": "sha256-tqM7xDEsaeK1p6VvRygeZ9LkQRpUUkbRT02BHv6hnTM=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "8edc0c72e3a38faf5434e40d1f19431125fe4b30",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixpkgs-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "frame-codebase": "frame-codebase",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

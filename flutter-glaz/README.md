@@ -52,6 +52,14 @@ linux-app             # from the devenv shell: bytecode, firmware, then the buil
 flutter-glaz/build/linux/x64/debug/bundle/glaz
 ```
 
+Or, without devenv, as a Nix package (`../flake.nix`) -- bytecode and the
+official firmware built in, with an entry in the desktop's app menu:
+
+```sh
+nix run github:antono/glaz   # or, in the repository: nix run
+nix profile install .     # keep it
+```
+
 On Linux the phone-only services stay off: notifications (Android's
 notification listener) and the shared Pictures folder -- photos and
 recordings go to `~/Documents/photos` and `~/Documents/recordings`.

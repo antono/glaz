@@ -12,6 +12,8 @@ photos/
 .devenv/
 .devenv.flake.nix
 .direnv/
+# nix build
+result
 # written by devenv's android module on every shell entry: Nix store paths,
 # the SDK cache, and a generated debug signing key
 /.android/

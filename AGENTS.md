@@ -31,6 +31,7 @@ The glasses run Lua; a laptop talks to them over Bluetooth using Python.
 - `sprites/` — pixel art for the splash, drawn by `frame_app.lua`
 - `flutter-glaz/` — the Flutter companion app (phone side)
 - `devenv.nix` — the development environment
+- `flake.nix` — the companion app as a Linux desktop package (`nix run`)
 
 ## Setup
 
