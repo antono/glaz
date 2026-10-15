@@ -551,6 +551,17 @@ follows a triple tap. A tilt reaches the menu's cursor, or the running
 module's `on_roll`, exactly where a head tilt would; with neither on screen
 it does nothing. Either counts as activity, keeping the menu or an app up.
 
+**A keyboard is a remote too** (`flutter-glaz/lib/services/keys.dart`, the
+Keyboard remote service). Any keyboard the phone has -- Bluetooth or USB, a
+presentation clicker, a gamepad's D-pad, a Flipper Zero in Bluetooth Remote
+> Keynote -- sends the same `INPUT`s: arrows, Page Up/Down and the track
+keys move the cursor; Space, Enter or the D-pad centre select, held 0.6 s
+they open the menu; Backspace or Esc go back; Menu or Start open the menu.
+Only while the glasses are connected and no text field has the focus, and
+only with the app on screen: Android gives key events to the foreground
+app. Keynote's Back sends Backspace and then Android's Back; the second is
+dropped so it does not also close the app.
+
 ### Settings
 
 Some modules have settings the user picks on the phone (Glaz > Menu, tap a

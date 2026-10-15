@@ -35,4 +35,11 @@ const services = [
     "Tells the apps you allow where the phone is",
     true,
   ),
+  GlazService(
+    'keys',
+    'Keyboard remote',
+    'Arrows, Space and Backspace on a Bluetooth keyboard or a Flipper '
+        'Zero drive the glasses',
+    true,
+  ),
 ];

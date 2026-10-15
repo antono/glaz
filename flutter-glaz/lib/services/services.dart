@@ -3,6 +3,7 @@ import 'dart:io';
 import '../frame/link.dart';
 import '../settings.dart';
 import 'glasses_files.dart';
+import 'keys.dart';
 import 'location.dart';
 import 'module_settings.dart';
 import 'network.dart';
@@ -50,6 +51,7 @@ class Services {
       GlassesFiles(link),
     );
     SettingsSync(link, s);
+    KeyRemote(link, s).attach();
     link.onConnected.add(() async {
       if (s.serviceOn('clock')) await link.sendClock();
     });
