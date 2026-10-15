@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:frame_ble/frame_ble.dart';
 
 import 'lua_min.dart';
+import 'update_screen.dart';
 
 /// Putting the app on the glasses, the way ../../host_test.py does it:
 /// stop the running app, take main.lua out of the way, reset into a bare
@@ -192,18 +193,6 @@ class Repl {
     return out;
   }
 
-  /// Draws [lines] on the glasses, one under another -- what the upload is
-  /// doing, since their own app is stopped meanwhile. Short ASCII lines: the
-  /// whole command has to fit one REPL write (about 240 bytes).
-  Future<void> show(List<String> lines) {
-    String esc(String l) => l.replaceAll(RegExp(r"[^ -~]|['\\]"), '?');
-    final draw = [
-      for (var i = 0; i < lines.length; i++)
-        "frame.display.text('${esc(lines[i])}',60,${80 + i * 60})",
-    ].join(' ');
-    return run('$draw frame.display.show() print(\'shown\')', 'shown');
-  }
-
   /// Runs [lua], which must end by printing [token].
   Future<void> run(
     String lua,
@@ -288,7 +277,11 @@ Future<void> uploadApp(
   report('Resetting the glasses');
   await device.sendResetSignal();
   await repl.ready();
-  await repl.show(['Uploading...']);
+  // the eye wired up, with what is going on under it; its art lives in Lua
+  // globals, so after a reset it is loaded again
+  final picture = GlassesPicture(repl.run);
+  await picture.load();
+  await picture.draw('Uploading...', progress: 0);
 
   // Lua files from earlier uploads -- modules switched off or gone, sprites
   // no longer drawn -- go. All of them: this upload brings back every one
@@ -321,11 +314,7 @@ Future<void> uploadApp(
     // main.lua as source goes up under another name, for the same reason
     final name = target == 'main.lua' && code == null ? mainSource : target;
     report('Uploading $name', done / total);
-    await repl.show([
-      'Uploading ${i + 1}/${order.length}',
-      name,
-      progressBar(done / total),
-    ]);
+    await picture.draw('Uploading: $name', progress: done / total);
     if (code == null) {
       await device.uploadScript(name, text);
     } else if (target != 'main.lua') {
@@ -356,15 +345,12 @@ Future<void> uploadApp(
     await device.sendResetSignal();
     await repl.ready();
     await repl.run("require('glaz_compile')", 'glaz_compile ready');
+    await picture.load();
   }
   for (var i = 0; i < toCompile.length; i++) {
     final name = toCompile[i];
     report('Compiling $name', i / toCompile.length);
-    await repl.show([
-      'Compiling ${i + 1}/${toCompile.length}',
-      name,
-      progressBar(i / toCompile.length),
-    ]);
+    await picture.draw('Compiling: $name', progress: i / toCompile.length);
     // pcall: any error -- out of memory in string.dump, say -- comes back
     // as 'E ...', and 'compiled' always follows, so nothing waits it out
     final source = name == 'main.lua' ? mainSource : name;
@@ -394,11 +380,12 @@ Future<void> uploadApp(
   }
   if (main.$3 case final code?) {
     report('Uploading main.lua', done / total);
+    await picture.draw('Uploading: main.lua', progress: done / total);
     await uploadBytes(device, 'main.lua', code);
   }
 
   report('Starting the app', 1);
-  await repl.show(['Starting...', '', progressBar(1)]);
+  await picture.draw('Starting...', progress: 1);
   await repl.start();
 }
 
@@ -442,13 +429,6 @@ Future<void> uploadBytes(
     await run("f:write(glaz_unhex('$piece'))", 'Error writing');
   }
   await run('f:close() glaz_unhex=nil', 'Error closing');
-}
-
-/// '[##########..........] 50%': in ASCII, as the glasses' font is.
-String progressBar(double done, {int width = 16}) {
-  final f = done.clamp(0.0, 1.0);
-  final n = (f * width).round();
-  return '[${'#' * n}${'.' * (width - n)}] ${(f * 100).round()}%';
 }
 
 /// Stops the app and boots main.lua again, as host_test.py does on exit:

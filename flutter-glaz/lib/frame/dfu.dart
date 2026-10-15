@@ -6,12 +6,15 @@ import 'package:frame_ble/frame_ble.dart';
 
 import 'firmware.dart';
 import 'link.dart';
+import 'update_screen.dart';
 import 'upload.dart';
 
 /// Installing a firmware package over Bluetooth (Nordic Secure DFU), the
 /// way the Noa app does it (lib/models/app_logic_model.dart there):
 ///
-/// 1. break the running app and ask the REPL for frame.update(): the
+/// 1. break the running app, put the eye wired up and 'firmware update' on
+///    the glasses (GlassesPicture, kept there through the reboot) and ask
+///    the REPL for frame.update(): the
 ///    glasses reboot into the bootloader, which advertises service fe59 as
 ///    "Frame Update" and gives up after 3 minutes of nothing
 ///    (NRF_BL_DFU_INACTIVITY_TIMEOUT_MS in the bootloader's sdk_config.h);
@@ -33,7 +36,18 @@ Future<void> installFirmware(
 ) async {
   report('Stopping the app');
   await device.sendBreakSignal();
-  await Repl(device).ready();
+  final repl = Repl(device);
+  await repl.ready();
+
+  // the eye wired up, kept on screen through the update; only a picture,
+  // so the update goes on without it
+  report('Showing the update on the glasses');
+  try {
+    final picture = GlassesPicture(repl.run);
+    await picture.load();
+    await picture.draw('firmware update');
+    await picture.freeze();
+  } catch (_) {}
 
   report('Rebooting into the bootloader');
   try {
