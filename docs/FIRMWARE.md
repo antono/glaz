@@ -203,10 +203,11 @@ make application BUILD_VERSION="v$(TZ= date +%y.%j.%H%M)-tap-tuning"
 
 The app does what the Noa app does (`flutter-glaz/lib/frame/dfu.dart`):
 break, `frame.update()`, find the bootloader by its DFU service `fe59`, and
-hand the zip to `frame_ble`'s `BrilliantDfuDevice`. DFU writes only the
-application partition, so the files on flash should survive and `main.lua`
-come back on its own after the reboot -- not yet confirmed on the device; if
-the menu does not return, Upload again.
+hand the zip to `frame_ble`'s `BrilliantDfuDevice`. **The update wipes the
+files on the glasses** -- `main.lua`, the modules, `settings.txt` -- although
+DFU writes only the application partition (seen: the first Upload after it
+found no `.lua` left to clear). So the app uploads the Lua again straight
+after, in the same step, compiled by the new firmware's own Lua.
 
 
 **nRF Connect on a phone** is the path that always works. Transfer the `.zip`

@@ -41,6 +41,10 @@ class FrameLink extends ChangeNotifier {
   final List<Future<void> Function()> onConnected = [];
 
   Stream<List<int>> get events => _events.stream;
+
+  /// The glasses as connected now -- after a reconnect, not the device a
+  /// task started with.
+  BrilliantDevice? get device => _device;
   bool get connected => state == LinkState.connected;
   bool get busy => task != null;
 

@@ -17,10 +17,9 @@ import 'upload.dart';
 ///    (NRF_BL_DFU_INACTIVITY_TIMEOUT_MS in the bootloader's sdk_config.h);
 /// 2. find it, connect, and hand the zip to frame_ble's BrilliantDfuDevice,
 ///    which sends application.dat then application.bin;
-/// 3. the glasses reboot into the new firmware. frame_ble reconnects to them
-///    by itself on Android. DFU writes only the application partition, so
-///    main.lua and the modules on flash should still be there (not yet
-///    confirmed on the device; Upload puts them back if not).
+/// 3. the glasses reboot into the new firmware, with their files gone --
+///    the update wipes the file system (seen on the device) -- so the app
+///    is uploaded again, as Upload does it.
 ///
 /// Only the application is replaced (it carries the FPGA image too); the
 /// bootloader never is, so a bad build is undone by installing an official
@@ -29,6 +28,7 @@ Future<void> installFirmware(
   FrameLink link,
   BrilliantDevice device,
   FirmwarePackage package,
+  List<LuaFile> app,
   void Function(String step, [double? progress]) report,
 ) async {
   report('Stopping the app');
@@ -73,8 +73,14 @@ Future<void> installFirmware(
   report('Connecting to the glasses again');
   await link.reconnect(const Duration(seconds: 60));
 
-  // Their app answers STATUS with the firmware version. No answer means the
-  // firmware is in but the app did not start: Upload puts it back.
+  // The update wipes the files on the glasses -- seen: the next Upload
+  // found no .lua left to clear -- so the app goes back on at once, and
+  // compiled by the new firmware's Lua at that.
+  final glasses = link.device;
+  if (glasses == null) throw Exception('the glasses dropped the link');
+  await uploadApp(glasses, app, report);
+
+  // Their app answers STATUS with the firmware version.
   report('Checking the version');
   link.firmware = null;
   await link.requestStatus(duringTask: true);
@@ -86,7 +92,7 @@ Future<void> installFirmware(
   if (now == null) {
     throw Exception(
       'installed, but the app on the glasses does not answer; '
-      'Upload it again',
+      'try Upload',
     );
   }
   if (now != package.version) {

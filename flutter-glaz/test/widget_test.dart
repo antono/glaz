@@ -12,7 +12,10 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     final dir = Directory.systemTemp.createTempSync('glaz_widget');
-    await Services.start(photoDir: Directory('${dir.path}/photos'));
+    await Services.start(
+      photoDir: Directory('${dir.path}/photos'),
+      recordingDir: Directory('${dir.path}/recordings'),
+    );
   });
 
   testWidgets('opens on the glasses tab, not connected', (tester) async {
@@ -123,11 +126,19 @@ void main() {
   });
 
   test('a saved tab order is kept, cleaned and completed', () {
-    expect(tabOrderFrom(null), ['glasses', 'photos', 'remote', 'menu', 'more']);
+    expect(tabOrderFrom(null), [
+      'glasses',
+      'photos',
+      'recordings',
+      'remote',
+      'menu',
+      'more',
+    ]);
     expect(tabOrderFrom(['more', 'gone', 'glasses', 'more']), [
       'more',
       'glasses',
       'photos',
+      'recordings',
       'remote',
       'menu',
     ]);

@@ -21,6 +21,9 @@ The glasses run Lua; a laptop talks to them over Bluetooth using Python.
 ## Layout
 
 - `frame_app.lua` — app that runs on the glasses (uploaded as `main.lua`)
+- `app/` — parts of `frame_app.lua` in files of their own (services, file
+  browsing, photo, splash): `main.lua` in one piece no longer fits the
+  glasses' memory to compile
 - `modules/` — one Lua file per menu item
 - `host_test.py` — reference host: uploads everything, then listens
 - `utils/` — diagnostics, run individually

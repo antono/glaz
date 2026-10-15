@@ -10,6 +10,7 @@ import 'network.dart';
 import 'notifications.dart';
 import 'photo_dir.dart';
 import 'photos.dart';
+import 'recordings.dart';
 
 /// The app's long-lived parts, made once at startup.
 class Services {
@@ -21,6 +22,7 @@ class Services {
     this.photos,
     this.location,
     this.files,
+    this.recorder,
   );
 
   final Settings settings;
@@ -30,17 +32,21 @@ class Services {
   final PhotoService photos;
   final LocationService location;
   final GlassesFiles files;
+  final RecorderService recorder;
 
   static late Services instance;
 
-  /// [photoDir]: where photos go; [photoRoot] by default.
+  /// [photoDir]: where photos go; [photoRoot] by default. [recordingDir]:
+  /// where recordings go; [recordingRoot] by default.
   static Future<Services> start({
     Settings? settings,
     Directory? photoDir,
+    Directory? recordingDir,
   }) async {
     final s = settings ?? await Settings.load();
     final link = FrameLink();
     final dir = photoDir ?? await photoRoot();
+    final recDir = recordingDir ?? await recordingRoot();
     final services = Services._(
       s,
       link,
@@ -49,6 +55,7 @@ class Services {
       PhotoService(link, s, PhotoStore(dir)),
       LocationService(link, s),
       GlassesFiles(link),
+      RecorderService(link, s, RecordingStore(recDir)),
     );
     SettingsSync(link, s);
     KeyRemote(link, s).attach();

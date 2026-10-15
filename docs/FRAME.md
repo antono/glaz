@@ -226,6 +226,13 @@ Everything below follows from that.
     the glasses lose their line numbers. `host_test.py` still sends source
     as it is.
 
+    Then main.lua itself grew past what the glasses could compile in one
+    go, even first thing after a reset ("not enough memory" at "Compiling
+    main.lua"). Its larger, separable parts moved to `app/`: the services
+    (`glaz_host.lua`, loaded at start but compiled on its own), and file
+    browsing, the remote's photo and the splash (loaded only when used).
+    Compiled with debug information main.lua went from 71 KB to 57 KB.
+
 The working recipe used both workarounds: find Frame by address with a long
 scan, and pair on connect. Both are monkey-patches around frame_ble 1.1.1, which
 has no options for them:

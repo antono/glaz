@@ -14,15 +14,23 @@ import 'package:permission_handler/permission_handler.dart';
 /// photos permission ([photoAccess]).
 ///
 /// Elsewhere: the app's documents folder.
-Future<Directory> photoRoot() async {
+Future<Directory> photoRoot() => _mediaRoot('Pictures/Glaz', 'photos');
+
+/// Where Recorder's recordings are kept: the shared Recordings/Glaz, the
+/// same way as [photoRoot]. Shown in the phone's own recorder and music
+/// apps too.
+Future<Directory> recordingRoot() =>
+    _mediaRoot('Recordings/Glaz', 'recordings');
+
+Future<Directory> _mediaRoot(String shared, String own) async {
   if (!kIsWeb && Platform.isAndroid) {
-    final own = await getExternalStorageDirectory();
-    final shared = own == null ? null : sharedPictures(own.path);
-    if (shared != null && await _writable(Directory(shared))) {
-      return Directory(shared);
+    final ext = await getExternalStorageDirectory();
+    final dir = ext == null ? null : sharedDir(ext.path, shared);
+    if (dir != null && await _writable(Directory(dir))) {
+      return Directory(dir);
     }
   }
-  return Directory('${(await getApplicationDocumentsDirectory()).path}/photos');
+  return Directory('${(await getApplicationDocumentsDirectory()).path}/$own');
 }
 
 /// Android 10 and older want a storage permission to write there, which
@@ -45,10 +53,16 @@ Future<bool> _writable(Directory dir) async {
 /// `/storage/emulated/0/Android/data/<id>/files` becomes
 /// `/storage/emulated/0/Pictures/Glaz`. Null for any other shape.
 @visibleForTesting
-String? sharedPictures(String appExternal) {
+String? sharedPictures(String appExternal) =>
+    sharedDir(appExternal, 'Pictures/Glaz');
+
+/// [sub] of the storage volume holding [appExternal]; null for any other
+/// shape.
+@visibleForTesting
+String? sharedDir(String appExternal, String sub) {
   final i = appExternal.indexOf('/Android/data/');
   if (i <= 0) return null;
-  return '${appExternal.substring(0, i)}/Pictures/Glaz';
+  return '${appExternal.substring(0, i)}/$sub';
 }
 
 /// Whether the app may read photos it did not write itself -- those of an

@@ -60,8 +60,8 @@ local data = require('data.min')
 -- submenus. Each module must return a table with a .label and either .run()
 -- (mode 'info') or .tick() (mode 'app'), and may set .background.
 local MENU = {
-  { label = 'Apps',     'photo', 'timeseries', 'stopwatch', 'files',
-                        'weather' },
+  { label = 'Apps',     'photo', 'timeseries', 'recorder', 'stopwatch',
+                        'files', 'weather' },
   { label = 'Sensors',  'battery', 'tilt', 'taptune' },
   { label = 'Settings', 'brightness', 'sleep' },
   { label = 'Info',     'notifications', 'bluetooth', 'uptime', 'firmware',
@@ -163,10 +163,6 @@ local NOTICE_CHARS   = 26     -- characters per line, under the 29 of
                               -- (640 - LEFT_X) / CHAR_W: the font is
                               -- proportional and overflow is dropped
 local NET_TIMEOUT    = 20
--- The phone can look at the files here (Glaz > Glasses > Files). A file is
--- read and sent a line at a time, never held whole -- frame_app.lua alone is
--- over 50 KB -- but the loop waits while it goes, so it stops at FILE_MAX.
-local FILE_MAX       = 64 * 1024
 
 -- Startup banner. IDLE is a blank screen, which is indistinguishable from
 -- "the app is not running" -- this is the sign of life. It is the sprite in
@@ -273,173 +269,15 @@ data.parsers[PHOTO_TAKE] = function(block) return block end
 -- newer than this app flooded the link that way, and its requests drowned.
 setmetatable(data.parsers, { __index = function() return function() end end })
 
--- Module settings, set on the phone (Glaz > Menu > a module). The phone
--- sends the whole set on connect and on every change; it is kept in
--- SETTINGS_FILE too, so the glasses remember it without the phone.
--- module -> { key -> value }, values as text.
-local SETTINGS_FILE = 'settings.txt'
-local settings = {}
-
-local function parse_settings(text)
-  local t = {}
-  for line in string.gmatch(text, '[^\n]+') do
-    local m, k, v = string.match(line, '^([%w_]+)%.([%w_]+)=(.*)$')
-    if m then
-      t[m] = t[m] or {}
-      t[m][k] = v
-    end
-  end
-  return t
-end
-
-local function load_settings()
-  local ok, fh = pcall(frame.file.open, SETTINGS_FILE, 'read')
-  if not ok or not fh then return end
-  local lines = {}
-  while true do
-    local line = fh:read()
-    if line == nil then break end
-    lines[#lines + 1] = line
-  end
-  fh:close()
-  settings = parse_settings(table.concat(lines, '\n'))
-end
-
-local function store_settings(text)
-  settings = parse_settings(text)
-  pcall(function()
-    local fh = frame.file.open(SETTINGS_FILE, 'write')
-    fh:write(text)
-    fh:close()
-  end)
-end
-
-load_settings()
-
--- Services the phone provides to modules. Each module is handed its own
--- copy as _M.host, bound to its file name: that name is what the phone
--- checks the Internet permission against (Glaz > Menu).
---
---   local id, err = _M.host.http('GET', url[, body])  -- nil, why on failure
---   local status, body = _M.host.result(id)  -- nil while pending; then once
---   _M.host.notices()  -- the kept notifications, newest first:
---                      -- { app, title, text }
---   local id = _M.host.locate()        -- where the phone is: ask, then
---   local fix, why = _M.host.location(id)  -- nil while pending; then once
---                      -- { lat, lon, accuracy, age } or nil, why
---   _M.host.setting(key, default)  -- this module's setting from the phone;
---                      -- default when unset, and a number when default is
---
--- status 0 means the request never got an answer from the server; body says
--- why. Results are handed out once and then forgotten.
-local notices  = {}
-local requests = {}   -- id -> { owner, at, status, body }; status nil = pending
-local next_req = 0
-local fixes    = {}   -- id -> { owner, at, fix or why }; LOCATION_GET answers
-local next_fix = 0
-local LOCATION_WHY = { [1] = 'not allowed', [2] = 'no fix' }
-
--- One packet of a longer message, [code, id, more, bytes...]. The radio
--- may still be busy with the previous packet, so it is retried briefly.
-local function send_packet(code, id, more, part)
-  local packet = string.char(code, id, more and 1 or 0) .. part
-  for _ = 1, 50 do
-    if pcall(frame.bluetooth.send, packet) then return true end
-    frame.sleep(0.01)
-  end
-  return false
-end
-
--- A whole message, split into packets of what the link can carry; more is
--- 0 on the last. An empty payload is still one packet.
-local function send_chunks(code, id, payload)
-  local chunk = frame.bluetooth.max_length() - 3
-  local pos = 1
-  repeat
-    local part = string.sub(payload, pos, pos + chunk - 1)
-    pos = pos + chunk
-    if not send_packet(code, id, pos <= #payload, part) then return false end
-  until pos > #payload
-  return true
-end
-
-local function send_request(id, payload)
-  return send_chunks(NET_REQUEST, id, payload)
-end
-
-local function host_api(owner)
-  local api = {}
-
-  function api.http(method, url, body)
-    if not frame.bluetooth.is_connected() then return nil, 'no phone' end
-    next_req = next_req % 255 + 1
-    local id = next_req
-    requests[id] = { owner = owner, at = frame.time.utc() }
-    local payload = owner .. '\n' .. method .. '\n' .. url .. '\n' .. (body or '')
-    if not send_request(id, payload) then
-      requests[id] = nil
-      return nil, 'send failed'
-    end
-    return id
-  end
-
-  function api.result(id)
-    local r = requests[id]
-    if not r or r.owner ~= owner then return 0, 'unknown request' end
-    if r.status == nil then
-      if frame.time.utc() - r.at > NET_TIMEOUT then
-        requests[id] = nil
-        return 0, 'timeout'
-      end
-      return nil
-    end
-    requests[id] = nil
-    return r.status, r.body
-  end
-
-  function api.notices() return notices end
-
-  -- Where the phone is: locate() asks, location(id) gives nil while
-  -- pending, then once { lat, lon, accuracy, age } -- degrees, metres,
-  -- seconds -- or nil and why: 'not allowed' (Glaz > Menu), 'no fix',
-  -- 'timeout'.
-  function api.locate()
-    if not frame.bluetooth.is_connected() then return nil, 'no phone' end
-    next_fix = next_fix % 255 + 1
-    local id = next_fix
-    fixes[id] = { owner = owner, at = frame.time.utc() }
-    local packet = string.char(LOCATION_GET, id) .. owner
-    for _ = 1, 50 do
-      if pcall(frame.bluetooth.send, packet) then return id end
-      frame.sleep(0.01)
-    end
-    fixes[id] = nil
-    return nil, 'send failed'
-  end
-
-  function api.location(id)
-    local f = fixes[id]
-    if not f or f.owner ~= owner then return nil, 'unknown request' end
-    if f.fix == nil and f.why == nil then
-      if frame.time.utc() - f.at > NET_TIMEOUT then
-        fixes[id] = nil
-        return nil, 'timeout'
-      end
-      return nil
-    end
-    fixes[id] = nil
-    return f.fix, f.why
-  end
-
-  function api.setting(key, default)
-    local v = settings[owner] and settings[owner][key]
-    if v == nil or v == '' then return default end
-    if type(default) == 'number' then return tonumber(v) or default end
-    return v
-  end
-
-  return api
-end
+-- Settings from the phone and the services modules get as _M.host --
+-- notifications, the Internet, location -- are in glaz_host.lua, compiled
+-- on its own: main.lua in one piece did not fit the glasses' memory to
+-- compile (FRAME.md 10). Its tables and functions keep their names here.
+local host = require('glaz_host')
+local notices, requests, fixes = host.notices, host.requests, host.fixes
+local send_packet, send_chunks = host.send_packet, host.send_chunks
+local host_api, store_settings = host.api, host.store_settings
+local LOCATION_WHY = host.LOCATION_WHY
 
 -- Load the modules and build the tree. A broken module must not take the
 -- whole menu down, so each require is guarded and failures become visible
@@ -799,33 +637,12 @@ local function release_hardware()
   pcall(frame.microphone.stop)
 end
 
--- A photo for the phone's remote, the way modules/photo.lua takes one: the
--- camera library loaded just for it (modules load only while in use, and so
--- does this), auto exposure given time to settle, and PHOTO_FROM 0 first so
--- the phone files it with the single shots. The loop waits meanwhile, about
--- 1.5 s of exposure plus the transfer.
-local QUALITIES = { 'VERY_LOW', 'LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH' }
-local PHOTO_WARMUP = 1.5
-
+-- A photo for the phone's remote: glaz_photo.lua, loaded for it alone.
 local function take_photo(size, quality)
-  if not frame.bluetooth.is_connected() then return end
-  local ok, camera = try_require('camera.min')
-  if not ok or type(camera) ~= 'table' then return end
-  if size % 2 == 1 or size < 100 or size > 720 then size = 512 end
-  pcall(frame.camera.power_save, false)
-  local settled = frame.time.utc() + PHOTO_WARMUP
-  while frame.time.utc() < settled do
-    pcall(camera.run_auto_exposure)
-    frame.sleep(0.1)
+  local ok, shoot = try_require('glaz_photo')
+  if ok then
+    pcall(shoot, size, quality, not running and not bg, release_hardware)
   end
-  for _ = 1, 50 do
-    if pcall(frame.bluetooth.send, string.char(0x1A, 0)) then break end
-    frame.sleep(0.01)
-  end
-  pcall(camera.capture_and_send, { resolution = size, pan = 0, raw = false,
-                                   quality = QUALITIES[quality] or 'MEDIUM' })
-  -- a running Camera or a series in the background may still want it
-  if not running and not bg then release_hardware() end
 end
 
 -- Does this module want to keep running once it leaves the screen?
@@ -1059,81 +876,12 @@ frame.imu.tap_callback(function()
   tap_at = t
 end)
 
--- The splash sprite, drawn with frame.display.bitmap one art row at a time.
--- 16-colour sprites take 4 bits a pixel, first pixel in the high nibble
--- (sprite_engine.sv), and palette index 0 is transparent.
---
--- Memory is what runs out on Frame, and the firmware reboots when it cannot
--- allocate. So the sprite file is never compiled: require would keep the art
--- cached for good (Frame's Lua has no package table to evict it from),
--- loadfile(name)() comes back nil on Frame, and reading the file into one
--- string to load() it died with 'not enough memory' next to the running
--- app (all measured, firmware v25.080.0838). Instead the file is scanned as
--- text, line by line, in the fixed format of sprites/*.lua:
---   colours:  "  w = 1," or "  ['.'] = 0,"
---   art rows: "  '....',"
--- Two passes: the first collects the colours and the size, the second packs
--- and draws each row as it is read. Only one row is ever held.
-local function scan_sprite(name, on_row)
-  local fh = frame.file.open(name .. '.lua', 'read')
-  while true do
-    local line = fh:read()
-    if line == nil then break end
-    local row = string.match(line, "^%s*'([^']*)',?%s*$")
-    if row then
-      on_row(row)
-    else
-      local key, value = string.match(line, "^%s*%['(.)'%]%s*=%s*(%d+)")
-      if not key then
-        key, value = string.match(line, "^%s*(%a)%s*=%s*(%d+),")
-      end
-      if key then on_row(nil, key, tonumber(value)) end
-    end
-  end
-  fh:close()
-end
-
--- One art row as a bitmap strip: widened SPLASH_SCALE times, then repeated
--- SPLASH_SCALE times to make it as tall.
-local function pack_row(line, colors)
-  local px = {}
-  for c in string.gmatch(line, '.') do
-    local v = colors[c] or 0
-    for _ = 1, SPLASH_SCALE do px[#px + 1] = v end
-  end
-  if #px % 2 == 1 then px[#px + 1] = 0 end   -- whole bytes per row
-  local bytes = {}
-  for k = 1, #px, 2 do
-    bytes[#bytes + 1] = string.char(px[k] * 16 + px[k + 1])
-  end
-  return string.rep(table.concat(bytes), SPLASH_SCALE), #px
-end
-
--- Draw the sprite centred in the visible area. Returns false when the file
--- is missing or holds no art, so the caller can fall back to text.
+-- The splash sprite: glaz_splash.lua, loaded to draw it and dropped after.
+-- False when it cannot be drawn, for the text fallback.
 local function draw_sprite(name)
-  local colors, rows, width = {}, 0, 0
-  scan_sprite(name, function(row, key, value)
-    if row then
-      rows = rows + 1
-      width = #row * SPLASH_SCALE
-    else
-      colors[key] = value
-    end
-  end)
-  if rows == 0 then return false end
-
-  width = width + width % 2
-  local x = (SCREEN_W - width) // 2
-  local y = (VISIBLE_BOTTOM - rows * SPLASH_SCALE) // 2
-  scan_sprite(name, function(row)
-    if row then
-      local strip, w = pack_row(row, colors)
-      frame.display.bitmap(x, y, w, 16, 0, strip)
-      y = y + SPLASH_SCALE
-    end
-  end)
-  return true
+  local ok, draw = try_require('glaz_splash')
+  if not ok then return false end
+  return draw(name, SPLASH_SCALE, SCREEN_W, VISIBLE_BOTTOM)
 end
 
 -- '<glaz>' centred, with the brackets in a second colour: the fallback. Two
@@ -1151,15 +899,21 @@ local function draw_splash_text()
   frame.display.text(SPLASH_TEXT, x + BRACKET_W, y, { color = SPLASH_COLOR })
 end
 
--- The sprite, or the text if it cannot be drawn. Guarded: a missing or
--- broken sprite file must not stop the app from starting.
+-- The sprite, or the text if there is no sprite to draw. Guarded: a missing
+-- or broken sprite file must not stop the app from starting. The text is
+-- only for a sprite that drew nothing: one that failed part way has rows on
+-- screen already, and the text landed on top of the eye.
 local function draw_splash()
   set_display(true)
   local ok, drawn = pcall(draw_sprite, SPLASH_SPRITE)
-  if not ok and string.find(tostring(drawn), 'break signal', 1, true) then
-    error(drawn, 0)
+  if not ok then
+    if string.find(tostring(drawn), 'break signal', 1, true) then
+      error(drawn, 0)
+    end
+    print('splash: ' .. tostring(drawn))
+  elseif not drawn then
+    draw_splash_text()
   end
-  if not (ok and drawn) then draw_splash_text() end
   frame.display.show()
   collectgarbage('collect')
 end
@@ -1326,61 +1080,15 @@ function app_loop()
 
         -- Modules read their settings when they need them (start, a shot),
         -- so a change applies from the next one; nothing is restarted.
-        -- The phone browsing the files (docs/PROTOCOL.md, "Files"). The
-        -- first byte of an answer says how it went: '+' or '-' and why.
-        if data.app_data[FILES_GET] ~= nil then
-          local block = data.app_data[FILES_GET]
-          data.app_data[FILES_GET] = nil
-          if #block >= 1 then
-            local id = string.byte(block, 1)
-            local path = string.sub(block, 2)
-            local ok, entries = pcall(frame.file.listdir,
-                                      path == '' and '/' or path)
-            if ok and type(entries) == 'table' then
-              local out = {}
-              for _, e in ipairs(entries) do
-                if e.name ~= '.' and e.name ~= '..' then
-                  -- type 2 is a folder (littlefs)
-                  out[#out + 1] = e.type == 2 and ('d\t' .. e.name)
-                                  or ('f\t' .. e.size .. '\t' .. e.name)
-                end
-              end
-              send_chunks(FILES, id, '+' .. table.concat(out, '\n'))
-            else
-              send_chunks(FILES, id, '-' .. tostring(entries))
-            end
-          end
-        end
-
-        if data.app_data[FILE_GET] ~= nil then
-          local block = data.app_data[FILE_GET]
-          data.app_data[FILE_GET] = nil
-          if #block >= 1 then
-            local id = string.byte(block, 1)
-            local ok, fh = pcall(frame.file.open, string.sub(block, 2), 'read')
-            if not ok then
-              send_chunks(FILE_DATA, id, '-' .. tostring(fh))
-            else
-              -- read() gives a line without its '\n'; send as it comes
-              local chunk = frame.bluetooth.max_length() - 3
-              local buf, total, sent = '+', 0, true
-              while sent do
-                local line = fh:read()
-                if line == nil then break end
-                total = total + #line + 1
-                if total > FILE_MAX then
-                  buf = buf .. '... cut at ' .. FILE_MAX .. ' bytes\n'
-                  break
-                end
-                buf = buf .. line .. '\n'
-                while sent and #buf >= chunk do
-                  sent = send_packet(FILE_DATA, id, true,
-                                     string.sub(buf, 1, chunk))
-                  buf = string.sub(buf, chunk + 1)
-                end
-              end
-              fh:close()
-              if sent then send_packet(FILE_DATA, id, false, buf) end
+        -- The phone browsing the files (docs/PROTOCOL.md, "Files"):
+        -- glaz_files.lua, loaded for the request and dropped after.
+        for _, code in ipairs({ FILES_GET, FILE_GET }) do
+          local block = data.app_data[code]
+          if block ~= nil then
+            data.app_data[code] = nil
+            local ok, serve = try_require('glaz_files')
+            if ok and #block >= 1 then
+              pcall(serve, code == FILES_GET, block, host)
             end
           end
         end

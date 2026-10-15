@@ -30,7 +30,12 @@ const status = 0x1B;
 const locationGet = 0x1C;
 const files = 0x1D;
 const fileData = 0x1E;
+const recStart = 0x1F;
 
 // The frame_msg camera library's own codes, used by Camera and Time series
 const photoChunk = 0x07;
 const photoEnd = 0x08;
+
+// The frame_msg audio library's own codes, used by Recorder
+const audioChunk = 0x05;
+const audioEnd = 0x06;

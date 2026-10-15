@@ -41,7 +41,7 @@ comment ]] local x = 137
     final dir = Directory.systemTemp.createTempSync('glaz_min');
     final files = [
       File('assets/lua/frame_app.lua'),
-      for (final d in ['modules', 'sprites', 'lib'])
+      for (final d in ['app', 'modules', 'sprites', 'lib'])
         ...Directory('assets/lua/$d')
             .listSync()
             .whereType<File>()

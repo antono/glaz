@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'screens/home_screen.dart';
 import 'screens/menu_screen.dart';
 import 'screens/photos_screen.dart';
+import 'screens/recordings_screen.dart';
 import 'screens/more_screen.dart';
 import 'screens/remote_screen.dart';
 import 'services/services.dart';
@@ -62,6 +63,13 @@ const tabs = <Tab>[
     selected: Icons.photo_library,
     label: 'Photos',
     screen: PhotosScreen(),
+  ),
+  (
+    id: 'recordings',
+    icon: Icons.mic_none,
+    selected: Icons.mic,
+    label: 'Voice',
+    screen: RecordingsScreen(),
   ),
   (
     id: 'remote',

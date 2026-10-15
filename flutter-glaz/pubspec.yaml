@@ -4,12 +4,13 @@ publish_to: 'none'
 
 # Shown in the About tab too: keep lib/screens/about_screen.dart in step
 # (test/version_test.dart checks it).
-version: 1.3.0+4
+version: 1.4.0+5
 
 environment:
   sdk: ^3.13.3
 
 dependencies:
+  audioplayers: ^6.8.1
   flutter:
     sdk: flutter
   flutter_blue_plus: ^1.36.8
@@ -37,6 +38,7 @@ flutter:
     # are links to the repository's own files, so the app always carries the
     # Lua it was built next to; lib/ holds the frame_msg libraries.
     - assets/lua/
+    - assets/lua/app/
     - assets/lua/modules/
     - assets/lua/sprites/
     - assets/lua/lib/

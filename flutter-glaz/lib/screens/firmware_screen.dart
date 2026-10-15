@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../frame/dfu.dart';
 import '../frame/firmware.dart';
 import '../frame/link.dart';
+import '../frame/upload.dart';
 import '../services/services.dart';
 
 /// Pick a firmware package and install it over Bluetooth. The packages are
@@ -146,8 +147,8 @@ class _FirmwareScreenState extends State<FirmwareScreen> {
         title: Text('Install ${package.version}?'),
         content: Text(
           'The glasses restart into update mode, take the new firmware '
-          '(a minute or two), and restart again. Your apps on them should '
-          'stay; if the menu does not come back, Upload again.'
+          '(a minute or two), and restart again. The update wipes the apps '
+          'on them, so they are uploaded again right after.'
           '${package.official ? '' : '\n\nThis is a custom build.'}'
           '${low ? '\n\nThe battery is at ${link.battery}%: charge first.' : ''}',
         ),
@@ -164,9 +165,14 @@ class _FirmwareScreenState extends State<FirmwareScreen> {
       ),
     );
     if (ok != true) return;
+    // the update wipes the glasses' files; the app goes back on after it
+    final app = await luaFiles(
+      rootBundle,
+      Services.instance.settings.installed,
+    );
     await link.runTask(
       'Firmware',
-      (device, report) => installFirmware(link, device, package, report),
+      (device, report) => installFirmware(link, device, package, app, report),
     );
   }
 }

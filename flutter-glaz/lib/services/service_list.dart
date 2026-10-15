@@ -30,6 +30,12 @@ const services = [
     true,
   ),
   GlazService(
+    'recordings',
+    'Recordings',
+    'Saves what Recorder hears, as WAV files',
+    true,
+  ),
+  GlazService(
     'location',
     'Location',
     "Tells the apps you allow where the phone is",

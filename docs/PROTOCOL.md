@@ -341,6 +341,9 @@ Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 | `0x1E` | `FILE_DATA` | `[0x1E, id, more, bytes...]` | a file's contents, in packets — see [Files](#files) |
 | `0x07` | photo chunk | `[0x07, jpeg bytes...]` | part of a photo (Camera module) |
 | `0x08` | photo end | `[0x08]` | last chunk; the photo is complete |
+| `0x1F` | `REC_START` | `[0x1F, bits, rate / 1000]` | Recorder starts a recording — see [Recorder](#recorder) |
+| `0x05` | audio chunk | `[0x05, samples...]` | part of a recording |
+| `0x06` | audio end | `[0x06, samples...]` | last part; the recording is complete |
 
 `0x07` / `0x08` are the frame_msg `camera` library's codes, not this app's:
 `modules/photo.lua` sends through its `capture_and_send()`, and the host
@@ -467,6 +470,33 @@ after it, goes into the same folder; anything else starts a new one. The
 counter lives on the glasses and restarts at 1 when they do, so the gap is
 what keeps an old folder from being reused. A photo with no `PHOTO_FROM`
 before it counts as a single shot.
+
+### Recorder
+
+Recorder (`modules/recorder.lua`) streams the microphone to the phone as it
+records; the glasses keep nothing. A tap sends `REC_START`
+(`[0x1F, bits, rate / 1000]`: 8 or 16 bits, 8 kHz), then the samples follow
+as `0x05` packets and a final `0x06` when a tap stops it. `0x05` / `0x06` are
+the frame_msg `audio` library's codes; the module sends them itself and does
+not load the library.
+
+Samples are mono PCM. 8-bit ones are signed, as the firmware gives them;
+16-bit ones are little-endian. 8 kHz 8-bit is 8 KB a second, well within
+the link; 16 kHz would not be. The firmware buffers about 2 s, and the
+module empties it every tick -- also in the background, once a second -- so
+a recording goes on with the screen elsewhere. What the link does not take
+is dropped, and counted on the glasses' screen.
+
+The phone writes the WAV as the sound comes in, and fixes its sizes at the
+end, or when the glasses disconnect:
+
+```
+recordings/2026-10-15/2026-10-15 13-07-01.wav   by time started
+```
+
+On Android `recordings/` is the shared `Recordings/Glaz`. The Voice tab lists
+them by day and plays them. The Recordings service (Services) turns saving
+off.
 
 ### Status
 

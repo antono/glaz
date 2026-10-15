@@ -66,6 +66,8 @@ Future<List<LuaFile>> luaFiles(
   return [
     for (final (name, text) in [
       ...await under('lib'),
+      // parts of frame_app.lua in files of their own (glaz_host.lua...)
+      ...await under('app'),
       ...await under('sprites', (s) => s == splash),
       ...modules.where((f) => !disabled.contains(f.$1.replaceAll('.lua', ''))),
       ('main.lua', menuWithout(app, disabled)),
@@ -113,29 +115,44 @@ const mainSource = 'glaz_main.lua';
 bool readAsText(String text) =>
     RegExp(r'^_M\.art = \{', multiLine: true).hasMatch(text);
 
+/// What the glasses print, one line at a time. The firmware packs prints
+/// that come faster than the link into one notification, joined by '\n'
+/// -- a listing of twenty files arrived as a few of them -- so a reply is
+/// split before it is compared.
+Stream<String> replLines(BrilliantDevice device) => device.stringResponse
+    .expand((s) => s.split('\n'))
+    .map((l) => l.trim())
+    .where((l) => l.isNotEmpty);
+
 /// Talks to the REPL: print() a token and wait for it to come back.
 class Repl {
   Repl(this.device);
   final BrilliantDevice device;
 
   Future<void> _expect(String token, Duration timeout, String lua) async {
-    final seen = device.stringResponse
-        .firstWhere((s) => s.trim() == token)
+    final seen = replLines(device)
+        .firstWhere((s) => s == token)
         .timeout(timeout);
     await device.sendString(lua, awaitResponse: false, log: false);
     await seen;
   }
 
-  /// Runs [lua] and collects every line it prints until [end].
+  /// Runs [lua] and collects every line it prints until [end] -- or until
+  /// a line that [match] accepts, which is collected too.
   Future<List<String>> lines(
     String lua,
     String end, {
     Duration timeout = const Duration(seconds: 5),
+    bool Function(String line)? match,
   }) async {
     final out = <String>[];
-    final done = device.stringResponse
-        .map((s) => s.trim())
-        .takeWhile((s) => s != end)
+    final last = match ?? (s) => s == end;
+    final done = replLines(device)
+        .takeWhile((s) {
+          if (!last(s)) return true;
+          if (match != null) out.add(s);
+          return false;
+        })
         .forEach(out.add)
         .timeout(timeout);
     await device.sendString(lua, awaitResponse: false, log: false);
@@ -178,20 +195,26 @@ class Repl {
   }
 
   /// require() the app and wait for the line it prints once running.
+  /// Starts main.lua with a reset: the firmware then require()s it as it
+  /// does at power-on, on a fresh Lua with the heap in one piece. Not
+  /// require('main') here, in the Lua that has just compiled two dozen
+  /// files: the firmware reads the file with a realloc() per byte, and in
+  /// that broken-up heap one failed and the glasses rebooted (seen right
+  /// after Upload; the same main.lua started fine on the reboot).
+  ///
   /// When it does not come up, the error says what the glasses printed
   /// instead -- 'not enough memory', say.
   Future<void> start() async {
     final seen = <String>[];
-    final sub = device.stringResponse.listen((s) {
-      final t = s.trim();
-      if (t.isNotEmpty && t != '\x02') seen.add(t);
+    final sub = replLines(device).listen((t) {
+      if (t != '\x02') seen.add(t);
     });
     try {
-      await run(
-        "require('main')",
-        'Frame app is running',
-        timeout: const Duration(seconds: 30),
-      );
+      final running = replLines(device)
+          .firstWhere((s) => s == 'Frame app is running')
+          .timeout(const Duration(seconds: 40));
+      await device.sendResetSignal();
+      await running;
     } catch (_) {
       final said = seen.where((s) => s != 'Frame app is running').toList();
       debugPrint('glaz: the glasses said on start: ${said.join(' / ')}');
@@ -206,6 +229,15 @@ class Repl {
   }
 }
 
+/// Lua that unhooks the app's tap and Bluetooth callbacks; run before a
+/// reset. The firmware keeps them across a reset of Lua -- a registry
+/// index, in a C static (imu.c, bluetooth.c) -- and the new Lua has
+/// something else, or nothing, there. A tap during Upload then broke the
+/// file being written: "attempt to call a nil value (hook '?')".
+const unhook =
+    'pcall(frame.imu.tap_callback,nil) '
+    'pcall(frame.bluetooth.receive_callback,nil)';
+
 Future<void> uploadApp(
   BrilliantDevice device,
   List<LuaFile> files,
@@ -217,7 +249,7 @@ Future<void> uploadApp(
   await device.sendBreakSignal();
   await repl.ready();
   await repl.run(
-    "pcall(frame.file.remove, 'main.lua');print('cleared')",
+    "$unhook pcall(frame.file.remove, 'main.lua');print('cleared')",
     'cleared',
   );
 
@@ -226,29 +258,23 @@ Future<void> uploadApp(
   await repl.ready();
   await repl.show(['Uploading...']);
 
-  // Lua files from earlier uploads that this one does not bring: modules
-  // switched off or gone, sprites no longer drawn. Anything else stays --
-  // settings.txt, and whatever is not Lua.
+  // Lua files from earlier uploads -- modules switched off or gone, sprites
+  // no longer drawn -- go. All of them: this upload brings back every one
+  // it needs. Done on the glasses, answered with one line: listing the
+  // files to the phone made them print two dozen lines at once, and lines
+  // printed faster than the link sends are lost -- the end of the list
+  // never arrived. Anything not Lua stays: settings.txt, say.
   report('Clearing old files');
-  final keep = {for (final (name, _) in files) name};
-  final present = await repl.lines(
-    "for _,e in ipairs(frame.file.listdir('/')) do "
-        "if e.type ~= 2 then print(e.name) end end print('listed')",
-    'listed',
+  final cleared = await repl.lines(
+    "local n=0 for _,e in ipairs(frame.file.listdir('/')) do "
+        "if e.type~=2 and e.name:match('%.lua\$') "
+        "and pcall(frame.file.remove,e.name) then n=n+1 end end "
+        "print('cleared '..n)",
+    'cleared',
+    // its own line, not part of the count
+    match: (l) => l.startsWith('cleared '),
   );
-  for (final name in present) {
-    // a name that would break the Lua string is left alone
-    if (name.endsWith('.lua') &&
-        !keep.contains(name) &&
-        !name.contains("'") &&
-        !name.contains('\\')) {
-      report('Removing $name');
-      await repl.run(
-        "pcall(frame.file.remove, '$name');print('removed')",
-        'removed',
-      );
-    }
-  }
+  debugPrint('glaz Upload: ${cleared.isEmpty ? 'cleared' : cleared.last}');
 
   final total = files.fold<int>(0, (n, f) => n + f.$2.length);
   var done = 0;
@@ -342,10 +368,15 @@ Future<void> restartApp(
   void Function(String step, [double? progress]) report,
 ) async {
   report('Restarting the glasses');
-  final running = device.stringResponse
-      .firstWhere((s) => s.trim() == 'Frame app is running')
+  final running = replLines(device)
+      .firstWhere((s) => s == 'Frame app is running')
       .timeout(const Duration(seconds: 30));
   await device.sendBreakSignal();
+  try {
+    final repl = Repl(device);
+    await repl.ready(attempts: 3);
+    await repl.run("$unhook print('unhooked')", 'unhooked');
+  } catch (_) {} // a stuck app: reset it all the same
   await device.sendResetSignal();
   try {
     await running;

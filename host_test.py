@@ -48,6 +48,9 @@ EVENTS = {
 
 MODULES_DIR = Path(__file__).parent / "modules"
 SPRITES_DIR = Path(__file__).parent / "sprites"
+# Parts of frame_app.lua in files of their own (glaz_host.lua and the
+# rest): main.lua in one piece no longer fits the glasses' memory to compile.
+APP_DIR = Path(__file__).parent / "app"
 
 # The Camera module (modules/photo.lua) streams each JPEG in chunks flagged
 # 0x07 / 0x08 -- the frame_msg camera library's own codes. Saved here.
@@ -231,6 +234,10 @@ async def main():
 
     # One module per menu item. frame_app.lua requires them by bare name,
     # so each must land at /<name>.lua on the device.
+    for path in sorted(APP_DIR.glob("*.lua")):
+        await frame.upload_file(str(path), path.name)
+        print(f"  app part: {path.name}")
+
     for path in sorted(MODULES_DIR.glob("*.lua")):
         await frame.upload_file(str(path), path.name)
         print(f"  module: {path.name}")

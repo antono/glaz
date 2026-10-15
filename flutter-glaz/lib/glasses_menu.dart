@@ -154,6 +154,23 @@ const glassesMenu = <MenuSection>[
       ],
     ),
     GlassesModule(
+      'recorder',
+      'Recorder',
+      ModuleKind.background,
+      Icons.mic,
+      'Tap to record; the sound goes to the Recordings tab.',
+      settings: [
+        ModuleSetting.choice(
+          'bits',
+          'Quality',
+          '8',
+          ['8', '16'],
+          optionLabels: ['Speech, 8 bit', 'Better, 16 bit'],
+          help: '16 bit sends twice as much; on a busy link some is lost.',
+        ),
+      ],
+    ),
+    GlassesModule(
       'stopwatch',
       'Stopwatch',
       ModuleKind.background,
