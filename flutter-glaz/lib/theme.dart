@@ -84,6 +84,18 @@ ThemeData glazTheme() {
       labelTextStyle: WidgetStatePropertyAll(text.labelSmall),
     ),
     dividerTheme: const DividerThemeData(color: FrameColors.outline),
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: FrameColors.surface,
+      contentTextStyle: base.textTheme.bodyMedium?.copyWith(
+        color: FrameColors.white,
+      ),
+      actionTextColor: FrameColors.lightGreen,
+      behavior: SnackBarBehavior.floating,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(12)),
+        side: BorderSide(color: FrameColors.outline),
+      ),
+    ),
     expansionTileTheme: const ExpansionTileThemeData(
       shape: Border(),
       collapsedShape: Border(),

@@ -249,9 +249,8 @@ class _Grid extends StatelessWidget {
       ),
       itemCount: photos.length,
       itemBuilder: (context, i) => GestureDetector(
-        onTap: () =>
-            Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => _Viewer(photos, i))),
+        onTap: () => Navigator.of(context)
+            .push(MaterialPageRoute(builder: (_) => PhotoViewer(photos, i))),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(6),
           child: _Thumb(photos[i]),
@@ -286,16 +285,16 @@ class _Thumb extends StatelessWidget {
 
 /// One photo full screen, titled with when it was taken; swipe for the
 /// others of the same group.
-class _Viewer extends StatefulWidget {
-  const _Viewer(this.photos, this.index);
+class PhotoViewer extends StatefulWidget {
+  const PhotoViewer(this.photos, this.index, {super.key});
   final List<File> photos;
   final int index;
 
   @override
-  State<_Viewer> createState() => _ViewerState();
+  State<PhotoViewer> createState() => _ViewerState();
 }
 
-class _ViewerState extends State<_Viewer> {
+class _ViewerState extends State<PhotoViewer> {
   late int _page = widget.index;
   late final _controller = PageController(initialPage: widget.index);
 

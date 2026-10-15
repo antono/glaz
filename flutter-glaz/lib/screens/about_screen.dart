@@ -4,7 +4,7 @@ import '../theme.dart';
 import '../widgets/pixel_logo.dart';
 
 /// Kept equal to `version:` in pubspec.yaml by test/version_test.dart.
-const appVersion = '1.2.0';
+const appVersion = '1.3.0';
 
 /// The third tab: what this is, versions, licences.
 class AboutScreen extends StatelessWidget {

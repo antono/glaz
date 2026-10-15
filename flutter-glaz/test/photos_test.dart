@@ -53,6 +53,7 @@ void main() {
     final file = days.single.photos.single;
     expect(file.path, endsWith('2026-10-14/2026-10-14 17-52-10-000.jpg'));
     expect(photoTime(file), DateTime(2026, 10, 14, 17, 52, 10));
+    expect(photos.last?.path, file.path, reason: 'the remote opens it');
     final saved = img.decodeJpg(file.readAsBytesSync())!;
     expect((saved.width, saved.height), (2, 4));
   });

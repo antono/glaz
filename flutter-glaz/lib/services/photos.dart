@@ -173,6 +173,9 @@ class PhotoService extends ChangeNotifier {
   Future<void> _saving = Future.value();
   int received = 0;
 
+  /// The photo saved last; null until one is.
+  File? last;
+
   @visibleForTesting
   void onMessage(List<int> m) {
     if (m.isEmpty) return;
@@ -201,7 +204,7 @@ class PhotoService extends ChangeNotifier {
   Future<void> _save(Uint8List jpeg, int from, DateTime at) async {
     final upright = await compute(_upright, jpeg);
     if (from == 0) {
-      await store.saveSingle(upright, at);
+      last = await store.saveSingle(upright, at);
     } else {
       if (from != _series ||
           _seriesDir == null ||
@@ -210,7 +213,7 @@ class PhotoService extends ChangeNotifier {
         _seriesDir = store.seriesDir(at);
       }
       _seriesLast = at;
-      await store.saveInSeries(upright, _seriesDir!, at);
+      last = await store.saveInSeries(upright, _seriesDir!, at);
     }
     received++;
     notifyListeners();

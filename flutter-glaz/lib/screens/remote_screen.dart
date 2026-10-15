@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -5,6 +7,7 @@ import '../frame/link.dart';
 import '../services/services.dart';
 import '../settings.dart';
 import '../theme.dart';
+import 'photos_screen.dart';
 
 /// A remote for the glasses: what the wearer does with taps and tilts,
 /// from the phone. The glasses take it as the same gestures, so the menu
@@ -266,9 +269,47 @@ class _PhotoButtonState extends State<_PhotoButton> {
     _received = n;
     if (_waiting && mounted) {
       setState(() => _waiting = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Saved to Photos')));
+      final photo = Services.instance.photos.last;
+      if (photo != null) _saved(photo);
     }
+  }
+
+  /// "Saved", with the photo: a tap on it opens it full screen.
+  void _saved(File photo) {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    void open() {
+      messenger.hideCurrentSnackBar();
+      navigator.push(
+        MaterialPageRoute<void>(builder: (_) => PhotoViewer([photo], 0)),
+      );
+    }
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: open,
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.file(
+                  photo,
+                  width: 40,
+                  height: 40,
+                  fit: BoxFit.cover,
+                  cacheWidth: 120,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(child: Text('Saved to Photos')),
+            ],
+          ),
+        ),
+        action: SnackBarAction(label: 'Open', onPressed: open),
+      ),
+    );
   }
 
   Future<void> _shoot() async {
