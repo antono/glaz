@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -18,7 +19,13 @@ import '../settings.dart';
 /// | Space, Enter, D-pad centre, A, play | select; held, the menu |
 /// | Backspace, Esc, B | back |
 /// | Menu, Start | the menu |
-class KeyRemote {
+///
+/// Android gives keys to the app on screen only. With [background] on --
+/// KeyRemoteService.kt, which the user turns on in Accessibility -- the
+/// same keys reach the glasses with another app in front, sent here on
+/// [channel]; the service keeps them from that app only while they are
+/// taken here: the glasses connected, the service on.
+class KeyRemote extends ChangeNotifier {
   KeyRemote(this.link, this.settings, {void Function(List<int>)? send})
     : _send = send ?? ((b) => link.send(input, b));
 
@@ -73,8 +80,30 @@ class KeyRemote {
   bool _echo = false;
   KeyEvent? _claimed;
 
+  static const channel = MethodChannel('glaz/keys');
+
+  /// Every key taken, as Android key codes: what the background service
+  /// keeps from other apps.
+  static final androidCodes = [
+    for (final e in kAndroidToLogicalKey.entries)
+      if ({
+        ..._previous,
+        ..._next,
+        ..._ok,
+        ..._back,
+        ..._menu,
+      }.contains(e.value))
+        e.key,
+  ];
+
+  /// The keys work with Glaz in the background too: the user has turned
+  /// on its accessibility service. Android only.
+  bool background = false;
+
   bool get _active =>
       settings.serviceOn('keys') && link.connected && !link.busy;
+
+  bool? _sentActive;
 
   /// Starts listening. The keys taken are also kept from the focus system,
   /// so arrows do not move the focus and Space does not press a button.
@@ -85,6 +114,74 @@ class KeyRemote {
           ? KeyEventResult.handled
           : KeyEventResult.ignored,
     );
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    channel.setMethodCallHandler((call) async {
+      if (call.method == 'key') fromBackground(call.arguments as List);
+    });
+    link.addListener(_sync);
+    settings.addListener(_sync);
+    // back from the system settings, where the service may have changed
+    AppLifecycleListener(onResume: refresh);
+    _sync();
+    refresh();
+  }
+
+  /// Asks Android whether the background service is on.
+  Future<void> refresh() async {
+    final on = await _call<bool>('background') ?? false;
+    if (on == background) return;
+    background = on;
+    notifyListeners();
+  }
+
+  /// Opens the system page where the background service is turned on.
+  Future<void> openSettings() => _call<void>('settings');
+
+  /// Tells the service which keys to take: all of them, or none.
+  void _sync() {
+    final active = _active;
+    if (active == _sentActive) return;
+    _sentActive = active;
+    _call<void>('take', active ? androidCodes : const <int>[]);
+  }
+
+  static Future<T?> _call<T>(String method, [Object? args]) async {
+    try {
+      return await channel.invokeMethod<T>(method, args);
+    } on MissingPluginException {
+      return null; // tests, and a platform without the service
+    } on PlatformException {
+      return null;
+    }
+  }
+
+  /// One key from the background service: `[action, key code, scan code,
+  /// time in ms]`, action 0 down, 1 repeat, 2 up. No text field to mind:
+  /// Glaz is not on screen.
+  void fromBackground(List args) {
+    final [action as int, code as int, scan as int, ms as int] = args;
+    final logical = kAndroidToLogicalKey[code];
+    if (logical == null || !_active) return;
+    final physical =
+        kAndroidToPhysicalKey[scan] ?? const PhysicalKeyboardKey(0);
+    final at = Duration(milliseconds: ms);
+    _take(switch (action) {
+      0 => KeyDownEvent(
+        physicalKey: physical,
+        logicalKey: logical,
+        timeStamp: at,
+      ),
+      1 => KeyRepeatEvent(
+        physicalKey: physical,
+        logicalKey: logical,
+        timeStamp: at,
+      ),
+      _ => KeyUpEvent(
+        physicalKey: physical,
+        logicalKey: logical,
+        timeStamp: at,
+      ),
+    });
   }
 
   /// One key event; true if it was taken for the glasses.

@@ -616,6 +616,17 @@ only with the app on screen: Android gives key events to the foreground
 app. Keynote's Back sends Backspace and then Android's Back; the second is
 dropped so it does not also close the app.
 
+**In the background** too, once the user turns on Glaz keyboard remote in
+Android's Accessibility settings (Glaz > Services has a button for it):
+`KeyRemoteService.kt` filters the keys before any app gets them. With Glaz
+on screen it lets them through to Flutter as above; otherwise, while the
+glasses are connected and the service is on, it takes the keys listed above
+from whatever app is in front and hands them to `keys.dart` on the
+`glaz/keys` channel, which turns them into the same `INPUT`s. Keynote's
+echoed Back is dropped there too. Other keys, and all keys while the glasses
+are away, pass untouched. It needs the app alive with its Flutter engine:
+swiped away from the recent apps, Glaz stops taking keys.
+
 The remote also takes photos: `PHOTO_TAKE` (`0x2C`) carries the size and the
 quality, the same two settings as Camera's (the phone shares them). The
 glasses load the camera library for it, give auto exposure 1.5 s, send

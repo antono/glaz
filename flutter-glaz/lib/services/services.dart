@@ -23,6 +23,7 @@ class Services {
     this.location,
     this.files,
     this.recorder,
+    this.keys,
   );
 
   final Settings settings;
@@ -33,6 +34,7 @@ class Services {
   final LocationService location;
   final GlassesFiles files;
   final RecorderService recorder;
+  final KeyRemote keys;
 
   static late Services instance;
 
@@ -56,9 +58,10 @@ class Services {
       LocationService(link, s),
       GlassesFiles(link),
       RecorderService(link, s, RecordingStore(recDir)),
+      KeyRemote(link, s),
     );
     SettingsSync(link, s);
-    KeyRemote(link, s).attach();
+    services.keys.attach();
     link.onConnected.add(() async {
       if (s.serviceOn('clock')) await link.sendClock();
     });

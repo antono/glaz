@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../glasses_menu.dart';
@@ -19,6 +20,7 @@ class ServicesScreen extends StatelessWidget {
         s.network,
         s.notifications,
         s.location,
+        s.keys,
       ]),
       builder: (context, _) => _build(context, s),
     );
@@ -76,6 +78,17 @@ class ServicesScreen extends StatelessWidget {
             ),
           ),
         ],
+        if (_keysForeground(s)) ...[
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: s.keys.openSettings,
+              icon: const Icon(Icons.keyboard_outlined),
+              label: const Text('Keyboard remote in the background'),
+            ),
+          ),
+        ],
         if (s.network.log.isNotEmpty) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 24, 4, 8),
@@ -116,8 +129,20 @@ class ServicesScreen extends StatelessWidget {
     );
   }
 
+  /// The keyboard remote is on but works only with Glaz on screen.
+  static bool _keysForeground(Services s) =>
+      defaultTargetPlatform == TargetPlatform.android &&
+      !kIsWeb &&
+      s.settings.serviceOn('keys') &&
+      !s.keys.background;
+
   static String _subtitle(Services s, GlazService service) {
     switch (service.id) {
+      case 'keys':
+        return _keysForeground(s)
+            ? 'Only with Glaz on screen: turn it on in Accessibility '
+                  'for the background'
+            : service.description;
       case 'notifications':
         if (!s.notifications.supported) return 'Android only';
         if (!s.notifications.permission) {

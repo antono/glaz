@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="key_remote_label">Glaz keyboard remote</string>
+    <string name="key_remote_description">Lets a Bluetooth keyboard or a Flipper Zero drive the glasses while Glaz is in the background. While the glasses are connected, Glaz takes the arrows, Space, Enter, Backspace, Esc, Page Up and Down, the media keys and the Menu key away from other apps. It reads no screen content and no other keys.</string>
+</resources>

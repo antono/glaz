@@ -81,4 +81,45 @@ void main() {
     expect(press(LogicalKeyboardKey.arrowDown, 2000), isFalse);
     expect(sent, isEmpty);
   });
+
+  // Android key codes (android.view.KeyEvent), as KeyRemoteService sends
+  const dpadUp = 19, dpadRight = 22, dpadCenter = 23, del = 67;
+
+  test('the background service takes the same keys', () {
+    expect(
+      KeyRemote.androidCodes,
+      containsAll([dpadUp, dpadRight, dpadCenter, del, 62, 66, 92, 93, 82]),
+    );
+    expect(KeyRemote.androidCodes, isNot(contains(4)), reason: 'Back');
+    expect(KeyRemote.androidCodes, isNot(contains(45)), reason: 'Q');
+  });
+
+  test('keys from the background drive the glasses alike', () {
+    void bg(int action, int code, int ms) =>
+        keys.fromBackground([action, code, 0, ms]);
+    bg(0, dpadUp, 0);
+    bg(2, dpadUp, 50);
+    bg(0, dpadRight, 1000);
+    bg(2, dpadRight, 1050);
+    bg(0, dpadCenter, 2000);
+    bg(2, dpadCenter, 2137);
+    // held: Android repeats the key down, then one up
+    bg(0, dpadCenter, 3000);
+    for (var ms = 3400; ms < 3700; ms += 50) {
+      bg(1, dpadCenter, ms);
+    }
+    bg(2, dpadCenter, 3700);
+    bg(0, del, 4000);
+    bg(2, del, 4050);
+    link.state = LinkState.disconnected;
+    bg(0, dpadUp, 5000);
+    bg(2, dpadUp, 5050);
+    expect(sent, [
+      [2, 255],
+      [2, 1],
+      [1, 1],
+      [1, 3],
+      [1, 2],
+    ]);
+  });
 }
