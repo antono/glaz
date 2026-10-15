@@ -14,65 +14,97 @@ import 'lua_min.dart';
 /// The Lua comes from the app's assets (assets/lua/), which link to the
 /// repository's frame_app.lua, modules/ and sprites/.
 
-/// One file for the glasses: its name there and its text.
-typedef LuaFile = (String name, String text);
+/// One file for the glasses: its name there, its text, and its bytecode
+/// when the app was built with it (tool/compile_lua.sh) and it still
+/// matches the text. Without bytecode the text goes up and the glasses
+/// compile it.
+typedef LuaFile = (String name, String text, Uint8List? code);
 
-/// [menu] (frame_app.lua's source) with [disabled] module names taken out
-/// of its MENU table, so switched-off apps neither load nor show.
-String menuWithout(String source, Set<String> disabled) {
-  final start = source.indexOf('local MENU = {');
-  if (start < 0 || disabled.isEmpty) return source;
-  final end = source.indexOf(RegExp(r'^}', multiLine: true), start);
-  if (end < 0) return source;
-  var menu = source.substring(start, end);
-  for (final name in disabled) {
-    menu = menu.replaceAll(RegExp("'${RegExp.escape(name)}'\\s*,?\\s*"), '');
+/// The FNV-1a hash tool/luac_frame.c prints for a source file.
+int fnv1a(List<int> bytes) {
+  var h = 0x811c9dc5;
+  for (final b in bytes) {
+    h = ((h ^ b) * 0x01000193) & 0xFFFFFFFF;
   }
-  return source.substring(0, start) + menu + source.substring(end);
+  return h;
+}
+
+/// Where tool/compile_lua.sh puts the bytecode of the source asset [path]:
+/// assets/lua/modules/photo.lua -> assets/luac/modules.photo.luac.
+String luacAsset(String path) =>
+    'assets/luac/${path.substring('assets/lua/'.length).replaceAll(RegExp(r'\.lua$'), '').replaceAll('/', '.')}.luac';
+
+/// assets/luac/index.txt: source asset -> hash of the text compiled.
+Future<Map<String, int>> _compiled(AssetBundle bundle) async {
+  try {
+    final index = await bundle.loadString(
+      'assets/luac/index.txt',
+      cache: false,
+    );
+    return {
+      for (final line in index.split('\n'))
+        if (line.trim().split(' ') case [final path, final hash])
+          path: int.parse(hash, radix: 16),
+    };
+  } catch (_) {
+    return {}; // built without tool/compile_lua.sh
+  }
 }
 
 /// Everything to upload, in order: libraries, the splash sprite, modules,
 /// main.lua last -- a half-finished upload then leaves no main.lua to boot
-/// into. [installed] says which modules to send (by file name, no .lua).
-/// Only the sprite frame_app.lua draws (SPLASH_SPRITE) goes; the others in
-/// sprites/ are for utils/show_sprite.py. Every file is minified
-/// (lua_min.dart): half the time, and the memory main.lua needs to start.
+/// into. [installed] says which modules to send (by file name, no .lua);
+/// frame_app.lua leaves the others out of its menu. Only the sprite
+/// frame_app.lua draws (SPLASH_SPRITE) goes; the others in sprites/ are for
+/// utils/show_sprite.py.
+///
+/// Each file carries its bytecode from assets/luac/ when that was compiled
+/// from this very text. The glasses no longer have the memory to compile
+/// main.lua themselves. The text is minified (lua_min.dart), for what goes
+/// up as source: half the time, and the memory main.lua needs to start.
 Future<List<LuaFile>> luaFiles(
   AssetBundle bundle,
   bool Function(String module) installed,
 ) async {
   final manifest = await AssetManifest.loadFromAssetBundle(bundle);
   final assets = manifest.listAssets().where((a) => a.endsWith('.lua'));
+  final compiled = await _compiled(bundle);
 
   String base(String path) => path.split('/').last;
+  String module(String path) => base(path).replaceAll('.lua', '');
+
+  Future<LuaFile> file(String path, [String? name]) async {
+    final bytes = (await bundle.load(path)).buffer.asUint8List();
+    final text = String.fromCharCodes(bytes);
+    Uint8List? code;
+    if (compiled[path] case final hash? when hash == fnv1a(bytes)) {
+      try {
+        code = (await bundle.load(luacAsset(path))).buffer.asUint8List();
+      } catch (_) {} // listed, but not in this build: source it is
+    }
+    return (name ?? base(path), minifyLua(text), code);
+  }
+
   Future<List<LuaFile>> under(String dir, [bool Function(String)? keep]) async {
     final paths = assets.where((a) => a.startsWith('assets/lua/$dir/')).toList()
       ..sort();
     return [
       for (final p in paths)
-        if (keep == null || keep(base(p).replaceAll('.lua', '')))
-          (base(p), await bundle.loadString(p, cache: false)),
+        if (keep == null || keep(module(p))) await file(p),
     ];
   }
 
-  final modules = await under('modules');
-  final disabled = {
-    for (final p in assets.where((a) => a.startsWith('assets/lua/modules/')))
-      if (!installed(base(p).replaceAll('.lua', '')))
-        base(p).replaceAll('.lua', ''),
-  };
   final app = await bundle.loadString('assets/lua/frame_app.lua', cache: false);
   final splash = splashSprite(app);
   return [
-    for (final (name, text) in [
-      ...await under('lib'),
-      // parts of frame_app.lua in files of their own (glaz_host.lua...)
-      ...await under('app'),
-      ...await under('sprites', (s) => s == splash),
-      ...modules.where((f) => !disabled.contains(f.$1.replaceAll('.lua', ''))),
-      ('main.lua', menuWithout(app, disabled)),
-    ])
-      (name, minifyLua(text)),
+    ...await under('lib'),
+    // parts of frame_app.lua in files of their own (glaz_host.lua...)
+    ...await under('app'),
+    // the sprite is read as text, never compiled
+    for (final (name, text, _) in await under('sprites', (s) => s == splash))
+      (name, text, null),
+    ...await under('modules', installed),
+    await file('assets/lua/frame_app.lua', 'main.lua'),
   ];
 }
 
@@ -276,42 +308,55 @@ Future<void> uploadApp(
   );
   debugPrint('glaz Upload: ${cleared.isEmpty ? 'cleared' : cleared.last}');
 
-  final total = files.fold<int>(0, (n, f) => n + f.$2.length);
+  // Bytecode built with the app goes up as it is. main.lua bytecode goes
+  // last, after any compiling below: a reset with a main.lua on the glasses
+  // would start it.
+  int size(LuaFile f) => f.$3?.length ?? f.$2.length;
+  final main = files.firstWhere((f) => f.$1 == 'main.lua');
+  final order = [...files.where((f) => f != main), main];
+  final total = files.fold<int>(0, (n, f) => n + size(f));
   var done = 0;
-  for (var i = 0; i < files.length; i++) {
-    final (target, text) = files[i];
-    // main.lua goes up as source under another name: a reset with a
-    // main.lua on the glasses would start it (see the compile step)
-    final name = target == 'main.lua' ? mainSource : target;
+  for (var i = 0; i < order.length; i++) {
+    final (target, text, code) = order[i];
+    // main.lua as source goes up under another name, for the same reason
+    final name = target == 'main.lua' && code == null ? mainSource : target;
     report('Uploading $name', done / total);
     await repl.show([
-      'Uploading ${i + 1}/${files.length}',
+      'Uploading ${i + 1}/${order.length}',
       name,
       progressBar(done / total),
     ]);
-    await device.uploadScript(name, text);
-    done += text.length;
+    if (code == null) {
+      await device.uploadScript(name, text);
+    } else if (target != 'main.lua') {
+      await uploadBytes(device, name, code);
+    }
+    done += size(order[i]);
   }
 
-  // Compile everything require() loads, on the glasses, while their memory
-  // is free: at start they then load bytecode without debug information --
-  // about a third of the compiled source in memory, and no compiler and no
-  // whole-file buffer (FRAME.md, "require() holds the whole source"). With
-  // the source, the app ran out of memory starting.
+  // What went up as source -- built without tool/compile_lua.sh, or since
+  // changed -- is compiled on the glasses, while their memory is free: at
+  // start they then load bytecode without debug information -- about a
+  // third of the compiled source in memory, and no compiler and no
+  // whole-file buffer (FRAME.md, "require() holds the whole source").
   //
   // main.lua goes first, on a freshly reset Lua with the heap in one piece:
   // compiling it and dumping the result peaks around 80 KB (measured on a
   // laptop), and after seventeen smaller files the heap was too broken up
-  // for it -- the dump ran out of memory. The small files follow.
-  await device.uploadScript('glaz_compile.lua', compileHelper);
-  report('Resetting the glasses');
-  await device.sendResetSignal();
-  await repl.ready();
-  await repl.run("require('glaz_compile')", 'glaz_compile ready');
+  // for it -- the dump ran out of memory. The small files follow. Today
+  // main.lua is too big for even that, so it needs its bytecode.
   final toCompile = [
-    for (final (name, text) in files)
-      if (!readAsText(text)) name,
+    for (final (name, text, code) in files)
+      if (code == null && !readAsText(text)) name,
   ]..sort((a, b) => a == 'main.lua' ? -1 : (b == 'main.lua' ? 1 : 0));
+  if (toCompile.isNotEmpty) {
+    debugPrint('glaz Upload: compiling on the glasses: ${toCompile.join(' ')}');
+    await device.uploadScript('glaz_compile.lua', compileHelper);
+    report('Resetting the glasses');
+    await device.sendResetSignal();
+    await repl.ready();
+    await repl.run("require('glaz_compile')", 'glaz_compile ready');
+  }
   for (var i = 0; i < toCompile.length; i++) {
     final name = toCompile[i];
     report('Compiling $name', i / toCompile.length);
@@ -340,15 +385,63 @@ Future<void> uploadApp(
       );
     }
   }
-  await repl.run(
-    "pcall(frame.file.remove,'glaz_compile.lua') "
-        "pcall(frame.file.remove,'$mainSource') print('removed')",
-    'removed',
-  );
+  if (toCompile.isNotEmpty) {
+    await repl.run(
+      "pcall(frame.file.remove,'glaz_compile.lua') "
+          "pcall(frame.file.remove,'$mainSource') print('removed')",
+      'removed',
+    );
+  }
+  if (main.$3 case final code?) {
+    report('Uploading main.lua', done / total);
+    await uploadBytes(device, 'main.lua', code);
+  }
 
   report('Starting the app', 1);
   await repl.show(['Starting...', '', progressBar(1)]);
   await repl.start();
+}
+
+/// [bytes] in hex, two digits a byte, split into pieces of at most [max]
+/// digits (rounded down to whole bytes).
+List<String> hexPieces(List<int> bytes, int max) {
+  final per = max ~/ 2;
+  return [
+    for (var i = 0; i < bytes.length || i == 0; i += per)
+      [
+        for (final b in bytes.skip(i).take(per))
+          b.toRadixString(16).padLeft(2, '0'),
+      ].join(),
+  ];
+}
+
+/// Turns hex back into bytes, on the glasses, for [uploadBytes].
+const _unhex =
+    "function glaz_unhex(s) return (s:gsub('..',function(x) "
+    "return string.char(tonumber(x,16)) end)) end";
+
+/// Writes [bytes] to [name] on the glasses, as frame_ble's uploadScript
+/// does a script, but byte for byte: uploadScript sends text, and bytecode
+/// is not text (AGENTS.md: non-ASCII breaks it). Sent as hex, two
+/// characters a byte: escaping only the bytes that need it came to three
+/// and a third, as bytecode is mostly not printable.
+Future<void> uploadBytes(
+  BrilliantDevice device,
+  String name,
+  Uint8List bytes,
+) async {
+  Future<void> run(String lua, String what) async {
+    final resp = await device.sendString("$lua;print('\x02')", log: false);
+    if (resp != '\x02') throw Exception('$what $name: $resp');
+  }
+
+  await run(_unhex, 'Error preparing');
+  await run("f=frame.file.open('$name','w')", 'Error opening');
+  // the command around a piece: f:write(glaz_unhex(''));print('\x02')
+  for (final piece in hexPieces(bytes, device.maxStringLength! - 36)) {
+    await run("f:write(glaz_unhex('$piece'))", 'Error writing');
+  }
+  await run('f:close() glaz_unhex=nil', 'Error closing');
 }
 
 /// '[##########..........] 50%': in ASCII, as the glasses' font is.

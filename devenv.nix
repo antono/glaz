@@ -86,6 +86,16 @@ in
     check.exec = ''./check.sh'';
     upload.exec = ''python host_test.py "$@"'';
     sprite.exec = ''python utils/show_sprite.py "$@"'';
+    # The phone app, with what it carries but git does not: the Lua compiled
+    # to bytecode -- the glasses cannot compile main.lua themselves any
+    # more -- and the firmware for Update. Built without them, the app had
+    # no firmware to offer.
+    apk.exec = ''
+      cd "$DEVENV_ROOT/flutter-glaz"
+      tool/compile_lua.sh
+      tool/fetch_firmware.sh || echo "firmware not fetched; Update offers what is in assets/firmware" >&2
+      flutter build apk --debug "$@"
+    '';
   };
 
   enterShell = ''
@@ -103,6 +113,7 @@ in
     echo "  upload           upload the app to the glasses and listen"
     echo "  sprite NAME N    show sprites/NAME.lua at N x on the glasses"
     echo "  emulator-start   boot the Android emulator (first run creates it)"
-    echo "  cd flutter-glaz && flutter run    the companion app"
+    echo "  apk              build the phone app (Lua bytecode and firmware first)"
+    echo "  cd flutter-glaz && tool/compile_lua.sh && flutter run    the companion app"
   '';
 }

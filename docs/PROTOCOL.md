@@ -115,6 +115,10 @@ hardware.
   bounces and the taps of a double or triple included. For measuring taps
   (`modules/taptune.lua`); a module never takes `frame.imu.tap_callback`
   over, which would leave the app without taps.
+- `remote(arg)` — the phone calls the module (`MODULE_CALL`, see
+  [Recorder](#recorder)), `arg` a string whose meaning is the module's. A
+  module not running is started into the background for it. Recorder's is
+  the phone's record button: `'on'` / `'off'`.
 
 Each returns the text to show (`nil` keeps the current text) and, optionally,
 `true` as a second value meaning "done": the module is stopped — even a
@@ -303,7 +307,7 @@ which splits long messages into MTU-sized packets and reassembles them.
 | `0x2A` | `FILE_GET` | `[id]` + path: read a file — see [Files](#files) |
 | `0x2B` | `INPUT` | `[kind, value]`: the phone's remote — `[1, n]` n taps, `[2, 1]` tilt right, `[2, 255]` tilt left; see [Remote](#remote) |
 | `0x2C` | `PHOTO_TAKE` | `>I2B`: size in px (square, even, 100..720), JPEG quality 1 very low .. 5 very high — the remote's photo; see [Remote](#remote) |
-| `0x2D` | `REC_SET` | `[1]` start / `[0]` stop Recorder — the remote's record button; see [Recorder](#recorder) |
+| `0x2D` | `MODULE_CALL` | text, `module` `\n` `arg`: calls that module's `remote(arg)` — the remote's record button is `recorder\non` / `recorder\noff`; see [Recorder](#recorder) |
 
 `MENU_SET` is an **override**: it replaces the module-defined menu with
 host-supplied labels and resets the cursor. Those items have no module behind
@@ -499,11 +503,13 @@ On Android `recordings/` is the shared `Recordings/Glaz`. The Voice tab lists
 them by day and plays them. The Recordings service (Services) turns saving
 off.
 
-**From the phone.** The Remote tab's record button sends `REC_SET` (`0x2D`,
-`[1]` start, `[0]` stop). The glasses call Recorder's `record(on)` where it
-is: on screen, in the background, or -- not running -- started straight into
-the background, so the screen stays as it was (another background module is
-stopped for it: there is only one). The sound comes back exactly as for a
+**From the phone.** The Remote tab's record button sends `MODULE_CALL`
+(`0x2D`) with `recorder\non` or `recorder\noff`. `MODULE_CALL` is generic:
+`frame_app.lua` knows no module by name, it finds the one named and calls
+its `remote(arg)` where it is: on screen, in the background, or -- not
+running -- started straight into the background, so the screen stays as it
+was (another background module is stopped for it: there is only one). A
+module without `remote()` is not called. Recorder takes `on` and `off`. The sound comes back exactly as for a
 tap. The phone shows the state the glasses report, not the one it asked
 for: red from `REC_START` to `0x06` (or a disconnect), the button and a strip
 over every screen with the time, a tap on the strip stops it; the glasses

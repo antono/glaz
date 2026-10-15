@@ -4,7 +4,7 @@ publish_to: 'none'
 
 # Shown in the About tab too: keep lib/screens/about_screen.dart in step
 # (test/version_test.dart checks it).
-version: 1.5.0+6
+version: 2.0.0+8
 
 environment:
   sdk: ^3.13.3
@@ -42,5 +42,8 @@ flutter:
     - assets/lua/modules/
     - assets/lua/sprites/
     - assets/lua/lib/
+    # The same Lua compiled to bytecode by tool/compile_lua.sh (not
+    # committed): the glasses cannot compile main.lua themselves any more.
+    - assets/luac/
     # DFU zips for Firmware, fetched by tool/fetch_firmware.sh (not committed)
     - assets/firmware/

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:frame_ble/frame_ble.dart';
 
+import 'pairing.dart';
 import 'protocol.dart';
 
 enum LinkState { disconnected, scanning, connecting, connected }
@@ -31,6 +32,23 @@ class FrameLink extends ChangeNotifier {
 
   static const statusEvery = Duration(minutes: 1);
   Timer? _statusTimer;
+
+  /// Whether the pairing has gone stale, and whose side must forget it;
+  /// see pairing.dart. Set by [_watchDrops], cleared by an answer from the
+  /// glasses or by [forgetPairing].
+  PairingTrouble pairing = PairingTrouble.none;
+
+  /// The glasses last found, kept while the link is down: what
+  /// [forgetPairing] forgets.
+  BluetoothDevice? _known;
+  StreamSubscription<OnConnectionStateChangedEvent>? _drops;
+  DateTime? _upAt;
+  int _quickDrops = 0;
+  bool _pairAfterConnect = false;
+
+  /// The phone can drop its pairing itself on Android only.
+  bool get canForgetPairing =>
+      _known != null && defaultTargetPlatform == TargetPlatform.android;
 
   BrilliantDevice? _device;
   StreamSubscription<List<int>>? _data;
@@ -99,6 +117,8 @@ class FrameLink extends ChangeNotifier {
     await BrilliantBluetooth.requestPermission();
     final scanned = await _scanForApp(timeout);
     if (state != LinkState.scanning) return; // cancelled meanwhile
+    _known = scanned.device;
+    _watchDrops();
     _set(LinkState.connecting);
     final device = await BrilliantBluetooth.connect(scanned);
     if (device.state != BrilliantConnectionState.connected) {
@@ -114,6 +134,69 @@ class FrameLink extends ChangeNotifier {
       }
     });
     _attach(device);
+  }
+
+  /// Every link up and down with the glasses, frame_ble's own reconnects
+  /// included: a link that keeps going down right after coming up is a
+  /// pairing that no longer holds (pairing.dart).
+  void _watchDrops() {
+    _drops ??= FlutterBluePlus.events.onConnectionStateChanged.listen((e) {
+      if (e.device.remoteId != _known?.remoteId) return;
+      if (e.connectionState == BluetoothConnectionState.connected) {
+        _upAt = DateTime.now();
+      } else if (e.connectionState == BluetoothConnectionState.disconnected) {
+        final up = _upAt == null
+            ? Duration.zero
+            : DateTime.now().difference(_upAt!);
+        _upAt = null;
+        _quickDrops = up < quickDrop ? _quickDrops + 1 : 0;
+        _onDrop(e.device, e.device.disconnectReason?.code);
+      }
+    });
+  }
+
+  Future<void> _onDrop(BluetoothDevice device, int? code) async {
+    if (busy || defaultTargetPlatform != TargetPlatform.android) return;
+    var bonded = false;
+    try {
+      bonded = await device.bondState.first == BluetoothBondState.bonded;
+    } catch (_) {}
+    final trouble = pairingTrouble(
+      bonded: bonded,
+      code: code,
+      quickDrops: _quickDrops,
+    );
+    debugPrint(
+      'glaz link: down, reason $code, bonded $bonded, '
+      'quick drops $_quickDrops -> ${trouble.name}',
+    );
+    if (trouble == PairingTrouble.none || trouble == pairing) return;
+    pairing = trouble;
+    // frame_ble would keep reconnecting, and the glasses keep refusing
+    await disconnect();
+    error = null;
+    notifyListeners();
+  }
+
+  /// Forgets this phone's pairing with the glasses and connects again;
+  /// Android then asks to pair. For [PairingTrouble.phoneStale]: the
+  /// glasses forgot the phone, the phone has to forget them too.
+  Future<void> forgetPairing() async {
+    final device = _known;
+    if (device == null) return;
+    await disconnect();
+    try {
+      await device.removeBond();
+    } catch (e) {
+      error = 'could not forget the pairing: $e';
+      notifyListeners();
+      return;
+    }
+    pairing = PairingTrouble.none;
+    _quickDrops = 0;
+    _pairAfterConnect = true;
+    notifyListeners();
+    await connect();
   }
 
   static Future<BrilliantScannedDevice> _scanForApp(Duration timeout) async {
@@ -142,6 +225,14 @@ class FrameLink extends ChangeNotifier {
   }
 
   void _attach(BrilliantDevice device) {
+    if (_pairAfterConnect) {
+      // after forgetPairing: ask now, rather than on the first encrypted
+      // read; Android shows its pairing dialog
+      _pairAfterConnect = false;
+      device.device.createBond().catchError((Object e) {
+        debugPrint('glaz link: pairing: $e');
+      });
+    }
     _data?.cancel();
     _device = device;
     name = device.device.advName.isEmpty
@@ -176,6 +267,9 @@ class FrameLink extends ChangeNotifier {
   @visibleForTesting
   void onStatus(List<int> m) {
     if (m.length < 2) return;
+    // the glasses answer: whatever the pairing was, it works
+    pairing = PairingTrouble.none;
+    _quickDrops = 0;
     battery = m[1] == 255 ? battery : m[1];
     if (m.length > 2) firmware = ascii.decode(m.sublist(2), allowInvalid: true);
     notifyListeners();
@@ -237,6 +331,9 @@ class FrameLink extends ChangeNotifier {
     try {
       await BrilliantBluetooth.stopScan();
       await device?.disconnect();
+      // between frame_ble's reconnects there is no BrilliantDevice, but a
+      // connect may still be pending
+      if (device == null) await _known?.disconnect();
     } catch (_) {}
   }
 
@@ -281,10 +378,16 @@ class FrameLink extends ChangeNotifier {
   Future<void> remotePhoto(int size, int quality) =>
       send(photoTake, [size >> 8, size & 0xFF, quality]);
 
-  /// The remote: start or stop Recorder on the glasses; it starts in the
-  /// background, the screen stays as it is. The sound comes back as when
-  /// recording is started on the glasses.
-  Future<void> remoteRecord(bool on) => send(recSet, [on ? 1 : 0]);
+  /// Calls [module]'s remote([arg]) on the glasses (MODULE_CALL). A module
+  /// not running is started in the background; the screen stays as it is.
+  /// What [arg] means is up to the module.
+  Future<void> callModule(String module, String arg) =>
+      send(moduleCall, '$module\n$arg'.codeUnits);
+
+  /// The remote: start or stop Recorder on the glasses. The sound comes back
+  /// as when recording is started on the glasses.
+  Future<void> remoteRecord(bool on) =>
+      callModule('recorder', on ? 'on' : 'off');
 
   /// The wall clock for the top bar: unix time and the UTC offset.
   Future<void> sendClock() {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../frame/link.dart';
+import '../frame/pairing.dart';
 import '../frame/upload.dart';
 import '../services/services.dart';
 import '../theme.dart';
@@ -120,6 +121,19 @@ class _ConnectionCard extends StatelessWidget {
                     ? muted?.copyWith(color: FrameColors.red)
                     : muted,
               ),
+            if (link.pairing != PairingTrouble.none) ...[
+              const SizedBox(height: 12),
+              _PairingTrouble(link),
+            ] else if (!link.connected &&
+                link.error != null &&
+                link.canForgetPairing) ...[
+              // not recognised, but worth a try when connecting fails
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => _confirmForget(context, link),
+                child: const Text('Pairing trouble? Forget it on this phone'),
+              ),
+            ],
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
@@ -137,6 +151,95 @@ class _ConnectionCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Forgets this phone's pairing, after asking: the glasses then have to be
+/// paired again, and that is the phone's own dialog, so say so first.
+Future<void> _confirmForget(BuildContext context, FrameLink link) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Forget the pairing?'),
+      content: const Text(
+        'This phone forgets the glasses and pairs with them again. Android '
+        'asks to pair: tap Pair. The glasses must be ready to pair -- reset '
+        'on the charger, with nothing paired.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Forget and pair'),
+        ),
+      ],
+    ),
+  );
+  if (ok == true) await link.forgetPairing();
+}
+
+/// The pairing no longer holds: what happened, and the way out.
+class _PairingTrouble extends StatelessWidget {
+  const _PairingTrouble(this.link);
+  final FrameLink link;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final phone = link.pairing == PairingTrouble.phoneStale;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: FrameColors.yellow),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.link_off, color: FrameColors.yellow),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  phone
+                      ? 'The glasses forgot this phone'
+                      : 'The glasses are paired with another phone',
+                  style: text.titleSmall,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            phone
+                ? 'Their pairing was reset -- on the charger, say -- but this '
+                      'phone still holds the old one, so the glasses turn it '
+                      'away. Forget it here and pair again.'
+                : 'Or with this phone before it forgot them. Only the glasses '
+                      'can let go: put them on the charger and press its '
+                      'button, then connect again.',
+            style: text.bodyMedium?.copyWith(color: FrameColors.grey),
+          ),
+          const SizedBox(height: 12),
+          if (phone && link.canForgetPairing)
+            FilledButton.icon(
+              onPressed: () => _confirmForget(context, link),
+              icon: const Icon(Icons.link_off),
+              label: const Text('Forget and pair again'),
+            )
+          else
+            OutlinedButton.icon(
+              onPressed: link.connect,
+              icon: const Icon(Icons.bluetooth_searching),
+              label: const Text('Connect again'),
+            ),
+        ],
       ),
     );
   }

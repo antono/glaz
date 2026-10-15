@@ -52,3 +52,7 @@ app.*.map.json
 
 # firmware zips, fetched by tool/fetch_firmware.sh
 /assets/firmware/*.zip
+
+# Lua bytecode, built by tool/compile_lua.sh
+/assets/luac/*
+!/assets/luac/.gitkeep

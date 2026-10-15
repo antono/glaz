@@ -83,7 +83,8 @@ local FILES_GET = 0x29    -- [id] .. path: list a folder, answered with FILES
 local FILE_GET  = 0x2A    -- [id] .. path: read a file, answered with FILE_DATA
 local PHOTO_TAKE = 0x2C   -- '>I2B' size in px, quality 1..5: take a photo
                           -- for the phone's remote; it arrives as Camera's do
-local REC_SET   = 0x2D    -- [1] start / [0] stop Recorder: the phone's button
+local MODULE_CALL = 0x2D  -- name .. '\n' .. arg: the phone calls a module's
+                          -- remote(arg), e.g. Recorder's record button
 local INPUT     = 0x2B    -- [kind, value]: the phone's remote, as gestures --
                           -- kind 1 = that many taps, kind 2 = a tilt (value
                           -- 1 right / next, 255 left / previous)
@@ -274,7 +275,7 @@ data.parsers[FILES_GET] = function(block) return block end
 data.parsers[FILE_GET]  = function(block) return block end
 data.parsers[INPUT]     = function(block) return block end
 data.parsers[PHOTO_TAKE] = function(block) return block end
-data.parsers[REC_SET]   = function(block) return block end
+data.parsers[MODULE_CALL] = function(block) return block end
 
 -- Any other code is dropped quietly. data.lua prints 'No parser for flag'
 -- for a code it has no parser for and keeps the message, so it prints again
@@ -330,7 +331,18 @@ local function try_require(name)
   return ok, mod
 end
 
+-- The modules on the glasses, by file name. The phone uploads only those
+-- switched on (Glaz > Menu); MENU lists them all, and an entry with no file
+-- is left out of the menu. main.lua goes up compiled, so the phone cannot
+-- edit MENU itself.
+local present = nil
+
 local function build(spec, label, parent)
+  if not present then
+    present = {}
+    local ok, entries = pcall(frame.file.listdir, '/')
+    for _, e in ipairs(ok and entries or {}) do present[e.name] = true end
+  end
   local level = new_level(label or spec.label)
   local path = { table.unpack(parent or {}) }
   path[#path + 1] = level
@@ -338,6 +350,9 @@ local function build(spec, label, parent)
     local item
     if type(entry) == 'table' then
       item = build(entry, nil, path)
+      if #item.items == 0 then item = nil end   -- every module switched off
+    elseif not present[entry .. '.lua'] then
+      item = nil                                -- switched off on the phone
     else
       local id = #names + 1
       paths[id] = path
@@ -353,7 +368,7 @@ local function build(spec, label, parent)
       mod = nil
       collectgarbage('collect')
     end
-    level.items[#level.items + 1] = item
+    if item then level.items[#level.items + 1] = item end
   end
   return level
 end
@@ -374,6 +389,7 @@ local function load_module(id)
 end
 
 local root  = build(MENU, ROOT_LABEL)
+present = nil   -- only wanted to build the menu
 local stack = { root }  -- path from the root to the level being shown
 
 local function level() return stack[#stack] end
@@ -881,29 +897,31 @@ local function module_input(handler, ...)
   end
 end
 
--- The phone's record button (REC_SET): Recorder's record(on), wherever it
--- is -- on screen, in the background, or not running, when it is started
--- straight into the background so the screen stays as it is.
-local function remote_record(on)
+-- The phone calls a module (MODULE_CALL): its remote(arg), wherever it is
+-- -- on screen, in the background, or not running, when it is started
+-- straight into the background so the screen stays as it is. Only a module
+-- with a remote() can be called. The app knows no module by name: what arg
+-- means is the module's business (Recorder: 'on' / 'off').
+local function remote_call(name, arg)
   local id
   for i, n in ipairs(names) do
-    if n == 'recorder' then id = i end
+    if n == name then id = i end
   end
   if not id then return end
   if running == id then
-    if mods[id].record then module_input(mods[id].record, on) end
+    if mods[id].remote then module_input(mods[id].remote, arg) end
     return
   end
   local mod = mods[id]
   if not mod then
-    mod = on and load_module(id)
-    if not mod then return end
+    mod = load_module(id)
+    if not (mod and mod.remote) then mods[id] = nil return end
     if mod.start then pcall(mod.start, { background = bg and bg_name }) end
     if bg then quit(bg) end
     bg, bg_name = id, mod.label
     send(APP_BACKGROUND, id)
   end
-  if mod.record then pcall(mod.record, on) end
+  if mod.remote then pcall(mod.remote, arg) end
   if bg == id and not wants_background(mod) then quit(id) end
   if visible or running then render() end
 end
@@ -1157,10 +1175,11 @@ function app_loop()
           end
         end
 
-        if data.app_data[REC_SET] ~= nil then
-          local block = data.app_data[REC_SET]
-          data.app_data[REC_SET] = nil
-          remote_record(string.byte(block) == 1)
+        if data.app_data[MODULE_CALL] ~= nil then
+          local block = data.app_data[MODULE_CALL]
+          data.app_data[MODULE_CALL] = nil
+          local name, arg = string.match(block, '^([%w_]+)\n?(.*)$')
+          if name then remote_call(name, arg) end
           last_act = frame.time.utc()
         end
 
