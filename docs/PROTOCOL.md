@@ -224,7 +224,7 @@ The same row is the **top bar**, left to right:
 | Piece | x | Notes |
 | --- | --- | --- |
 | breadcrumb | 60 | sky blue |
-| background icon | 376 | green play triangle, a 16×16 1-bit `frame.display.bitmap`; only while a module runs in the background |
+| background icon | 376 | green play triangle, a 16×16 1-bit `frame.display.bitmap`; only while a module runs in the background. A red dot instead while the module on screen or in the background sets `_M.rec` (Recorder, recording) |
 | Bluetooth icon | 400 | the Bluetooth rune, same bitmap format; sky blue while a host is connected, grey when not; always shown |
 | clock | 430 | `HH:MM`, grey; `--:--` until the host sends `CLOCK_SET` |
 | battery | 545 | `84%`, grey; red at 15 % or below |
@@ -303,6 +303,7 @@ which splits long messages into MTU-sized packets and reassembles them.
 | `0x2A` | `FILE_GET` | `[id]` + path: read a file — see [Files](#files) |
 | `0x2B` | `INPUT` | `[kind, value]`: the phone's remote — `[1, n]` n taps, `[2, 1]` tilt right, `[2, 255]` tilt left; see [Remote](#remote) |
 | `0x2C` | `PHOTO_TAKE` | `>I2B`: size in px (square, even, 100..720), JPEG quality 1 very low .. 5 very high — the remote's photo; see [Remote](#remote) |
+| `0x2D` | `REC_SET` | `[1]` start / `[0]` stop Recorder — the remote's record button; see [Recorder](#recorder) |
 
 `MENU_SET` is an **override**: it replaces the module-defined menu with
 host-supplied labels and resets the cursor. Those items have no module behind
@@ -497,6 +498,18 @@ recordings/2026-10-15/2026-10-15 13-07-01.wav   by time started
 On Android `recordings/` is the shared `Recordings/Glaz`. The Voice tab lists
 them by day and plays them. The Recordings service (Services) turns saving
 off.
+
+**From the phone.** The Remote tab's record button sends `REC_SET` (`0x2D`,
+`[1]` start, `[0]` stop). The glasses call Recorder's `record(on)` where it
+is: on screen, in the background, or -- not running -- started straight into
+the background, so the screen stays as it was (another background module is
+stopped for it: there is only one). The sound comes back exactly as for a
+tap. The phone shows the state the glasses report, not the one it asked
+for: red from `REC_START` to `0x06` (or a disconnect), the button and a strip
+over every screen with the time, a tap on the strip stops it; the glasses
+show a red dot in the top bar while Recorder's `_M.rec` is true. A
+background module that no longer wants the background -- Recorder after the
+link cut a recording short -- is stopped at its next background tick.
 
 ### Status
 

@@ -9,6 +9,7 @@ import 'screens/more_screen.dart';
 import 'screens/remote_screen.dart';
 import 'services/services.dart';
 import 'theme.dart';
+import 'widgets/recording.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +26,8 @@ class GlazApp extends StatelessWidget {
       title: 'glaz',
       debugShowCheckedModeBanner: false,
       theme: glazTheme(),
+      // recording on the glasses shows over every screen
+      builder: (context, child) => RecordingBanner(child: child!),
       home: const HomeShell(),
     );
   }
@@ -125,10 +128,17 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final settings = Services.instance.settings;
+    final recorder = Services.instance.recorder;
     return ListenableBuilder(
-      listenable: settings,
+      listenable: Listenable.merge([settings, recorder]),
       builder: (context, _) {
         final order = _order;
+        // a red dot on Recordings while the glasses record
+        Widget icon(String id, IconData data) => Badge(
+          isLabelVisible: id == 'recordings' && recorder.recording,
+          backgroundColor: FrameColors.red,
+          child: Icon(data),
+        );
         return PopScope(
           // back leaves the editing mode first
           canPop: !_editing,
@@ -166,8 +176,8 @@ class _HomeShellState extends State<HomeShell> {
                       destinations: [
                         for (final id in order)
                           NavigationDestination(
-                            icon: Icon(_tab(id).icon),
-                            selectedIcon: Icon(_tab(id).selected),
+                            icon: icon(id, _tab(id).icon),
+                            selectedIcon: icon(id, _tab(id).selected),
                             label: _tab(id).label,
                             // no tooltip: it would take the long press that
                             // opens the editing mode

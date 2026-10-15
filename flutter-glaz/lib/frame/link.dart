@@ -281,6 +281,11 @@ class FrameLink extends ChangeNotifier {
   Future<void> remotePhoto(int size, int quality) =>
       send(photoTake, [size >> 8, size & 0xFF, quality]);
 
+  /// The remote: start or stop Recorder on the glasses; it starts in the
+  /// background, the screen stays as it is. The sound comes back as when
+  /// recording is started on the glasses.
+  Future<void> remoteRecord(bool on) => send(recSet, [on ? 1 : 0]);
+
   /// The wall clock for the top bar: unix time and the UTC offset.
   Future<void> sendClock() {
     final now = DateTime.now();

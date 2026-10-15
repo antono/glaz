@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:glaz/frame/protocol.dart';
 import 'package:glaz/main.dart';
 import 'package:glaz/screens/menu_screen.dart';
 import 'package:glaz/services/services.dart';
@@ -75,7 +76,7 @@ void main() {
     await tester.tap(find.text('Remote'));
     await tester.pumpAndSettle();
 
-    final take = find.textContaining('Take a photo');
+    final take = find.textContaining('Photo ·');
     await tester.scrollUntilVisible(take, 200);
     expect(find.textContaining('M, Mid'), findsOneWidget);
     expect(find.text('Quality'), findsNothing);
@@ -88,6 +89,39 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('L, High'), findsOneWidget);
     expect(Services.instance.settings.config('photo', 'resolution'), '720');
+  });
+
+  testWidgets('recording on the glasses shows everywhere, red', (tester) async {
+    await tester.pumpWidget(const GlazApp());
+    await tester.tap(find.text('Remote'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Rec'), 200);
+    expect(find.text('REC'), findsNothing);
+
+    final recorder = Services.instance.recorder;
+    await tester.runAsync(() async {
+      recorder.onMessage([recStart, 8, 8]);
+      await recorder.flush();
+    });
+    await tester.pump();
+    // the strip over the app, the button turned red with the time
+    expect(find.text('REC'), findsOneWidget);
+    expect(find.text('STOP'), findsOneWidget);
+    expect(find.text('Rec'), findsNothing);
+    expect(find.text('0:00'), findsNWidgets(2));
+    // over a page pushed on top too
+    await tester.tap(find.text('More'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Services'));
+    await tester.pumpAndSettle();
+    expect(find.text('REC'), findsOneWidget);
+
+    await tester.runAsync(() async {
+      recorder.onMessage([audioEnd]);
+      await recorder.flush();
+    });
+    await tester.pump();
+    expect(find.text('REC'), findsNothing);
   });
 
   testWidgets('Weather has a settings page with the Internet permission', (

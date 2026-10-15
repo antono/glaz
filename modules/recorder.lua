@@ -3,6 +3,10 @@
 --   single tap -- start / stop recording
 --   double tap -- back; a recording goes on in the background
 --
+-- The phone's record button (REC_SET) calls record(on), and starts the
+-- module straight into the background when it is not running. _M.rec is
+-- true while recording: the top bar shows a red dot for it.
+--
 -- The glasses keep nothing: the sound is streamed to the phone as it is
 -- recorded, and the phone saves each recording as a WAV file (Glaz >
 -- Recordings). With no host connected the module says so and does not start.
@@ -60,19 +64,20 @@ local function drain()
   end
 end
 
+-- At most three rows of about 26 characters each.
 local function screen()
   if not started then
     if not frame.bluetooth.is_connected() then return 'no host' end
     if sent > 0 then
-      return string.format('saved %d KB, tap = record', sent // 1024)
+      return string.format('saved %d KB\ntap = record', sent // 1024)
     end
     return 'tap = record'
   end
   local s = math.floor(frame.time.utc() - started)
   local text = string.format('REC %d:%02d  %d KB', s // 60, s % 60,
                              sent // 1024)
-  if lost > 0 then text = text .. string.format('  lost %d KB', lost // 1024) end
-  return text .. '  tap = stop'
+  if lost > 0 then text = text .. string.format('\nlost %d KB', lost // 1024) end
+  return text .. '\ntap = stop'
 end
 
 local function begin()
@@ -93,6 +98,7 @@ local function begin()
   end
   started = frame.time.utc()
   sent, lost = 0, 0
+  _M.rec = true
 end
 
 local function finish()
@@ -101,6 +107,7 @@ local function finish()
   drain()
   send(string.char(AUDIO_END))
   started = nil
+  _M.rec = false
 end
 
 -- Keeps running off screen while recording; stopped for good otherwise.
@@ -119,6 +126,12 @@ end
 
 function _M.on_tap()
   if started then finish() else begin() end
+  return screen()
+end
+
+-- The phone's button: on starts, off stops; either is a no-op when already so.
+function _M.record(on)
+  if on and not started then begin() elseif not on then finish() end
   return screen()
 end
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import '../frame/link.dart';
 import '../services/services.dart';
 import '../settings.dart';
 import '../theme.dart';
+import '../widgets/recording.dart';
 import 'photos_screen.dart';
 
 /// A remote for the glasses: what the wearer does with taps and tilts,
@@ -74,7 +76,15 @@ class RemoteScreen extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 28),
-        _PhotoButton(link: link, enabled: on),
+        Row(
+          children: [
+            Expanded(
+              child: _PhotoButton(link: link, enabled: on),
+            ),
+            const SizedBox(width: 8),
+            _RecordButton(link: link, enabled: on),
+          ],
+        ),
         const SizedBox(height: 24),
         Text(
           'Up and left go back one item, down and right forward one -- the '
@@ -402,9 +412,7 @@ class _PhotoButtonState extends State<_PhotoButton> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.photo_camera),
-              label: Text(
-                _waiting ? 'Taking...' : 'Take a photo  ·  $size, $quality',
-              ),
+              label: Text(_waiting ? 'Taking...' : 'Photo · $size, $quality'),
             ),
           ),
           const SizedBox(width: 8),
@@ -417,4 +425,88 @@ class _PhotoButtonState extends State<_PhotoButton> {
       );
     },
   );
+}
+
+/// Start and stop Recorder on the glasses. Red while they record, with the
+/// time; the state is the glasses' own, read from what they send, so it is
+/// right however the recording was started or ended.
+class _RecordButton extends StatefulWidget {
+  const _RecordButton({required this.link, required this.enabled});
+  final FrameLink link;
+  final bool enabled;
+
+  @override
+  State<_RecordButton> createState() => _RecordButtonState();
+}
+
+class _RecordButtonState extends State<_RecordButton> {
+  /// Asked, and the glasses have not answered yet.
+  bool _asked = false;
+  Timer? _giveUp;
+
+  @override
+  void initState() {
+    super.initState();
+    Services.instance.recorder.addListener(_changed);
+  }
+
+  @override
+  void dispose() {
+    _giveUp?.cancel();
+    Services.instance.recorder.removeListener(_changed);
+    super.dispose();
+  }
+
+  void _changed() {
+    _giveUp?.cancel();
+    if (mounted) setState(() => _asked = false);
+  }
+
+  void _press(bool on) {
+    HapticFeedback.mediumImpact();
+    setState(() => _asked = true);
+    widget.link.remoteRecord(on);
+    // no answer: Recorder could not start (no microphone, a bad link)
+    _giveUp?.cancel();
+    _giveUp = Timer(const Duration(seconds: 5), _changed);
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    // the Recordings service switched in More > Services
+    listenable: Services.instance.settings,
+    builder: (context, _) => _build(),
+  );
+
+  Widget _build() {
+    final services = Services.instance;
+    final recorder = services.recorder;
+    final saving = services.settings.serviceOn('recordings');
+    final enabled = widget.enabled && saving && !_asked;
+    const padding = EdgeInsets.symmetric(vertical: 14, horizontal: 16);
+    if (recorder.recording) {
+      return FilledButton.icon(
+        style: FilledButton.styleFrom(
+          backgroundColor: FrameColors.red,
+          foregroundColor: FrameColors.white,
+          padding: padding,
+        ),
+        onPressed: enabled ? () => _press(false) : null,
+        icon: const Icon(Icons.stop),
+        label: RecordingClock(recorder),
+      );
+    }
+    return Tooltip(
+      message: saving ? 'Record on the glasses' : 'Recordings service is off',
+      child: OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(padding: padding),
+        onPressed: enabled ? () => _press(true) : null,
+        icon: Icon(
+          Icons.fiber_manual_record,
+          color: enabled ? FrameColors.red : null,
+        ),
+        label: const Text('Rec'),
+      ),
+    );
+  }
 }

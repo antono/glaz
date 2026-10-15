@@ -14,6 +14,7 @@ const filesGet = 0x29;
 const fileGet = 0x2A;
 const input = 0x2B;
 const photoTake = 0x2C;
+const recSet = 0x2D;
 
 // Frame -> Host
 const menuSelect = 0x11;

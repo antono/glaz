@@ -83,6 +83,7 @@ local FILES_GET = 0x29    -- [id] .. path: list a folder, answered with FILES
 local FILE_GET  = 0x2A    -- [id] .. path: read a file, answered with FILE_DATA
 local PHOTO_TAKE = 0x2C   -- '>I2B' size in px, quality 1..5: take a photo
                           -- for the phone's remote; it arrives as Camera's do
+local REC_SET   = 0x2D    -- [1] start / [0] stop Recorder: the phone's button
 local INPUT     = 0x2B    -- [kind, value]: the phone's remote, as gestures --
                           -- kind 1 = that many taps, kind 2 = a tilt (value
                           -- 1 right / next, 255 left / previous)
@@ -222,6 +223,13 @@ local ICON_PLAY    = '\x00\x00\x18\x00\x1E\x00\x1F\x00\x1F\xC0\x1F\xF0' ..
                      '\x1F\xF8\x1F\xFE\x1F\xFE\x1F\xF8\x1F\xF0\x1F\xC0' ..
                      '\x1F\x00\x1E\x00\x18\x00\x00\x00'
 
+-- Recording: a red dot in the background icon's place, while the module on
+-- screen or in the background says so (_M.rec). Palette offset 2: RED.
+local REC_PALETTE  = 2
+local ICON_REC     = '\x00\x00\x00\x00\x00\x00\x07\xE0\x0F\xF0\x1F\xF8' ..
+                     '\x1F\xF8\x1F\xF8\x1F\xF8\x1F\xF8\x1F\xF8\x0F\xF0' ..
+                     '\x07\xE0\x00\x00\x00\x00\x00\x00'
+
 -- Bluetooth icon: the rune, right of the background icon, always shown. Same
 -- bitmap format as ICON_PLAY. Palette offsets: 13 draws index 14, SKYBLUE,
 -- while a host is connected; 1 draws index 2, GREY, while none is.
@@ -262,6 +270,7 @@ data.parsers[FILES_GET] = function(block) return block end
 data.parsers[FILE_GET]  = function(block) return block end
 data.parsers[INPUT]     = function(block) return block end
 data.parsers[PHOTO_TAKE] = function(block) return block end
+data.parsers[REC_SET]   = function(block) return block end
 
 -- Any other code is dropped quietly. data.lua prints 'No parser for flag'
 -- for a code it has no parser for and keeps the message, so it prints again
@@ -495,9 +504,15 @@ local function bt_connected()
 end
 
 -- What the right end of the top bar shows; a change means a redraw.
+-- A module on screen or in the background is recording (_M.rec).
+local function recording()
+  local m, b = running and mods[running], bg and mods[bg]
+  return (m and m.rec or b and b.rec) == true
+end
+
 local function status_text()
   return clock_text() .. ' ' .. tostring(battery_level()) .. ' ' ..
-         tostring(bt_connected())
+         tostring(bt_connected()) .. ' ' .. tostring(recording())
 end
 
 -- 'Glaz > Settings > Brightness'. When it is too wide for right_x, the
@@ -524,13 +539,17 @@ local function draw_top_bar(last, crumbs)
   if last then parts[#parts + 1] = last end
 
   -- the icon, guarded: a bad bitmap call must not take the screen down
-  if bg then
+  local rec = recording()
+  if rec then
+    pcall(frame.display.bitmap, ICON_X, ICON_Y, ICON_W, 2, REC_PALETTE,
+          ICON_REC)
+  elseif bg then
     pcall(frame.display.bitmap, ICON_X, ICON_Y, ICON_W, 2, ICON_PALETTE,
           ICON_PLAY)
   end
   pcall(frame.display.bitmap, BT_X, ICON_Y, ICON_W, 2,
         bt_connected() and BT_ON_PALETTE or BT_OFF_PALETTE, ICON_BT)
-  draw_crumbs(parts, (bg and ICON_X or BT_X) - CHAR_W // 2)
+  draw_crumbs(parts, ((bg or rec) and ICON_X or BT_X) - CHAR_W // 2)
 
   frame.display.text(clock_text(), TIME_X, CRUMB_Y, { color = 'GREY' })
   local level = battery_level()
@@ -858,6 +877,33 @@ local function module_input(handler, ...)
   end
 end
 
+-- The phone's record button (REC_SET): Recorder's record(on), wherever it
+-- is -- on screen, in the background, or not running, when it is started
+-- straight into the background so the screen stays as it is.
+local function remote_record(on)
+  local id
+  for i, n in ipairs(names) do
+    if n == 'recorder' then id = i end
+  end
+  if not id then return end
+  if running == id then
+    if mods[id].record then module_input(mods[id].record, on) end
+    return
+  end
+  local mod = mods[id]
+  if not mod then
+    mod = on and load_module(id)
+    if not mod then return end
+    if mod.start then pcall(mod.start, { background = bg and bg_name }) end
+    if bg then quit(bg) end
+    bg, bg_name = id, mod.label
+    send(APP_BACKGROUND, id)
+  end
+  if mod.record then pcall(mod.record, on) end
+  if bg == id and not wants_background(mod) then quit(id) end
+  if visible or running then render() end
+end
+
 -- Counting happens HERE, not in the loop, because this is the only place with
 -- accurate timing. The loop drained one queued tap per iteration, and idle
 -- iterations are IDLE_PERIOD apart -- far enough that three real taps looked
@@ -1107,6 +1153,13 @@ function app_loop()
           end
         end
 
+        if data.app_data[REC_SET] ~= nil then
+          local block = data.app_data[REC_SET]
+          data.app_data[REC_SET] = nil
+          remote_record(string.byte(block) == 1)
+          last_act = frame.time.utc()
+        end
+
         if data.app_data[INPUT] ~= nil then
           local block = data.app_data[INPUT]
           data.app_data[INPUT] = nil
@@ -1301,7 +1354,9 @@ function app_loop()
         local mod = mods[bg]
         if mod and mod.tick then
           local ok, _, done = pcall(mod.tick)
-          if ok and done then
+          -- done, or no longer wanting the background (a recording the
+          -- link cut short): it stops from there
+          if ok and (done or not wants_background(mod)) then
             quit(bg)
             if visible or running then render() end   -- the icon goes
           end
