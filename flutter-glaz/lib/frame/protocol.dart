@@ -13,6 +13,7 @@ const location = 0x28;
 const filesGet = 0x29;
 const fileGet = 0x2A;
 const input = 0x2B;
+const photoTake = 0x2C;
 
 // Frame -> Host
 const menuSelect = 0x11;

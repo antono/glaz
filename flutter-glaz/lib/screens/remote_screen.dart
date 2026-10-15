@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../frame/link.dart';
 import '../services/services.dart';
+import '../settings.dart';
 import '../theme.dart';
 
 /// A remote for the glasses: what the wearer does with taps and tilts,
@@ -69,6 +70,8 @@ class RemoteScreen extends StatelessWidget {
             ),
           ],
         ),
+        const SizedBox(height: 28),
+        _PhotoCard(link: link, enabled: on),
         const SizedBox(height: 24),
         Text(
           'Up and left go back one item, down and right forward one -- the '
@@ -198,4 +201,158 @@ class _GestureButton extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// A photo from the glasses' camera, with the two settings that matter:
+/// size and quality. They are Camera's own settings (Menu > Camera), so the
+/// two stay in step; the photo lands in Photos with the others.
+class _PhotoCard extends StatefulWidget {
+  const _PhotoCard({required this.link, required this.enabled});
+  final FrameLink link;
+  final bool enabled;
+
+  @override
+  State<_PhotoCard> createState() => _PhotoCardState();
+}
+
+class _PhotoCardState extends State<_PhotoCard> {
+  static const _sizes = [('256', 'S'), ('512', 'M'), ('720', 'L')];
+  static const _qualities = [
+    ('LOW', 'Low'),
+    ('MEDIUM', 'Mid'),
+    ('HIGH', 'High'),
+  ];
+  static const _qualityIndex = {
+    'VERY_LOW': 1,
+    'LOW': 2,
+    'MEDIUM': 3,
+    'HIGH': 4,
+    'VERY_HIGH': 5,
+  };
+
+  int _received = 0;
+  bool _waiting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final photos = Services.instance.photos;
+    _received = photos.received;
+    photos.addListener(_onPhoto);
+  }
+
+  @override
+  void dispose() {
+    Services.instance.photos.removeListener(_onPhoto);
+    super.dispose();
+  }
+
+  void _onPhoto() {
+    final n = Services.instance.photos.received;
+    if (n == _received) return;
+    _received = n;
+    if (_waiting && mounted) {
+      setState(() => _waiting = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Saved to Photos')));
+    }
+  }
+
+  Future<void> _shoot(Settings settings) async {
+    HapticFeedback.mediumImpact();
+    final size = int.parse(settings.config('photo', 'resolution') ?? '512');
+    final quality =
+        _qualityIndex[settings.config('photo', 'quality') ?? 'MEDIUM'] ?? 3;
+    setState(() => _waiting = true);
+    await widget.link.remotePhoto(size, quality);
+    // the glasses take about 1.5 s to expose, then a few to send
+    Future.delayed(const Duration(seconds: 20), () {
+      if (mounted && _waiting) setState(() => _waiting = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = Services.instance.settings;
+    final text = Theme.of(context).textTheme;
+    return ListenableBuilder(
+      listenable: settings,
+      builder: (context, _) {
+        final size = settings.config('photo', 'resolution') ?? '512';
+        final quality = settings.config('photo', 'quality') ?? 'MEDIUM';
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Photo', style: text.titleMedium),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const SizedBox(width: 56, child: Text('Size')),
+                    Expanded(
+                      child: SegmentedButton<String>(
+                        showSelectedIcon: false,
+                        segments: [
+                          for (final (v, l) in _sizes)
+                            ButtonSegment(value: v, label: Text(l)),
+                        ],
+                        selected: {size},
+                        onSelectionChanged: (s) =>
+                            settings.setConfig('photo', 'resolution', s.first),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const SizedBox(width: 56, child: Text('Quality')),
+                    Expanded(
+                      child: SegmentedButton<String>(
+                        showSelectedIcon: false,
+                        segments: [
+                          for (final (v, l) in _qualities)
+                            ButtonSegment(value: v, label: Text(l)),
+                        ],
+                        // Very low and very high, set in Menu > Camera,
+                        // show no segment as selected
+                        selected: {quality},
+                        emptySelectionAllowed: true,
+                        onSelectionChanged: (s) {
+                          if (s.isNotEmpty) {
+                            settings.setConfig('photo', 'quality', s.first);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: widget.enabled && !_waiting
+                      ? () => _shoot(settings)
+                      : null,
+                  icon: _waiting
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.photo_camera),
+                  label: Text(_waiting ? 'Taking...' : 'Take a photo'),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Saved in Photos with the others. The Photos service '
+                  '(More > Services) must be on.',
+                  style: text.bodySmall?.copyWith(color: FrameColors.grey),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }

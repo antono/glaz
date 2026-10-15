@@ -65,4 +65,10 @@ local x = { 'weather' }
     link.onStatus([0x1B, 255, ...'v25.080.0838'.codeUnits]);
     expect(link.battery, 84, reason: '255 = not sampled, keep the last');
   });
+
+  test('the progress bar on the glasses is ASCII', () {
+    expect(progressBar(0), '[................] 0%');
+    expect(progressBar(0.5), '[########........] 50%');
+    expect(progressBar(1.2), '[################] 100%');
+  });
 }

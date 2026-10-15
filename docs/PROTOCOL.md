@@ -298,6 +298,7 @@ which splits long messages into MTU-sized packets and reassembles them.
 | `0x29` | `FILES_GET` | `[id]` + path (`''` the root): list a folder — see [Files](#files) |
 | `0x2A` | `FILE_GET` | `[id]` + path: read a file — see [Files](#files) |
 | `0x2B` | `INPUT` | `[kind, value]`: the phone's remote — `[1, n]` n taps, `[2, 1]` tilt right, `[2, 255]` tilt left; see [Remote](#remote) |
+| `0x2C` | `PHOTO_TAKE` | `>I2B`: size in px (square, even, 100..720), JPEG quality 1 very low .. 5 very high — the remote's photo; see [Remote](#remote) |
 
 `MENU_SET` is an **override**: it replaces the module-defined menu with
 host-supplied labels and resets the cursor. Those items have no module behind
@@ -561,6 +562,13 @@ Only while the glasses are connected and no text field has the focus, and
 only with the app on screen: Android gives key events to the foreground
 app. Keynote's Back sends Backspace and then Android's Back; the second is
 dropped so it does not also close the app.
+
+The remote also takes photos: `PHOTO_TAKE` (`0x2C`) carries the size and the
+quality, the same two settings as Camera's (the phone shares them). The
+glasses load the camera library for it, give auto exposure 1.5 s, send
+`PHOTO_FROM 0` and the photo as Camera does, so it lands in Photos with the
+single shots, and switch the camera off again unless a module still uses it.
+The main loop waits meanwhile.
 
 ### Settings
 

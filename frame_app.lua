@@ -81,6 +81,8 @@ local STATUS_GET = 0x26   -- any payload; answered with STATUS
 local SETTINGS_SET = 0x27 -- 'module.key=value' lines: every module's settings
 local FILES_GET = 0x29    -- [id] .. path: list a folder, answered with FILES
 local FILE_GET  = 0x2A    -- [id] .. path: read a file, answered with FILE_DATA
+local PHOTO_TAKE = 0x2C   -- '>I2B' size in px, quality 1..5: take a photo
+                          -- for the phone's remote; it arrives as Camera's do
 local INPUT     = 0x2B    -- [kind, value]: the phone's remote, as gestures --
                           -- kind 1 = that many taps, kind 2 = a tilt (value
                           -- 1 right / next, 255 left / previous)
@@ -263,6 +265,7 @@ data.parsers[LOCATION] = function(block) return block end
 data.parsers[FILES_GET] = function(block) return block end
 data.parsers[FILE_GET]  = function(block) return block end
 data.parsers[INPUT]     = function(block) return block end
+data.parsers[PHOTO_TAKE] = function(block) return block end
 
 -- Any other code is dropped quietly. data.lua prints 'No parser for flag'
 -- for a code it has no parser for and keeps the message, so it prints again
@@ -792,6 +795,35 @@ end
 local function release_hardware()
   pcall(frame.camera.power_save, true)
   pcall(frame.microphone.stop)
+end
+
+-- A photo for the phone's remote, the way modules/photo.lua takes one: the
+-- camera library loaded just for it (modules load only while in use, and so
+-- does this), auto exposure given time to settle, and PHOTO_FROM 0 first so
+-- the phone files it with the single shots. The loop waits meanwhile, about
+-- 1.5 s of exposure plus the transfer.
+local QUALITIES = { 'VERY_LOW', 'LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH' }
+local PHOTO_WARMUP = 1.5
+
+local function take_photo(size, quality)
+  if not frame.bluetooth.is_connected() then return end
+  local ok, camera = try_require('camera.min')
+  if not ok or type(camera) ~= 'table' then return end
+  if size % 2 == 1 or size < 100 or size > 720 then size = 512 end
+  pcall(frame.camera.power_save, false)
+  local settled = frame.time.utc() + PHOTO_WARMUP
+  while frame.time.utc() < settled do
+    pcall(camera.run_auto_exposure)
+    frame.sleep(0.1)
+  end
+  for _ = 1, 50 do
+    if pcall(frame.bluetooth.send, string.char(0x1A, 0)) then break end
+    frame.sleep(0.01)
+  end
+  pcall(camera.capture_and_send, { resolution = size, pan = 0, raw = false,
+                                   quality = QUALITIES[quality] or 'MEDIUM' })
+  -- a running Camera or a series in the background may still want it
+  if not running and not bg then release_hardware() end
 end
 
 -- Does this module want to keep running once it leaves the screen?
@@ -1355,6 +1387,15 @@ function app_loop()
         -- gesture, classified below as soon as no further tap could join;
         -- a tilt into remote_dir, which steps 3 and 4 take like a finished
         -- roll. Activity, like a real gesture: keeps an app or the menu up.
+        if data.app_data[PHOTO_TAKE] ~= nil then
+          local block = data.app_data[PHOTO_TAKE]
+          data.app_data[PHOTO_TAKE] = nil
+          if #block >= 3 then
+            take_photo(string.unpack('>I2B', block))
+            last_act = frame.time.utc()
+          end
+        end
+
         if data.app_data[INPUT] ~= nil then
           local block = data.app_data[INPUT]
           data.app_data[INPUT] = nil

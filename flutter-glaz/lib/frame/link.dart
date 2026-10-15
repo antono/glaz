@@ -197,12 +197,17 @@ class FrameLink extends ChangeNotifier {
     notifyListeners();
     try {
       await job(device, (step, [progress]) {
+        // to the system log too (adb logcat -s flutter), to see what an
+        // upload did without looking at the phone
+        if (step != taskStep) debugPrint('glaz $name: $step');
         taskStep = step;
         taskProgress = progress;
         notifyListeners();
       });
+      debugPrint('glaz $name: done');
     } catch (e) {
       taskError = '$e';
+      debugPrint('glaz $name failed: $e');
     } finally {
       task = null;
       notifyListeners();
@@ -266,6 +271,11 @@ class FrameLink extends ChangeNotifier {
   /// cursor down.
   Future<void> remoteTilt({required bool next}) =>
       send(input, [2, next ? 1 : 255]);
+
+  /// The remote: take a photo, [size] px square, JPEG [quality] 1 (very
+  /// low) to 5 (very high). It comes back as a Camera photo does.
+  Future<void> remotePhoto(int size, int quality) =>
+      send(photoTake, [size >> 8, size & 0xFF, quality]);
 
   /// The wall clock for the top bar: unix time and the UTC offset.
   Future<void> sendClock() {
