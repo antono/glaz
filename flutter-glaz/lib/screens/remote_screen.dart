@@ -71,7 +71,7 @@ class RemoteScreen extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 28),
-        _PhotoCard(link: link, enabled: on),
+        _PhotoButton(link: link, enabled: on),
         const SizedBox(height: 24),
         Text(
           'Up and left go back one item, down and right forward one -- the '
@@ -203,19 +203,20 @@ class _GestureButton extends StatelessWidget {
   );
 }
 
-/// A photo from the glasses' camera, with the two settings that matter:
-/// size and quality. They are Camera's own settings (Menu > Camera), so the
-/// two stay in step; the photo lands in Photos with the others.
-class _PhotoCard extends StatefulWidget {
-  const _PhotoCard({required this.link, required this.enabled});
+/// A photo from the glasses' camera: one button, and next to it a small
+/// one for the two settings that matter, size and quality. They are
+/// Camera's own settings (Menu > Camera), so the two stay in step; the
+/// photo lands in Photos with the others.
+class _PhotoButton extends StatefulWidget {
+  const _PhotoButton({required this.link, required this.enabled});
   final FrameLink link;
   final bool enabled;
 
   @override
-  State<_PhotoCard> createState() => _PhotoCardState();
+  State<_PhotoButton> createState() => _PhotoButtonState();
 }
 
-class _PhotoCardState extends State<_PhotoCard> {
+class _PhotoButtonState extends State<_PhotoButton> {
   static const _sizes = [('256', 'S'), ('512', 'M'), ('720', 'L')];
   static const _qualities = [
     ('LOW', 'Low'),
@@ -229,9 +230,21 @@ class _PhotoCardState extends State<_PhotoCard> {
     'HIGH': 4,
     'VERY_HIGH': 5,
   };
+  // Very low and very high are set in Menu > Camera only
+  static const _qualityNames = {
+    'VERY_LOW': 'Very low',
+    'LOW': 'Low',
+    'MEDIUM': 'Mid',
+    'HIGH': 'High',
+    'VERY_HIGH': 'Very high',
+  };
 
   int _received = 0;
   bool _waiting = false;
+
+  Settings get _settings => Services.instance.settings;
+  String get _size => _settings.config('photo', 'resolution') ?? '512';
+  String get _quality => _settings.config('photo', 'quality') ?? 'MEDIUM';
 
   @override
   void initState() {
@@ -258,101 +271,109 @@ class _PhotoCardState extends State<_PhotoCard> {
     }
   }
 
-  Future<void> _shoot(Settings settings) async {
+  Future<void> _shoot() async {
     HapticFeedback.mediumImpact();
-    final size = int.parse(settings.config('photo', 'resolution') ?? '512');
-    final quality =
-        _qualityIndex[settings.config('photo', 'quality') ?? 'MEDIUM'] ?? 3;
     setState(() => _waiting = true);
-    await widget.link.remotePhoto(size, quality);
+    await widget.link.remotePhoto(
+      int.parse(_size),
+      _qualityIndex[_quality] ?? 3,
+    );
     // the glasses take about 1.5 s to expose, then a few to send
     Future.delayed(const Duration(seconds: 20), () {
       if (mounted && _waiting) setState(() => _waiting = false);
     });
   }
 
+  void _openSettings() => showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => ListenableBuilder(
+      listenable: _settings,
+      builder: (context, _) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Photo', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            _choice('Size', _sizes, _size, 'resolution'),
+            const SizedBox(height: 8),
+            _choice('Quality', _qualities, _quality, 'quality'),
+            const SizedBox(height: 12),
+            Text(
+              'Shared with Menu > Camera. Photos land in Photos; the Photos '
+              'service (More > Services) must be on.',
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: FrameColors.grey),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  Widget _choice(
+    String label,
+    List<(String, String)> options,
+    String value,
+    String key,
+  ) => Row(
+    children: [
+      SizedBox(width: 64, child: Text(label)),
+      Expanded(
+        child: SegmentedButton<String>(
+          showSelectedIcon: false,
+          segments: [
+            for (final (v, l) in options)
+              ButtonSegment(value: v, label: Text(l)),
+          ],
+          // a value set in Menu > Camera with no segment here shows none
+          selected: {value},
+          emptySelectionAllowed: true,
+          onSelectionChanged: (s) {
+            if (s.isNotEmpty) _settings.setConfig('photo', key, s.first);
+          },
+        ),
+      ),
+    ],
+  );
+
   @override
-  Widget build(BuildContext context) {
-    final settings = Services.instance.settings;
-    final text = Theme.of(context).textTheme;
-    return ListenableBuilder(
-      listenable: settings,
-      builder: (context, _) {
-        final size = settings.config('photo', 'resolution') ?? '512';
-        final quality = settings.config('photo', 'quality') ?? 'MEDIUM';
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text('Photo', style: text.titleMedium),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const SizedBox(width: 56, child: Text('Size')),
-                    Expanded(
-                      child: SegmentedButton<String>(
-                        showSelectedIcon: false,
-                        segments: [
-                          for (final (v, l) in _sizes)
-                            ButtonSegment(value: v, label: Text(l)),
-                        ],
-                        selected: {size},
-                        onSelectionChanged: (s) =>
-                            settings.setConfig('photo', 'resolution', s.first),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const SizedBox(width: 56, child: Text('Quality')),
-                    Expanded(
-                      child: SegmentedButton<String>(
-                        showSelectedIcon: false,
-                        segments: [
-                          for (final (v, l) in _qualities)
-                            ButtonSegment(value: v, label: Text(l)),
-                        ],
-                        // Very low and very high, set in Menu > Camera,
-                        // show no segment as selected
-                        selected: {quality},
-                        emptySelectionAllowed: true,
-                        onSelectionChanged: (s) {
-                          if (s.isNotEmpty) {
-                            settings.setConfig('photo', 'quality', s.first);
-                          }
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: widget.enabled && !_waiting
-                      ? () => _shoot(settings)
-                      : null,
-                  icon: _waiting
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.photo_camera),
-                  label: Text(_waiting ? 'Taking...' : 'Take a photo'),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Saved in Photos with the others. The Photos service '
-                  '(More > Services) must be on.',
-                  style: text.bodySmall?.copyWith(color: FrameColors.grey),
-                ),
-              ],
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _settings,
+    builder: (context, _) {
+      final size = _sizes
+          .firstWhere((e) => e.$1 == _size, orElse: () => (_size, _size))
+          .$2;
+      final quality = _qualityNames[_quality] ?? _quality;
+      return Row(
+        children: [
+          Expanded(
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              onPressed: widget.enabled && !_waiting ? _shoot : null,
+              icon: _waiting
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.photo_camera),
+              label: Text(
+                _waiting ? 'Taking...' : 'Take a photo  ·  $size, $quality',
+              ),
             ),
           ),
-        );
-      },
-    );
-  }
+          const SizedBox(width: 8),
+          IconButton.filledTonal(
+            tooltip: 'Photo settings',
+            onPressed: _openSettings,
+            icon: const Icon(Icons.tune),
+          ),
+        ],
+      );
+    },
+  );
 }

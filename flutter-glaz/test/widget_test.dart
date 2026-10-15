@@ -65,6 +65,28 @@ void main() {
     expect(find.text('Open source licences'), findsOneWidget);
   });
 
+  testWidgets('photo settings hide behind the icon by Take a photo', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const GlazApp());
+    await tester.tap(find.text('Remote'));
+    await tester.pumpAndSettle();
+
+    final take = find.textContaining('Take a photo');
+    await tester.scrollUntilVisible(take, 200);
+    expect(find.textContaining('M, Mid'), findsOneWidget);
+    expect(find.text('Quality'), findsNothing);
+
+    await tester.tap(find.byTooltip('Photo settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Quality'), findsOneWidget);
+    await tester.tap(find.text('L'));
+    await tester.tap(find.text('High'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('L, High'), findsOneWidget);
+    expect(Services.instance.settings.config('photo', 'resolution'), '720');
+  });
+
   testWidgets('Weather has a settings page with the Internet permission', (
     tester,
   ) async {
