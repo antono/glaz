@@ -318,7 +318,7 @@ Future<void> uploadApp(
     if (code == null) {
       await device.uploadScript(name, text);
     } else if (target != 'main.lua') {
-      await uploadBytes(device, name, code);
+      await uploadBytes(device, name, code, meanwhile: picture.tick);
     }
     done += size(order[i]);
   }
@@ -381,7 +381,7 @@ Future<void> uploadApp(
   if (main.$3 case final code?) {
     report('Uploading main.lua', done / total);
     await picture.draw('Uploading: main.lua', progress: done / total);
-    await uploadBytes(device, 'main.lua', code);
+    await uploadBytes(device, 'main.lua', code, meanwhile: picture.tick);
   }
 
   report('Starting the app', 1);
@@ -412,11 +412,16 @@ const _unhex =
 /// is not text (AGENTS.md: non-ASCII breaks it). Sent as hex, two
 /// characters a byte: escaping only the bytes that need it came to three
 /// and a third, as bytecode is mostly not printable.
+///
+/// [meanwhile] is called between pieces, at most every [meanwhileEvery]:
+/// the upload's picture moves on (GlassesPicture.tick).
 Future<void> uploadBytes(
   BrilliantDevice device,
   String name,
-  Uint8List bytes,
-) async {
+  Uint8List bytes, {
+  Future<void> Function()? meanwhile,
+  Duration meanwhileEvery = const Duration(milliseconds: 300),
+}) async {
   Future<void> run(String lua, String what) async {
     final resp = await device.sendString("$lua;print('\x02')", log: false);
     if (resp != '\x02') throw Exception('$what $name: $resp');
@@ -425,8 +430,13 @@ Future<void> uploadBytes(
   await run(_unhex, 'Error preparing');
   await run("f=frame.file.open('$name','w')", 'Error opening');
   // the command around a piece: f:write(glaz_unhex(''));print('\x02')
+  final since = Stopwatch()..start();
   for (final piece in hexPieces(bytes, device.maxStringLength! - 36)) {
     await run("f:write(glaz_unhex('$piece'))", 'Error writing');
+    if (meanwhile != null && since.elapsed >= meanwhileEvery) {
+      await meanwhile();
+      since.reset();
+    }
   }
   await run('f:close() glaz_unhex=nil', 'Error closing');
 }

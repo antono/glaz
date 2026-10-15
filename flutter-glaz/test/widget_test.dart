@@ -76,7 +76,7 @@ void main() {
     await tester.tap(find.text('Remote'));
     await tester.pumpAndSettle();
 
-    final take = find.textContaining('Photo ·');
+    final take = find.textContaining('Take a photo');
     await tester.scrollUntilVisible(take, 200);
     expect(find.textContaining('M, Mid'), findsOneWidget);
     expect(find.text('Quality'), findsNothing);
@@ -91,11 +91,35 @@ void main() {
     expect(Services.instance.settings.config('photo', 'resolution'), '720');
   });
 
+  testWidgets('recording settings hide behind the icon by Record', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const GlazApp());
+    await tester.tap(find.text('Remote'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.textContaining('Record  ·'), 200);
+    expect(find.text('Record  ·  Speech'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Recording settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Better'));
+    await tester.pumpAndSettle();
+    expect(Services.instance.settings.config('recorder', 'bits'), '16');
+    expect(find.text('Save on the phone'), findsOneWidget);
+    await tester.tap(find.text('Save on the phone'));
+    await tester.pumpAndSettle();
+    expect(Services.instance.settings.serviceOn('recordings'), isFalse);
+    // the sheet away, the button says what it will do
+    await tester.tapAt(const Offset(400, 20));
+    await tester.pumpAndSettle();
+    expect(find.text('Record  ·  Better'), findsOneWidget);
+  });
+
   testWidgets('recording on the glasses shows everywhere, red', (tester) async {
     await tester.pumpWidget(const GlazApp());
     await tester.tap(find.text('Remote'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Rec'), 200);
+    await tester.scrollUntilVisible(find.textContaining('Record  ·'), 200);
     expect(find.text('REC'), findsNothing);
 
     final recorder = Services.instance.recorder;
@@ -107,8 +131,9 @@ void main() {
     // the strip over the app, the button turned red with the time
     expect(find.text('REC'), findsOneWidget);
     expect(find.text('STOP'), findsOneWidget);
-    expect(find.text('Rec'), findsNothing);
-    expect(find.text('0:00'), findsNWidgets(2));
+    expect(find.textContaining('Record  ·'), findsNothing);
+    expect(find.textContaining('Stop'), findsWidgets);
+    expect(find.text('0:00'), findsWidgets);
     // over a page pushed on top too
     await tester.tap(find.text('More'));
     await tester.pumpAndSettle();

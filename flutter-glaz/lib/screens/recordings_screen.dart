@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../services/recordings.dart';
 import '../services/services.dart';
+import '../widgets/recording.dart';
 import 'photos_screen.dart' show dayLabel;
 
 String _clock(Duration d) {
@@ -110,8 +111,13 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
           final all = snap.data;
           if (all == null) return const SizedBox.shrink();
           final now = DateTime.now();
-          final children = <Widget>[];
-          if (recorder.recording) children.add(const _Live());
+          // start and stop from here too; red with the time while recording
+          final children = <Widget>[
+            const Padding(
+              padding: EdgeInsets.only(top: 16),
+              child: RecordRow(),
+            ),
+          ];
           DateTime? day;
           for (final r in all) {
             // the one coming in now is still being written
@@ -199,48 +205,6 @@ class _DayHeader extends StatelessWidget {
   }
 }
 
-/// Shown while the glasses are recording.
-class _Live extends StatefulWidget {
-  const _Live();
-
-  @override
-  State<_Live> createState() => _LiveState();
-}
-
-class _LiveState extends State<_Live> {
-  late final Timer _tick;
-
-  @override
-  void initState() {
-    super.initState();
-    _tick = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
-  }
-
-  @override
-  void dispose() {
-    _tick.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final started = Services.instance.recorder.started;
-    final d = started == null
-        ? Duration.zero
-        : DateTime.now().difference(started);
-    return Card(
-      margin: const EdgeInsets.only(top: 16),
-      color: scheme.errorContainer,
-      child: ListTile(
-        leading: Icon(Icons.fiber_manual_record, color: scheme.error),
-        title: const Text('Recording on the glasses'),
-        subtitle: Text('${_clock(d)}  -  tap on the glasses to stop'),
-      ),
-    );
-  }
-}
-
 class _Empty extends StatelessWidget {
   const _Empty();
 
@@ -256,8 +220,8 @@ class _Empty extends StatelessWidget {
             Icon(Icons.mic_none, size: 48, color: scheme.onSurfaceVariant),
             const SizedBox(height: 12),
             Text(
-              'No recordings yet.\nOpen Apps > Recorder on the glasses '
-              'and tap to record.',
+              'No recordings yet.\nTap Record above, or open Apps > '
+              'Recorder on the glasses and tap there.',
               textAlign: TextAlign.center,
               style: TextStyle(color: scheme.onSurfaceVariant),
             ),

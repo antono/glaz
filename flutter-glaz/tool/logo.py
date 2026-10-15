@@ -455,6 +455,7 @@ def update_art(name='bloodshot'):
 
     mid = len(eye) // 2
     bottom = len(grid) - 1
+    wires = []     # each cable from its connector to the eye: (x, y, width)
     for sign in (-1, 1):                        # left, then mirrored right
         edge = (min if sign < 0 else max)(
             x for x, c in enumerate(''.join(grid[mid])) if c != '.')
@@ -468,6 +469,8 @@ def update_art(name='bloodshot'):
             put(x, mid, WIRE['cable'])
         for y in range(mid, bottom - 1):
             put(far, y, WIRE['cable'])
+        wires.append([(far, y, 1) for y in range(bottom - 2, mid, -1)] +
+                     [(x, mid, 1) for x in range(far, run - sign, -sign)])
         for x in (far - 1, far, far + 1):        # its connector
             put(x, bottom - 1, WIRE['pin'])
             put(x, bottom, WIRE['pin'])
@@ -476,6 +479,7 @@ def update_art(name='bloodshot'):
     for y in range(last + 1, bottom - 2):
         put(centre, y, WIRE['cable'])
         put(centre - 1, y, WIRE['cable'])
+    wires.append([(centre - 1, y, 2) for y in range(bottom - 3, last, -1)])
     for x in range(centre - 3, centre + 3):      # a plug from below
         put(x, bottom - 2, WIRE['plug'])
         put(x, bottom - 1, WIRE['plug'])
@@ -500,6 +504,12 @@ def update_art(name='bloodshot'):
         out.append(f"  '{c}': {idx}, // {label}")
     out += ['};', '', '/// The rows, top to bottom.', 'const updateArt = [']
     out += [f"  '{r}'," for r in rows]
+    out += ['];', '',
+            '/// The cables, each from its connector to the eye, as x, y, width',
+            '/// triples: what the current runs along.',
+            'const updateWires = [']
+    out += ['  [' + ', '.join(f'{x}, {y}, {w}' for x, y, w in wire) + '],'
+            for wire in wires]
     out += ['];', '']
     path = ROOT / 'lib/frame/update_art.dart'
     path.write_text('\n'.join(out), encoding='ascii')

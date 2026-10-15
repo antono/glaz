@@ -7,6 +7,10 @@ import 'update_art.dart';
 /// It goes through the REPL, one write of about 240 bytes at a time. So the
 /// art is sent once, into globals, by [load] -- a reset wipes them, [load]
 /// again after one -- and then every [draw] is a single write.
+///
+/// Every frame is drawn whole anyway, so the current runs: sparks along the
+/// cables (updateWires), one cell nearer the eye with every [draw] or
+/// [tick].
 class GlassesPicture {
   /// [run]: runs Lua on the glasses and waits for the token it prints --
   /// Repl.run.
@@ -23,6 +27,13 @@ class GlassesPicture {
   static const barWidth = 400; // even: two pixels a byte
   static const barHeight = 12;
 
+  /// A spark every this many cells along a cable: a head and its tail.
+  static const sparkGap = 4;
+
+  int _phase = 0;
+  String _line = '';
+  double? _progress;
+
   static int get artX => (screenWidth - updateArt.first.length * scale) ~/ 2;
   static int get textY => top + updateArt.length * scale + 22;
   static int get barY => textY + 60;
@@ -33,7 +44,10 @@ class GlassesPicture {
     final colors = updateArtColors.entries
         .map((e) => e.key == '.' ? "['.']=${e.value}" : '${e.key}=${e.value}')
         .join(',');
-    await run("C={$colors} A={} S=$scale X=$artX Y=$top print('p0')", 'p0');
+    await run(
+      "C={$colors} A={} P={} S=$scale X=$artX Y=$top print('p0')",
+      'p0',
+    );
     for (var i = 0; i < updateArt.length; i += 3) {
       final rows = [
         for (var j = i; j < i + 3 && j < updateArt.length; j++)
@@ -49,6 +63,22 @@ class GlassesPicture {
           "string.rep(table.concat(t),S)) end end print('pd')",
       'pd',
     );
+    for (var i = 0; i < updateWires.length; i++) {
+      await run(
+        "P[${i + 1}]={${updateWires[i].join(',')}} print('pp$i')",
+        'pp$i',
+      );
+    }
+    // E(p): the sparks at phase p -- a SKYBLUE head (14 * 17), a SEABLUE
+    // tail (13 * 17) behind it, toward the connector
+    await run(
+      'function E(p) for _,w in ipairs(P) do for i=0,#w//3-1 do '
+          'local k,j=(i-p)%$sparkGap,i*3 if k<2 then local c=w[j+3]*S '
+          'frame.display.bitmap(X+w[j+1]*S,Y+w[j+2]*S,c,16,0,'
+          'string.char(k<1 and 238 or 221):rep(c*S//2)) '
+          "end end end end print('pe')",
+      'pe',
+    );
     // filled LIGHTGREEN (11 * 17), the rest GREY (2 * 17)
     await run(
       'function B(f) local n=math.floor($barWidth*f/2) '
@@ -60,17 +90,25 @@ class GlassesPicture {
     );
   }
 
-  /// The art, [line] under it, and a bar at [progress] (0..1) if given.
+  /// The art, [line] under it, and a bar at [progress] (0..1) if given;
+  /// the sparks one cell on.
   Future<void> draw(String line, {double? progress}) {
+    _line = line;
+    _progress = progress;
+    _phase = (_phase + 1) % sparkGap;
     final bar = progress == null
         ? ''
         : 'B(${progress.clamp(0.0, 1.0).toStringAsFixed(3)}) ';
     return run(
-      "D() frame.display.text('${_text(line)}',$textX,$textY) $bar"
-          "frame.display.show() print('pw')",
+      "D() E($_phase) frame.display.text('${_text(line)}',$textX,$textY) "
+          "${bar}frame.display.show() print('pw')",
       'pw',
     );
   }
+
+  /// The same again, the sparks one cell on: for a long step, between its
+  /// parts.
+  Future<void> tick() => draw(_line, progress: _progress);
 
   /// Leaves the picture up until the next reset: nothing else can draw.
   /// frame.update() puts its own 'Frame Update' on screen just before the
