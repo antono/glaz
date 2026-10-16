@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme.dart';
 import 'about_screen.dart';
+import 'app_settings_screen.dart';
 import 'services_screen.dart';
 
 /// What does not need a tab of its own: the phone's services for the
@@ -34,6 +35,16 @@ class MoreScreen extends StatelessWidget {
                 onTap: () =>
                     Navigator.of(context)
                         .push(page('SERVICES', const ServicesScreen())),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.tune, color: FrameColors.skyBlue),
+                title: const Text('Settings'),
+                subtitle: const Text('How the app works with the glasses'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () =>
+                    Navigator.of(context)
+                        .push(page('SETTINGS', const AppSettingsScreen())),
               ),
               const Divider(height: 1),
               ListTile(

@@ -6,13 +6,15 @@ import 'package:flutter/material.dart';
 import 'eye_art.dart';
 
 /// The glaz eye, drawn pixel by pixel (eye_art.dart, the same art as
-/// tool/logo.py's logo). It blinks now and then; a tap makes it twitch: the
-/// pupil widens a little and the veins crawl, then it settles.
+/// tool/logo.py's logo). It twitches now and then, and at a tap: the pupil
+/// widens a little and the veins crawl, then it settles. It never blinks.
 class PixelLogo extends StatefulWidget {
-  const PixelLogo({super.key, this.size = 160, this.blink = true});
+  const PixelLogo({super.key, this.size = 160, this.alive = true});
 
   final double size;
-  final bool blink;
+
+  /// Twitching by itself; a still eye still twitches at a tap.
+  final bool alive;
 
   @override
   State<PixelLogo> createState() => _PixelLogoState();
@@ -30,10 +32,6 @@ class _PixelLogoState extends State<PixelLogo> with TickerProviderStateMixin {
   /// The veins take a new shape this many times during a twitch.
   static const _steps = 6;
 
-  late final _lid = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 180),
-  );
   late final _twitch = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 900),
@@ -43,21 +41,16 @@ class _PixelLogoState extends State<PixelLogo> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    if (widget.blink) {
-      _timer = Timer.periodic(_period, (_) => _blinkOnce());
+    if (widget.alive) {
+      _timer = Timer.periodic(_period, (_) {
+        if (!_twitch.isAnimating) _twitch.forward(from: 0);
+      });
     }
-  }
-
-  Future<void> _blinkOnce() async {
-    if (!mounted || _twitch.isAnimating) return;
-    await _lid.forward(from: 0);
-    if (mounted) await _lid.reverse();
   }
 
   @override
   void dispose() {
     _timer?.cancel();
-    _lid.dispose();
     _twitch.dispose();
     super.dispose();
   }
@@ -70,7 +63,7 @@ class _PixelLogoState extends State<PixelLogo> with TickerProviderStateMixin {
       child: GestureDetector(
         onTap: () => _twitch.forward(from: 0),
         child: AnimatedBuilder(
-          animation: Listenable.merge([_lid, _twitch]),
+          animation: _twitch,
           builder: (context, _) {
             final t = _twitch.value;
             // up and back down: 0 at rest, 1 halfway through
@@ -81,12 +74,9 @@ class _PixelLogoState extends State<PixelLogo> with TickerProviderStateMixin {
                     pupilR: restPupil + _dilate * swell,
                     veins: twitchVeins(_crawl * swell, (t * _steps).floor()),
                   );
-            return Transform.scale(
-              scaleY: 1 - 0.9 * Curves.easeIn.transform(_lid.value),
-              child: CustomPaint(
-                size: Size.square(widget.size),
-                painter: _EyePainter(pixels),
-              ),
+            return CustomPaint(
+              size: Size.square(widget.size),
+              painter: _EyePainter(pixels),
             );
           },
         ),

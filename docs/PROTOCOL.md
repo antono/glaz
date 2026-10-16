@@ -308,6 +308,7 @@ which splits long messages into MTU-sized packets and reassembles them.
 | `0x2B` | `INPUT` | `[kind, value]`: the phone's remote — `[1, n]` n taps, `[2, 1]` tilt right, `[2, 255]` tilt left; see [Remote](#remote) |
 | `0x2C` | `PHOTO_TAKE` | `>I2B`: size in px (square, even, 100..720), JPEG quality 1 very low .. 5 very high — the remote's photo; see [Remote](#remote) |
 | `0x2D` | `MODULE_CALL` | text, `module` `\n` `arg`: calls that module's `remote(arg)` — the remote's record button is `recorder\non` / `recorder\noff`; see [Recorder](#recorder) |
+| `0x2E` | `HANDS_OFF` | `[1]`: the remote is in front, the wearer's own gestures are off but a triple tap and a tap waking a blank screen; `[0]`: all back; see [Remote](#remote) |
 
 `MENU_SET` is an **override**: it replaces the module-defined menu with
 host-supplied labels and resets the cursor. Those items have no module behind
@@ -604,6 +605,17 @@ Taps go into the tap counter as a finished gesture, classified at once
 follows a triple tap. A tilt reaches the menu's cursor, or the running
 module's `on_roll`, exactly where a head tilt would; with neither on screen
 it does nothing. Either counts as activity, keeping the menu or an app up.
+
+**While the Remote tab is in front** the phone sends `HANDS_OFF` `[1]`, so
+the glasses do not also react to the wearer's head and fingers: tilts are
+not read (the IMU is not polled), raw hits do not reach `on_hit`, and taps
+on the arm count only as a triple tap -- the menu, always reachable -- or as
+a single tap on a blank screen: waking it, bringing back the last app or
+dismissing a notification. Taps from the remote work as before. Leaving the
+tab, or the app leaving the screen, sends `[0]`; the phone sends `[1]` again
+on every connect while the tab is open. The glasses drop it themselves the
+moment Bluetooth goes, so a lost phone never leaves them deaf. The user can
+turn it off: Glaz > More > Settings, Glasses gestures off.
 
 **A keyboard is a remote too** (`flutter-glaz/lib/services/keys.dart`, the
 Keyboard remote service). Any keyboard the phone has -- Bluetooth or USB, a

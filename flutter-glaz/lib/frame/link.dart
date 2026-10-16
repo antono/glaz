@@ -255,6 +255,7 @@ class FrameLink extends ChangeNotifier {
     for (final f in onConnected) {
       f();
     }
+    if (_handsOff) send(handsOff, [1]);
     requestStatus();
   }
 
@@ -362,6 +363,18 @@ class FrameLink extends ChangeNotifier {
     });
     _tail = job.catchError((_) {});
     return job;
+  }
+
+  /// Whether the wearer's own gestures are off but the triple tap and a tap
+  /// waking a blank screen, while the remote is in front (docs/PROTOCOL.md,
+  /// "Remote"). Sent again on every connect; the glasses drop it themselves
+  /// when the link goes.
+  bool get remoteHandsOff => _handsOff;
+  bool _handsOff = false;
+  set remoteHandsOff(bool on) {
+    if (on == _handsOff) return;
+    _handsOff = on;
+    send(handsOff, [on ? 1 : 0]);
   }
 
   /// The remote: [count] taps (1 select, 2 back, 3 the menu), as if on the

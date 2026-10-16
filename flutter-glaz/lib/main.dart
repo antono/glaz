@@ -112,9 +112,39 @@ List<String> tabOrderFrom(List<String>? saved) {
   ];
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   String _current = tabs.first.id;
   bool _editing = false;
+  bool _shown = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    Services.instance.settings.addListener(_handsOff);
+  }
+
+  @override
+  void dispose() {
+    Services.instance.settings.removeListener(_handsOff);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // inactive is still on screen: a dialog, the shade, an unfocused window
+    _shown =
+        state == AppLifecycleState.resumed ||
+        state == AppLifecycleState.inactive;
+    _handsOff();
+  }
+
+  // the Remote tab in front: the glasses take few gestures of their own
+  void _handsOff() => Services.instance.link.remoteHandsOff =
+      _shown &&
+      _current == 'remote' &&
+      Services.instance.settings.remoteHandsOff;
 
   List<String> get _order => tabOrderFrom(Services.instance.settings.tabOrder);
 
@@ -171,8 +201,10 @@ class _HomeShellState extends State<HomeShell> {
                     onLongPress: () => _edit(true),
                     child: NavigationBar(
                       selectedIndex: order.indexOf(_current),
-                      onDestinationSelected: (i) =>
-                          setState(() => _current = order[i]),
+                      onDestinationSelected: (i) {
+                        setState(() => _current = order[i]);
+                        _handsOff();
+                      },
                       destinations: [
                         for (final id in order)
                           NavigationDestination(

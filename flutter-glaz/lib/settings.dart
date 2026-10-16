@@ -28,6 +28,11 @@ class Settings extends ChangeNotifier {
   bool locAllowed(String module) => _prefs.getBool('loc.$module') ?? false;
   void setLocAllowed(String module, bool on) => _set('loc.$module', on);
 
+  /// Whether the Remote tab, while in front, turns the wearer's own gestures
+  /// off but the triple tap and a waking tap.
+  bool get remoteHandsOff => _prefs.getBool('remote.handsOff') ?? true;
+  set remoteHandsOff(bool on) => _set('remote.handsOff', on);
+
   /// The bottom bar's tabs, in the user's order (by id); null until they
   /// rearrange it.
   List<String>? get tabOrder => _prefs.getStringList('tabs');

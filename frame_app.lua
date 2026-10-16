@@ -88,6 +88,9 @@ local MODULE_CALL = 0x2D  -- name .. '\n' .. arg: the phone calls a module's
 local INPUT     = 0x2B    -- [kind, value]: the phone's remote, as gestures --
                           -- kind 1 = that many taps, kind 2 = a tilt (value
                           -- 1 right / next, 255 left / previous)
+local HANDS_OFF = 0x2E    -- [1]: the phone's remote is in front, so the
+                          -- wearer's gestures are off but a triple tap and a
+                          -- tap waking a blank screen; [0]: all back
 local LOCATION  = 0x28    -- '>BBi4i4I2I2' id, status, lat and lon in
                           -- microdegrees, accuracy m, age s; an answer to
                           -- LOCATION_GET
@@ -419,6 +422,8 @@ local tap_hits  = 0   -- every hit counted, bounces included: on_hit(n)
 local hits_seen = 0   -- tap_hits already handed to a module
 local tap_mute  = 0   -- swallow taps until this time, after a toggle
 local remote_dir = 0  -- a tilt from the phone's remote, taken as if by roll
+local tap_remote = false  -- tap_n came from the phone's remote, not the arm
+local hands_off = false   -- HANDS_OFF: the wearer's gestures mostly off
 
 local function split_lines(s)
   local out = {}
@@ -942,6 +947,7 @@ frame.imu.tap_callback(function()
     tap_n = tap_n + 1
   end
   tap_at = t
+  tap_remote = false
 end)
 
 -- The splash sprite: glaz_splash.lua, loaded to draw it and dropped after.
@@ -1195,11 +1201,17 @@ function app_loop()
               -- a remote gesture is whole: none of it trails a toggle, so
               -- the mute after a triple tap does not swallow the next one
               tap_mute = 0
+              tap_remote = true
             elseif kind == 2 then
               remote_dir = value == 1 and 1 or -1
             end
             last_act = now
           end
+        end
+
+        if data.app_data[HANDS_OFF] ~= nil then
+          hands_off = string.byte(data.app_data[HANDS_OFF], 1) == 1
+          data.app_data[HANDS_OFF] = nil
         end
 
         if data.app_data[LOCATION] ~= nil then
@@ -1237,6 +1249,9 @@ function app_loop()
         end
       end
 
+      -- the remote went with the link: the wearer has the glasses back
+      if hands_off and not bt_connected() then hands_off = false end
+
       -- 2. taps. The callback has already counted them; this only decides
       --    what the count means. Nothing here depends on the loop's pace.
 
@@ -1271,6 +1286,12 @@ function app_loop()
         if now < tap_mute then
           tap_mute = tap_at + TAP_WINDOW
           n = 0   -- trailing taps of a toggle mean nothing
+        end
+
+        -- the phone's remote in front: of the wearer's taps only the one
+        -- waking a blank screen counts (the triple is taken above)
+        if hands_off and not tap_remote and (n ~= 1 or visible or running) then
+          n = 0
         end
 
         -- a tap on a notification only dismisses it
@@ -1319,7 +1340,8 @@ function app_loop()
       hits_seen = tap_hits
       if running then
         local mod = mods[running]
-        local dir = (mod and mod.on_roll) and roll_step(now) or 0
+        local dir = (mod and mod.on_roll and not hands_off) and roll_step(now)
+                    or 0
         if remote_dir ~= 0 then
           dir = (mod and mod.on_roll) and remote_dir or 0
           remote_dir = 0
@@ -1328,7 +1350,7 @@ function app_loop()
         if dir ~= 0 then
           module_input(mod.on_roll, dir)
 
-        elseif hits > 0 and mod and mod.on_hit then
+        elseif hits > 0 and mod and mod.on_hit and not hands_off then
           module_input(mod.on_hit, hits)
 
         elseif mod and mod.mode == 'app' then
@@ -1360,7 +1382,7 @@ function app_loop()
       --    which saves battery. Nor under a notification: the cursor would
       --    move unseen.
       elseif visible and not notice and #level().items > 0 then
-        local dir = roll_step(now)
+        local dir = hands_off and 0 or roll_step(now)
         if remote_dir ~= 0 then dir, remote_dir = remote_dir, 0 end
         if dir ~= 0 then move(dir) end
 

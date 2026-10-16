@@ -4,7 +4,7 @@ import '../theme.dart';
 import '../widgets/pixel_logo.dart';
 
 /// Kept equal to `version:` in pubspec.yaml by test/version_test.dart.
-const appVersion = '2.3.0';
+const appVersion = '2.4.0';
 
 /// The third tab: what this is, versions, licences.
 class AboutScreen extends StatelessWidget {
@@ -17,7 +17,7 @@ class AboutScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
       children: [
-        const Center(child: PixelLogo(size: 96, blink: false)),
+        const Center(child: PixelLogo(size: 96, alive: false)),
         const SizedBox(height: 12),
         Center(child: Text('glaz $appVersion', style: text.titleMedium)),
         const SizedBox(height: 24),
@@ -56,7 +56,7 @@ class AboutScreen extends StatelessWidget {
                   applicationVersion: appVersion,
                   applicationIcon: const Padding(
                     padding: EdgeInsets.all(8),
-                    child: PixelLogo(size: 64, blink: false),
+                    child: PixelLogo(size: 64, alive: false),
                   ),
                 ),
               ),

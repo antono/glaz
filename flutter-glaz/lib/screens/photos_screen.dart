@@ -116,9 +116,10 @@ class _AccessState extends State<_Access> {
           child: Card(
             child: ListTile(
               leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Photos from before a reinstall'),
+              title: const Text('Show older photos'),
               subtitle: const Text(
-                'They are kept in Pictures/Glaz; allow access to show them.',
+                'Photos from an earlier install of the app stay in '
+                'Pictures/Glaz. Allow access to see them here too.',
               ),
               trailing: TextButton(
                 onPressed: () async {

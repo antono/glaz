@@ -7,6 +7,7 @@ import '../frame/upload.dart';
 import '../services/services.dart';
 import '../theme.dart';
 import '../widgets/pixel_logo.dart';
+import 'about_screen.dart';
 import 'firmware_screen.dart';
 import 'glasses_files_screen.dart';
 
@@ -28,6 +29,16 @@ class HomeScreen extends StatelessWidget {
           child: Text(
             'companion for Frame glasses',
             style: text.bodyMedium?.copyWith(color: FrameColors.grey),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Center(
+          child: Text(
+            'v$appVersion',
+            style: text.bodySmall?.copyWith(
+              color: FrameColors.grey.withValues(alpha: 0.5),
+              fontFamily: monoFamily,
+            ),
           ),
         ),
         const SizedBox(height: 28),
@@ -53,64 +64,43 @@ class _ConnectionCard extends StatelessWidget {
     );
   }
 
-  static (IconData, Color, String) _state(FrameLink link) =>
-      switch (link.state) {
-        LinkState.connected => (
-          Icons.bluetooth_connected,
-          FrameColors.lightGreen,
-          link.name ?? 'Connected',
-        ),
-        LinkState.connecting => (
-          Icons.bluetooth_searching,
-          FrameColors.yellow,
-          'Connecting...',
-        ),
-        LinkState.scanning => (
-          Icons.bluetooth_searching,
-          FrameColors.yellow,
-          'Looking for the glasses...',
-        ),
-        LinkState.disconnected => (
-          Icons.bluetooth_disabled,
-          FrameColors.grey,
-          'Not connected',
-        ),
-      };
+  static (Color, String) _state(FrameLink link) => switch (link.state) {
+    LinkState.connected => (FrameColors.lightGreen, 'Connected'),
+    LinkState.connecting => (FrameColors.yellow, 'Connecting...'),
+    LinkState.scanning => (FrameColors.yellow, 'Looking for the glasses...'),
+    LinkState.disconnected => (FrameColors.grey, 'Not connected'),
+  };
 
   Widget _build(BuildContext context, FrameLink link) {
     final text = Theme.of(context).textTheme;
     final muted = text.bodyMedium?.copyWith(color: FrameColors.grey);
-    final (icon, color, title) = _state(link);
+    final (color, title) = _state(link);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // connected, the dot and the battery say it all; the firmware
+            // is in the Software card below
             Row(
               children: [
-                Icon(icon, color: color),
-                const SizedBox(width: 12),
-                Expanded(child: Text(title, style: text.titleMedium)),
                 _StatusDot(color: color),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (link.connected)
-              Row(
-                children: [
+                const SizedBox(width: 12),
+                if (link.connected)
                   _Reading(
                     Icons.battery_std,
                     link.battery == null ? '--' : '${link.battery}%',
                     color: (link.battery ?? 100) <= 15
                         ? FrameColors.red
                         : FrameColors.skyBlue,
-                  ),
-                  const SizedBox(width: 24),
-                  _Reading(Icons.memory, link.firmware ?? '--'),
-                ],
-              )
-            else
+                  )
+                else
+                  Expanded(child: Text(title, style: text.titleMedium)),
+              ],
+            ),
+            if (!link.connected) ...[
+              const SizedBox(height: 12),
               Text(
                 link.error != null
                     ? 'Failed: ${link.error}'
@@ -120,18 +110,6 @@ class _ConnectionCard extends StatelessWidget {
                 style: link.error != null
                     ? muted?.copyWith(color: FrameColors.red)
                     : muted,
-              ),
-            if (link.pairing != PairingTrouble.none) ...[
-              const SizedBox(height: 12),
-              _PairingTrouble(link),
-            ] else if (!link.connected &&
-                link.error != null &&
-                link.canForgetPairing) ...[
-              // not recognised, but worth a try when connecting fails
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () => _confirmForget(context, link),
-                child: const Text('Pairing trouble? Forget it on this phone'),
               ),
             ],
             const SizedBox(height: 16),
@@ -149,6 +127,19 @@ class _ConnectionCard extends StatelessWidget {
                       label: Text(link.connected ? 'Disconnect' : 'Cancel'),
                     ),
             ),
+            if (link.pairing != PairingTrouble.none) ...[
+              const SizedBox(height: 12),
+              _PairingTrouble(link),
+            ] else if (!link.connected &&
+                link.error != null &&
+                link.canForgetPairing) ...[
+              // not recognised, but worth a try when connecting fails
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => _confirmForget(context, link),
+                child: const Text('Pairing trouble? Forget it on this phone'),
+              ),
+            ],
           ],
         ),
       ),
@@ -229,6 +220,10 @@ class _PairingTrouble extends StatelessWidget {
           const SizedBox(height: 12),
           if (phone && link.canForgetPairing)
             FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: FrameColors.red,
+                foregroundColor: FrameColors.white,
+              ),
               onPressed: () => _confirmForget(context, link),
               icon: const Icon(Icons.link_off),
               label: const Text('Forget and pair again'),
@@ -289,7 +284,7 @@ class _GlassesAppCard extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-            child: Text('On the glasses', style: text.titleMedium),
+            child: Text('Software', style: text.titleMedium),
           ),
           if (link.busy && link.task != 'Firmware')
             Padding(
@@ -415,7 +410,7 @@ class _GesturesCard extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: Text('On the glasses', style: text.titleMedium),
+              child: Text('Gestures', style: text.titleMedium),
             ),
             for (final (icon, gesture, meaning) in _gestures)
               ListTile(
