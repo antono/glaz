@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
@@ -54,8 +55,47 @@ void main() {
     expect(file.path, endsWith('2026-10-14/2026-10-14 17-52-10-000.jpg'));
     expect(photoTime(file), DateTime(2026, 10, 14, 17, 52, 10));
     expect(photos.last?.path, file.path, reason: 'the remote opens it');
-    final saved = img.decodeJpg(file.readAsBytesSync())!;
-    expect((saved.width, saved.height), (2, 4));
+    // kept as it came, with an Exif Orientation saying how to turn it
+    final saved = file.readAsBytesSync();
+    expect(saved.length, jpeg.length + 36);
+    final i = saved.indexOf(0xE1) - 1; // the Exif segment, 36 bytes
+    expect([...saved.sublist(0, i), ...saved.sublist(i + 36)], jpeg);
+    // a decoder that reads Exif turns it upright
+    final upright = img.decodeJpg(saved)!;
+    expect((upright.width, upright.height), (2, 4));
+  });
+
+  testWidgets('Flutter shows the photo turned, as Exif says', (tester) async {
+    // left half black, right half white: turned counterclockwise, the
+    // white half is on top
+    final side = img.Image(width: 32, height: 16);
+    img.fillRect(
+      side,
+      x1: 16,
+      y1: 0,
+      x2: 31,
+      y2: 15,
+      color: img.ColorRgb8(255, 255, 255),
+    );
+    final tagged = withOrientation(Uint8List.fromList(img.encodeJpg(side)));
+    final image = await tester.runAsync(() async {
+      final codec = await ui.instantiateImageCodec(tagged);
+      return (await codec.getNextFrame()).image;
+    });
+    expect((image!.width, image.height), (16, 32));
+    final rgba = (await tester.runAsync(
+      () => image.toByteData(format: ui.ImageByteFormat.rawRgba),
+    ))!;
+    int at(int x, int y) => rgba.getUint8((y * 16 + x) * 4);
+    expect(at(8, 4), greaterThan(200), reason: 'white on top');
+    expect(at(8, 28), lessThan(50), reason: 'black below');
+  });
+
+  test('a photo with Exif already, or not a JPEG, is kept as it came', () {
+    final once = withOrientation(jpeg);
+    expect(withOrientation(once), once);
+    final other = Uint8List.fromList([1, 2, 3, 137]);
+    expect(withOrientation(other), other);
   });
 
   test('a series goes in one folder named by its start, counted', () async {

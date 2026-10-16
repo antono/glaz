@@ -233,6 +233,13 @@ Everything below follows from that.
     browsing, the remote's photo and the splash (loaded only when used).
     Compiled with debug information main.lua went from 71 KB to 57 KB.
 
+    Upload sends only what changed. The glasses hash each file they have
+    (FNV-1a over what `read()` gives, `glaz_check` in `upload.dart`) and
+    compare it with what the upload would write; files that match stay,
+    main.lua included (moved aside as `glaz_prev.lua` while the upload
+    runs). Files sent as source to be compiled on the glasses always go:
+    only the glasses know what they compile to.
+
 The working recipe used both workarounds: find Frame by address with a long
 scan, and pair on connect. Both are monkey-patches around frame_ble 1.1.1, which
 has no options for them:

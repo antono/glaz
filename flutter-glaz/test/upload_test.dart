@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -56,6 +58,86 @@ void main() {
     );
     expect(fnv1a([]), 0x811c9dc5);
     expect(fnv1a('a'.codeUnits), 0xe40c292c);
+  });
+
+  group('what changed', () {
+    // cut where Frame's read() cuts: at a newline, or after 512 bytes
+    final cases = <String, List<int>>{
+      'empty': [],
+      'one line': 'print(1)'.codeUnits,
+      'ends in a newline': 'a\nb\n'.codeUnits,
+      'empty lines': '\n\n\nx'.codeUnits,
+      'a long line': [for (var i = 0; i < 1300; i++) 0x41 + i % 26],
+      '512 then a newline': [...List.filled(512, 0x78), 0x0A, 0x79],
+      '512 then more': [...List.filled(512, 0x78), 0x79],
+      'bytecode': [for (var i = 0; i < 3000; i++) (i * 137) % 256],
+    };
+
+    test('the hash tells the cases apart', () {
+      final hashes = {for (final b in cases.values) frameFileHash(b)};
+      expect(hashes, hasLength(cases.length));
+      expect(frameFileHash([]), 0x811c9dc5);
+      expect(frameFileHash('a'.codeUnits), fnv1a('a\n'.codeUnits));
+    });
+
+    test('text goes up as uploadScript writes it', () {
+      expect(uploadedBytes(('x.lua', 'a\r\nb', null)), 'a\nb'.codeUnits);
+      final code = Uint8List.fromList([1, 2]);
+      expect(uploadedBytes(('x.lua', 'a', code)), code);
+      expect(checkable(('x.lua', 'a', code)), isTrue);
+      expect(checkable(('x.lua', 'return 1', null)), isFalse);
+      expect(checkable(('logo.lua', '_M.art = {}', null)), isTrue);
+    });
+
+    // checkHelper itself, on Lua 5.4, with frame.file as the firmware's
+    // file.c has it; skipped without a lua 5.4 on PATH (devenv has one)
+    final lua = Process.runSync('lua', ['-v']);
+    final hasLua =
+        lua.exitCode == 0 && '${lua.stdout}${lua.stderr}'.contains('5.4');
+    test('the glasses work out the same hash', () {
+      final dir = Directory.systemTemp.createTempSync('glaz_check');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      var checks = '';
+      var n = 0;
+      for (final bytes in cases.values) {
+        File('${dir.path}/f$n').writeAsBytesSync(bytes);
+        checks += "glaz_check('f$n', ${frameFileHash(bytes)})\n";
+        checks += "glaz_check('f$n', ${frameFileHash(bytes) ^ 1})\n";
+        n++;
+      }
+      checks += "glaz_check('missing', 0)\n";
+      File('${dir.path}/run.lua').writeAsStringSync('''
+frame = { file = {} }
+function frame.file.open(name)
+  local f = assert(io.open(name, 'rb'))
+  return {
+    read = function()
+      local s = {}
+      for i = 1, $frameReadMax do
+        local c = f:read(1)
+        if c == nil or c == '\\n' then
+          if i == 1 then return c and '' or nil end
+          break
+        end
+        s[#s + 1] = c
+      end
+      return table.concat(s)
+    end,
+    close = function() f:close() end,
+  }
+end
+$checkHelper
+$checks''');
+      final out = Process.runSync('lua', [
+        'run.lua',
+      ], workingDirectory: dir.path);
+      expect(out.stderr, '');
+      expect('${out.stdout}'.trim().split('\n'), [
+        'glaz_check ready',
+        for (var i = 0; i < n; i++) ...['same f$i', 'diff f$i'],
+        'diff missing',
+      ]);
+    }, skip: hasLua ? false : 'no lua 5.4 on PATH');
   });
 
   test('bytes go up as hex pieces that read back the same', () {

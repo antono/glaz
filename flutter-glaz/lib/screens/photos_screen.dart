@@ -34,30 +34,59 @@ String _photos(int n) => n == 1 ? '1 photo' : '$n photos';
 
 /// Photos from the glasses, newest day first. Each day shows its Time
 /// series folders, with how many photos each holds, then its single shots.
-class PhotosScreen extends StatelessWidget {
+///
+/// The folders are read when a photo comes in or access changes, not on
+/// every rebuild, and thumbnails are made only as they scroll into view.
+class PhotosScreen extends StatefulWidget {
   const PhotosScreen({super.key});
 
   @override
+  State<PhotosScreen> createState() => _PhotosScreenState();
+}
+
+class _PhotosScreenState extends State<PhotosScreen> {
+  PhotoStore get _store => Services.instance.photos.store;
+  late Future<List<PhotoDay>> _days = _store.days();
+
+  @override
+  void initState() {
+    super.initState();
+    _store.addListener(_reread);
+  }
+
+  @override
+  void dispose() {
+    _store.removeListener(_reread);
+    super.dispose();
+  }
+
+  void _reread() {
+    if (mounted) setState(() => _days = _store.days());
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final store = Services.instance.photos.store;
-    return ListenableBuilder(
-      listenable: store,
-      builder: (context, _) => FutureBuilder<List<PhotoDay>>(
-        future: store.days(),
-        builder: (context, snap) {
-          final days = snap.data;
-          if (days == null) return const SizedBox.shrink();
-          final now = DateTime.now();
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            children: [
-              _Access(onGranted: store.refresh),
-              if (days.isEmpty) const _Empty(),
-              for (final day in days) ..._day(context, day, now),
-            ],
-          );
-        },
-      ),
+    return FutureBuilder<List<PhotoDay>>(
+      future: _days,
+      builder: (context, snap) {
+        final days = snap.data;
+        if (days == null) return const SizedBox.shrink();
+        final now = DateTime.now();
+        return CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              sliver: SliverMainAxisGroup(
+                slivers: [
+                  SliverToBoxAdapter(child: _Access(onGranted: _store.refresh)),
+                  if (days.isEmpty) const SliverToBoxAdapter(child: _Empty()),
+                  for (final day in days) ..._day(context, day, now),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -65,28 +94,32 @@ class PhotosScreen extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     return [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
-        child: Row(
-          children: [
-            Text(
-              dayLabel(day.date, now),
-              style: text.titleSmall?.copyWith(color: scheme.primary),
-            ),
-            const Spacer(),
-            Text(
-              _photos(day.count),
-              style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-            ),
-          ],
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
+          child: Row(
+            children: [
+              Text(
+                dayLabel(day.date, now),
+                style: text.titleSmall?.copyWith(color: scheme.primary),
+              ),
+              const Spacer(),
+              Text(
+                _photos(day.count),
+                style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+              ),
+            ],
+          ),
         ),
       ),
-      for (final series in day.series)
-        Padding(
+      SliverList.builder(
+        itemCount: day.series.length,
+        itemBuilder: (context, i) => Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: _SeriesTile(series),
+          child: _SeriesTile(day.series[i]),
         ),
-      if (day.photos.isNotEmpty) _Grid(day.photos),
+      ),
+      if (day.photos.isNotEmpty) _grid(day.photos),
     ];
   }
 }
@@ -226,40 +259,37 @@ class _SeriesScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: _Grid(series.photos),
+      body: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.all(16),
+            sliver: _grid(series.photos),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _Grid extends StatelessWidget {
-  const _Grid(this.photos);
-  final List<File> photos;
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 140,
-        mainAxisSpacing: 4,
-        crossAxisSpacing: 4,
-      ),
-      itemCount: photos.length,
-      itemBuilder: (context, i) => GestureDetector(
-        onTap: () => Navigator.of(context)
+/// [photos] as a grid of thumbnails, each made as it scrolls into view;
+/// a tap opens the viewer there.
+Widget _grid(List<File> photos) => SliverGrid.builder(
+  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+    maxCrossAxisExtent: 140,
+    mainAxisSpacing: 4,
+    crossAxisSpacing: 4,
+  ),
+  itemCount: photos.length,
+  itemBuilder: (context, i) => GestureDetector(
+    onTap: () =>
+        Navigator.of(context)
             .push(MaterialPageRoute(builder: (_) => PhotoViewer(photos, i))),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: _Thumb(photos[i]),
-        ),
-      ),
-    );
-  }
-}
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: _Thumb(photos[i]),
+    ),
+  ),
+);
 
 class _Thumb extends StatelessWidget {
   const _Thumb(this.file, {this.size});

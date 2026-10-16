@@ -4,7 +4,7 @@ publish_to: 'none'
 
 # Shown in the About tab too: keep lib/screens/about_screen.dart in step
 # (test/version_test.dart checks it).
-version: 2.4.0+13
+version: 2.5.0+14
 
 environment:
   sdk: ^3.13.3
@@ -17,7 +17,6 @@ dependencies:
   frame_ble: ^3.0.0
   geolocator: ^14.1.1
   http: ^1.6.0
-  image: ^4.12.0
   notification_listener_service: ^1.0.0
   path_provider: ^2.1.6
   permission_handler: ^12.0.1
@@ -27,6 +26,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  # tests make and read JPEGs with it; the app no longer does
+  image: ^4.12.0
 
 flutter:
   uses-material-design: true

@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
-import 'package:image/image.dart' as img;
 
 import '../frame/link.dart';
 import '../frame/protocol.dart';
@@ -202,7 +201,7 @@ class PhotoService extends ChangeNotifier {
   Future<void> flush() => _saving;
 
   Future<void> _save(Uint8List jpeg, int from, DateTime at) async {
-    final upright = await compute(_upright, jpeg);
+    final upright = withOrientation(jpeg);
     if (from == 0) {
       last = await store.saveSingle(upright, at);
     } else {
@@ -220,10 +219,38 @@ class PhotoService extends ChangeNotifier {
   }
 }
 
-/// The camera is mounted turned by 90 degrees; this is what frame_msg's
-/// RxPhoto does too. A photo that does not decode is kept as it came.
-Uint8List _upright(Uint8List jpeg) {
-  final image = img.decodeJpg(jpeg);
-  if (image == null) return jpeg;
-  return img.encodeJpg(img.copyRotate(image, angle: 270), quality: 90);
+/// The camera is mounted turned by 90 degrees; frame_msg's RxPhoto turns
+/// the picture by 270 (counterclockwise). Here the picture stays as it came
+/// and an Exif Orientation 8 says how to show it -- what a phone's own
+/// camera does: no decoding and re-encoding, nothing lost, and Flutter's
+/// Image and gallery apps turn it when they show it. A file that is not a
+/// JPEG, or already says how it is turned, is kept as it came.
+Uint8List withOrientation(Uint8List jpeg) {
+  if (jpeg.length < 4 || jpeg[0] != 0xFF || jpeg[1] != 0xD8) return jpeg;
+  // after SOI and a JFIF APP0, which must come first
+  var at = 2;
+  if (jpeg[2] == 0xFF && jpeg[3] == 0xE0 && jpeg.length >= 6) {
+    at = 4 + (jpeg[4] << 8 | jpeg[5]);
+    if (at > jpeg.length) return jpeg;
+  }
+  if (at + 1 < jpeg.length && jpeg[at] == 0xFF && jpeg[at + 1] == 0xE1) {
+    return jpeg; // an Exif segment already
+  }
+  return Uint8List.fromList([
+    ...jpeg.sublist(0, at),
+    ..._exifOrientation8,
+    ...jpeg.sublist(at),
+  ]);
 }
+
+/// APP1: 'Exif', a big-endian TIFF header, and an IFD0 with one entry,
+/// Orientation (0x0112) = 8: turn 90 degrees counterclockwise to show.
+const _exifOrientation8 = [
+  0xFF, 0xE1, 0x00, 0x22, // APP1, 34 bytes with this length
+  0x45, 0x78, 0x69, 0x66, 0x00, 0x00, // 'Exif' 0 0
+  0x4D, 0x4D, 0x00, 0x2A, 0x00, 0x00, 0x00, 0x08, // 'MM', 42, IFD0 at 8
+  0x00, 0x01, // one entry
+  0x01, 0x12, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, // Orientation, SHORT, 1
+  0x00, 0x08, 0x00, 0x00, // 8
+  0x00, 0x00, 0x00, 0x00, // no next IFD
+];

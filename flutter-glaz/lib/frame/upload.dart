@@ -143,6 +143,75 @@ print('glaz_compile ready')
 /// What main.lua is uploaded as, before it is compiled into main.lua.
 const mainSource = 'glaz_main.lua';
 
+/// Where main.lua is put out of the way while an upload runs: a reset with
+/// a main.lua would start it. Moved back when it is still the right one.
+const mainKept = 'glaz_prev.lua';
+
+/// How much of a file one read() on the glasses gives at most: their
+/// LUAL_BUFFERSIZE, 16 * sizeof(void*) * sizeof(lua_Number) = 16 * 4 * 8.
+const frameReadMax = 512;
+
+/// The hash [checkHelper] works out on the glasses for a file holding
+/// [bytes]: FNV-1a over what read() gives, piece by piece, each followed
+/// by a newline. read() stops at a newline, which it takes but does not
+/// return, or after [frameReadMax] bytes; the pieces here are cut the same
+/// way. Should the two ever disagree, the file only goes up again.
+int frameFileHash(List<int> bytes) {
+  var h = 0x811c9dc5;
+  void add(int b) => h = ((h ^ b) * 0x01000193) & 0xFFFFFFFF;
+  var i = 0;
+  while (i < bytes.length) {
+    for (var n = 0; n < frameReadMax && i < bytes.length; n++) {
+      final b = bytes[i++];
+      if (b == 0x0A) break;
+      add(b);
+    }
+    add(0x0A);
+  }
+  return h;
+}
+
+/// What a [LuaFile] is on the glasses once uploaded: its bytecode, or its
+/// text as uploadScript writes it (a CRLF becomes a newline).
+List<int> uploadedBytes(LuaFile f) =>
+    f.$3 ?? f.$2.replaceAll('\r\n', '\n').codeUnits;
+
+/// Whether the glasses keep [f] as uploaded. Not what goes up as source
+/// to be compiled there: what that compiles to is only known there.
+bool checkable(LuaFile f) => f.$3 != null || readAsText(f.$2);
+
+/// Says whether a file on the glasses is already what an upload would
+/// write: glaz_check(name, hash) prints 'same NAME' or 'diff NAME', and
+/// files that are the same go in glaz_keep, for Clearing old files to
+/// leave. See [frameFileHash] for the hash. Uploaded for the duration of
+/// an upload, like [compileHelper]. A read() that never ends -- the
+/// firmware's at the end of a file is not quite sure -- gives up and says
+/// diff after 4000 pieces.
+const checkHelper = r'''
+glaz_keep = {}
+function glaz_check(name, want)
+  local ok, h = pcall(frame.file.open, name, 'read')
+  if not ok then print('diff ' .. name) return end
+  local byte, x, n = string.byte, 0x811c9dc5, 0
+  while true do
+    local l = h:read()
+    if not l then break end
+    n = n + 1
+    if n > 4000 then x = nil break end
+    for i = 1, #l do x = ((x ~ byte(l, i)) * 16777619) & 0xFFFFFFFF end
+    x = ((x ~ 10) * 16777619) & 0xFFFFFFFF
+  end
+  h:close()
+  if x == want then
+    glaz_keep[name] = true
+    print('same ' .. name)
+  else
+    print('diff ' .. name)
+  end
+end
+print('glaz_check ready')
+''';
+
 /// Files frame_app.lua reads as text instead of require()-ing them -- the
 /// splash sprite, scanned line by line -- so they must stay source.
 bool readAsText(String text) =>
@@ -269,8 +338,10 @@ Future<void> uploadApp(
   report('Stopping the app');
   await device.sendBreakSignal();
   await repl.ready();
+  // main.lua out of the way, but kept: it may need no uploading
   await repl.run(
-    "$unhook pcall(frame.file.remove, 'main.lua');print('cleared')",
+    "$unhook pcall(frame.file.rename, 'main.lua', '$mainKept');"
+        "print('cleared')",
     'cleared',
   );
 
@@ -283,16 +354,24 @@ Future<void> uploadApp(
   await picture.load();
   await picture.draw('Uploading...', progress: 0);
 
+  // Only what changed goes up: the glasses hash each file they have and
+  // say whether it is what this upload would write. Usually one or two
+  // modules of two dozen are not.
+  report('Checking what changed');
+  await picture.draw('Checking...', progress: 0);
+  final same = await _unchanged(device, repl, files);
+  debugPrint('glaz Upload: ${same.length} of ${files.length} files unchanged');
+
   // Lua files from earlier uploads -- modules switched off or gone, sprites
-  // no longer drawn -- go. All of them: this upload brings back every one
-  // it needs. Done on the glasses, answered with one line: listing the
-  // files to the phone made them print two dozen lines at once, and lines
-  // printed faster than the link sends are lost -- the end of the list
-  // never arrived. Anything not Lua stays: settings.txt, say.
+  // no longer drawn, files that changed -- go; those found the same stay.
+  // Done on the glasses, answered with one line: listing the files to the
+  // phone made them print two dozen lines at once, and lines printed
+  // faster than the link sends are lost -- the end of the list never
+  // arrived. Anything not Lua stays: settings.txt, say.
   report('Clearing old files');
   final cleared = await repl.lines(
     "local n=0 for _,e in ipairs(frame.file.listdir('/')) do "
-        "if e.type~=2 and e.name:match('%.lua\$') "
+        "if e.type~=2 and e.name:match('%.lua\$') and not glaz_keep[e.name] "
         "and pcall(frame.file.remove,e.name) then n=n+1 end end "
         "print('cleared '..n)",
     'cleared',
@@ -306,8 +385,12 @@ Future<void> uploadApp(
   // would start it.
   int size(LuaFile f) => f.$3?.length ?? f.$2.length;
   final main = files.firstWhere((f) => f.$1 == 'main.lua');
-  final order = [...files.where((f) => f != main), main];
-  final total = files.fold<int>(0, (n, f) => n + size(f));
+  final order = [
+    for (final f in files)
+      if (f != main && !same.contains(f.$1)) f,
+    if (!same.contains('main.lua')) main,
+  ];
+  final total = order.fold<int>(0, (n, f) => n + size(f));
   var done = 0;
   for (var i = 0; i < order.length; i++) {
     final (target, text, code) = order[i];
@@ -378,7 +461,12 @@ Future<void> uploadApp(
       'removed',
     );
   }
-  if (main.$3 case final code?) {
+  if (same.contains('main.lua')) {
+    await repl.run(
+      "pcall(frame.file.rename,'$mainKept','main.lua') print('restored')",
+      'restored',
+    );
+  } else if (main.$3 case final code?) {
     report('Uploading main.lua', done / total);
     await picture.draw('Uploading: main.lua', progress: done / total);
     await uploadBytes(device, 'main.lua', code, meanwhile: picture.tick);
@@ -387,6 +475,31 @@ Future<void> uploadApp(
   report('Starting the app', 1);
   await picture.draw('Starting...', progress: 1);
   await repl.start();
+}
+
+/// The names of [files] the glasses already have as this upload would
+/// write them; main.lua is looked for where the upload put it, [mainKept].
+/// Leaves glaz_keep on the glasses naming them, for Clearing old files.
+Future<Set<String>> _unchanged(
+  BrilliantDevice device,
+  Repl repl,
+  List<LuaFile> files,
+) async {
+  await device.uploadScript('glaz_check.lua', checkHelper);
+  await repl.run("require('glaz_check')", 'glaz_check ready');
+  final same = <String>{};
+  for (final f in files.where(checkable)) {
+    final name = f.$1 == 'main.lua' ? mainKept : f.$1;
+    final want = frameFileHash(uploadedBytes(f));
+    final said = await repl.lines(
+      "glaz_check('$name',$want)",
+      '',
+      timeout: const Duration(seconds: 15),
+      match: (l) => l == 'same $name' || l == 'diff $name',
+    );
+    if (said.lastOrNull == 'same $name') same.add(f.$1);
+  }
+  return same;
 }
 
 /// [bytes] in hex, two digits a byte, split into pieces of at most [max]

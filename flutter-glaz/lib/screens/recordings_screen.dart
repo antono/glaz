@@ -29,18 +29,39 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
   final _subs = <StreamSubscription<Object?>>[];
   String? _playing; // path of the recording loaded in the player
   PlayerState _state = PlayerState.stopped;
-  Duration _position = Duration.zero;
+
+  /// Where the player is; several times a second while it plays, so only
+  /// the time and the slider follow it, not the whole list.
+  final _position = ValueNotifier(Duration.zero);
+
+  /// The recordings on disk: read when they change -- a recording started,
+  /// finished or deleted -- not on every rebuild.
+  late Future<List<Recording>> _list;
+  late final Listenable _changes;
+
+  @override
+  void initState() {
+    super.initState();
+    final recorder = Services.instance.recorder;
+    _list = recorder.store.list();
+    _changes = Listenable.merge([recorder, recorder.store])
+      ..addListener(_reread);
+  }
+
+  void _reread() => _set(() {
+    _list = Services.instance.recorder.store.list();
+  });
 
   AudioPlayer get player {
     if (_player != null) return _player!;
     final p = _player = AudioPlayer();
     _subs.addAll([
       p.onPlayerStateChanged.listen((s) => _set(() => _state = s)),
-      p.onPositionChanged.listen((d) => _set(() => _position = d)),
+      p.onPositionChanged.listen((d) => _position.value = d),
       p.onPlayerComplete.listen(
         (_) => _set(() {
           _state = PlayerState.completed;
-          _position = Duration.zero;
+          _position.value = Duration.zero;
         }),
       ),
     ]);
@@ -53,6 +74,8 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
 
   @override
   void dispose() {
+    _changes.removeListener(_reread);
+    _position.dispose();
     for (final s in _subs) {
       s.cancel();
     }
@@ -68,7 +91,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
     } else {
       setState(() {
         _playing = r.file.path;
-        _position = Duration.zero;
+        _position.value = Duration.zero;
       });
       await player.play(DeviceFileSource(r.file.path));
     }
@@ -103,45 +126,39 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
   @override
   Widget build(BuildContext context) {
     final recorder = Services.instance.recorder;
-    return ListenableBuilder(
-      listenable: Listenable.merge([recorder, recorder.store]),
-      builder: (context, _) => FutureBuilder<List<Recording>>(
-        future: recorder.store.list(),
-        builder: (context, snap) {
-          final all = snap.data;
-          if (all == null) return const SizedBox.shrink();
-          final now = DateTime.now();
-          // start and stop from here too; red with the time while recording
-          final children = <Widget>[
-            const Padding(
-              padding: EdgeInsets.only(top: 16),
-              child: RecordRow(),
-            ),
-          ];
-          DateTime? day;
-          for (final r in all) {
-            // the one coming in now is still being written
-            if (recorder.recording &&
-                recorder.started != null &&
-                r.at.difference(recorder.started!).inSeconds.abs() < 2) {
-              continue;
-            }
-            final d = DateTime(r.at.year, r.at.month, r.at.day);
-            if (d != day) {
-              day = d;
-              children.add(_DayHeader(dayLabel(d, now)));
-            }
-            children.add(_tile(context, r));
+    return FutureBuilder<List<Recording>>(
+      future: _list,
+      builder: (context, snap) {
+        final all = snap.data;
+        if (all == null) return const SizedBox.shrink();
+        final now = DateTime.now();
+        // start and stop from here too; red with the time while recording
+        final children = <Widget>[
+          const Padding(padding: EdgeInsets.only(top: 16), child: RecordRow()),
+        ];
+        DateTime? day;
+        for (final r in all) {
+          // the one coming in now is still being written
+          if (recorder.recording &&
+              recorder.started != null &&
+              r.at.difference(recorder.started!).inSeconds.abs() < 2) {
+            continue;
           }
-          if (all.isEmpty && !recorder.recording) {
-            children.add(const _Empty());
+          final d = DateTime(r.at.year, r.at.month, r.at.day);
+          if (d != day) {
+            day = d;
+            children.add(_DayHeader(dayLabel(d, now)));
           }
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            children: children,
-          );
-        },
-      ),
+          children.add(_tile(context, r));
+        }
+        if (all.isEmpty && !recorder.recording) {
+          children.add(const _Empty());
+        }
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          children: children,
+        );
+      },
     );
   }
 
@@ -163,11 +180,13 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
             title: Text(
               '${_two(r.at.hour)}:${_two(r.at.minute)}:${_two(r.at.second)}',
             ),
-            subtitle: Text(
-              current && _state != PlayerState.stopped
-                  ? '${_clock(_position)} / ${_clock(r.length)}'
-                  : _clock(r.length),
-            ),
+            subtitle: current && _state != PlayerState.stopped
+                ? ValueListenableBuilder(
+                    valueListenable: _position,
+                    builder: (context, at, _) =>
+                        Text('${_clock(at)} / ${_clock(r.length)}'),
+                  )
+                : Text(_clock(r.length)),
             trailing: IconButton(
               tooltip: 'Delete',
               icon: Icon(Icons.delete_outline, color: scheme.onSurfaceVariant),
@@ -176,10 +195,14 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
             onTap: () => _toggle(r),
           ),
           if (current && total > 0 && _state != PlayerState.stopped)
-            Slider(
-              value: _position.inMilliseconds.clamp(0, total).toDouble(),
-              max: total.toDouble(),
-              onChanged: (v) => player.seek(Duration(milliseconds: v.round())),
+            ValueListenableBuilder(
+              valueListenable: _position,
+              builder: (context, at, _) => Slider(
+                value: at.inMilliseconds.clamp(0, total).toDouble(),
+                max: total.toDouble(),
+                onChanged: (v) =>
+                    player.seek(Duration(milliseconds: v.round())),
+              ),
             ),
         ],
       ),
