@@ -121,6 +121,27 @@ back the stock settings (`WAKE_TAPS` in `frame_app.lua`). That also clears a
 latched tap, which would hold the wake-up line where no new tap can move it.
 The boot after waking programs the `imu.c` defaults again.
 
+**The firmware does this itself since `okulo/stable`.** Waking depended on
+the Lua line above, and that line needs `frame.imu.tap_config`, which only
+this branch has. Branch `pairing-once` (`v26.288.1712-pairing-once`) was cut
+from upstream `main`, without the tap commits: the app skipped the reset, a
+latched tap stayed on the wake-up line, and **the glasses never woke, by one
+tap or two** (seen 16.10.2026, right after flashing it).
+
+Branch `okulo/stable` merges both, and `shutdown()` in `main.c` now calls
+`imu_prepare_wakeup()` (`imu.c`) on the way to System OFF: the boot tap
+defaults back, the latch cleared, and cleared again 300 ms later, after the
+frame has stopped ringing from the tap that sent it to sleep. So waking no
+longer depends on what the Lua app remembers to do. Build
+`v26.289.1613-stable`.
+
+Rule: **every firmware of ours is built from `okulo/stable`**, and a fix goes
+in as a branch merged into it, never as a branch off upstream `main` alone.
+
+Also worth knowing: `frame.sleep()` with no argument is System OFF, and waking
+from it is a **reset**. Nothing after `frame.sleep()` in Lua runs; the glasses
+boot and `require('main')` again.
+
 ---
 
 ## Building and flashing
