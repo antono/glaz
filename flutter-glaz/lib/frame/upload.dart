@@ -13,7 +13,7 @@ import 'update_screen.dart';
 /// ../../docs/FRAME.md ("Deploy as main.lua") for why each step is there.
 ///
 /// The Lua comes from the app's assets (assets/lua/), which link to the
-/// repository's frame_app.lua, modules/ and sprites/.
+/// repository's frame_app.lua, app/ and modules/.
 
 /// One file for the glasses: its name there, its text, and its bytecode
 /// when the app was built with it (tool/compile_lua.sh) and it still
@@ -52,12 +52,12 @@ Future<Map<String, int>> _compiled(AssetBundle bundle) async {
   }
 }
 
-/// Everything to upload, in order: libraries, the splash sprite, modules,
-/// main.lua last -- a half-finished upload then leaves no main.lua to boot
-/// into. [installed] says which modules to send (by file name, no .lua);
-/// frame_app.lua leaves the others out of its menu. Only the sprite
-/// frame_app.lua draws (SPLASH_SPRITE) goes; the others in sprites/ are for
-/// utils/show_sprite.py.
+/// Everything to upload, in order: libraries, the app's parts, modules, the
+/// app, main.lua last -- a half-finished upload then leaves no main.lua to
+/// boot into. [installed] says which modules to send (by file name, no
+/// .lua); frame_app.lua leaves the others out of its menu. No sprites: the
+/// phone draws the eye itself while it uploads (update_screen.dart), and
+/// one kept on the glasses took memory the app needs.
 ///
 /// Each file carries its bytecode from assets/luac/ when that was compiled
 /// from this very text. The glasses no longer have the memory to compile
@@ -95,23 +95,23 @@ Future<List<LuaFile>> luaFiles(
     ];
   }
 
-  final app = await bundle.loadString('assets/lua/frame_app.lua', cache: false);
-  final splash = splashSprite(app);
   return [
     ...await under('lib'),
-    // parts of frame_app.lua in files of their own (glaz_host.lua...)
-    ...await under('app'),
-    // the sprite is read as text, never compiled
-    for (final (name, text, _) in await under('sprites', (s) => s == splash))
-      (name, text, null),
+    // parts of frame_app.lua in files of their own (glaz_host.lua...); the
+    // loader goes up as main.lua, last
+    ...(await under('app')).where((f) => f.$1 != _boot),
     ...await under('modules', installed),
-    await file('assets/lua/frame_app.lua', 'main.lua'),
+    // the app itself, loaded by main.lua: the firmware's require() cannot
+    // be trusted with a file its size (app/glaz_boot.lua)
+    await file('assets/lua/frame_app.lua', appFile),
+    await file('assets/lua/app/$_boot', 'main.lua'),
   ];
 }
 
-/// The sprite frame_app.lua shows on start: its SPLASH_SPRITE.
-String? splashSprite(String app) =>
-    RegExp(r"local SPLASH_SPRITE\s*=\s*'(\w+)'").firstMatch(app)?.group(1);
+/// What frame_app.lua is called on the glasses; main.lua, which loads it,
+/// is app/glaz_boot.lua.
+const appFile = 'glaz_app.lua';
+const _boot = 'glaz_boot.lua';
 
 /// Compiles a file on the glasses, in place, to bytecode without debug
 /// information. Uploaded for the duration of an upload and run from the
@@ -178,7 +178,7 @@ List<int> uploadedBytes(LuaFile f) =>
 
 /// Whether the glasses keep [f] as uploaded. Not what goes up as source
 /// to be compiled there: what that compiles to is only known there.
-bool checkable(LuaFile f) => f.$3 != null || readAsText(f.$2);
+bool checkable(LuaFile f) => f.$3 != null;
 
 /// Says whether a file on the glasses is already what an upload would
 /// write: glaz_check(name, hash) prints 'same NAME' or 'diff NAME', and
@@ -211,11 +211,6 @@ function glaz_check(name, want)
 end
 print('glaz_check ready')
 ''';
-
-/// Files frame_app.lua reads as text instead of require()-ing them -- the
-/// splash sprite, scanned line by line -- so they must stay source.
-bool readAsText(String text) =>
-    RegExp(r'^_M\.art = \{', multiLine: true).hasMatch(text);
 
 /// What the glasses print, one line at a time. The firmware packs prints
 /// that come faster than the link into one notification, joined by '\n'
@@ -418,8 +413,8 @@ Future<void> uploadApp(
   // for it -- the dump ran out of memory. The small files follow. Today
   // main.lua is too big for even that, so it needs its bytecode.
   final toCompile = [
-    for (final (name, text, code) in files)
-      if (code == null && !readAsText(text)) name,
+    for (final (name, _, code) in files)
+      if (code == null) name,
   ]..sort((a, b) => a == 'main.lua' ? -1 : (b == 'main.lua' ? 1 : 0));
   if (toCompile.isNotEmpty) {
     debugPrint('glaz Upload: compiling on the glasses: ${toCompile.join(' ')}');
@@ -564,15 +559,28 @@ Future<void> restartApp(
   void Function(String step, [double? progress]) report,
 ) async {
   report('Restarting the glasses');
-  final running = replLines(device)
-      .firstWhere((s) => s == 'Frame app is running')
-      .timeout(const Duration(seconds: 30));
   await device.sendBreakSignal();
+  var hasApp = true;
   try {
     final repl = Repl(device);
     await repl.ready(attempts: 3);
-    await repl.run("$unhook print('unhooked')", 'unhooked');
+    // no main.lua -- an upload cut short -- and nothing would ever say it
+    // runs: say so now, rather than wait it out
+    final said = await repl.lines(
+      "$unhook print(pcall(frame.file.open,'main.lua','read') and 'app' "
+          "or 'no app')",
+      '',
+      match: (l) => l == 'app' || l == 'no app',
+    );
+    hasApp = said.lastOrNull != 'no app';
   } catch (_) {} // a stuck app: reset it all the same
+  if (!hasApp) {
+    throw Exception('there is no app on the glasses: Upload it again');
+  }
+  // the app is up in about a second (app/glaz_boot.lua)
+  final running = replLines(device)
+      .firstWhere((s) => s == 'Frame app is running')
+      .timeout(restartWait);
   await device.sendResetSignal();
   try {
     await running;
@@ -582,3 +590,6 @@ Future<void> restartApp(
     report('Restarted; waiting for the glasses'); // link dropped meanwhile
   }
 }
+
+/// How long Restart waits to hear the app say it runs.
+const restartWait = Duration(seconds: 12);

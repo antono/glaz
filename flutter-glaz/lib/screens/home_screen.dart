@@ -81,21 +81,28 @@ class _ConnectionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // connected, the dot and the battery say it all; the firmware
-            // is in the Software card below
+            // connected: the dot, the glasses' name and the battery; the
+            // firmware is in the Software card below
             Row(
               children: [
                 _StatusDot(color: color),
                 const SizedBox(width: 12),
-                if (link.connected)
+                if (link.connected) ...[
+                  Expanded(
+                    child: Text(
+                      link.name ?? 'Connected',
+                      style: text.titleMedium,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                   _Reading(
                     Icons.battery_std,
                     link.battery == null ? '--' : '${link.battery}%',
                     color: (link.battery ?? 100) <= 15
                         ? FrameColors.red
                         : FrameColors.skyBlue,
-                  )
-                else
+                  ),
+                ] else
                   Expanded(child: Text(title, style: text.titleMedium)),
               ],
             ),

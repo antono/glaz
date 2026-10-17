@@ -14,17 +14,16 @@ void main() {
     final names = files.map((f) => f.$1).toList();
     expect(names.take(2), ['camera.min.lua', 'data.min.lua']);
     expect(names, contains('photo.lua'));
-    expect(names, contains('logo.lua')); // the splash sprite
-    expect(names, isNot(contains('flipper.lua'))); // not drawn: not sent
+    expect(names, isNot(contains('logo.lua'))); // no sprites: the phone draws
     expect(names, isNot(contains('weather.lua'))); // switched off
-    expect(names.last, 'main.lua');
-    final main = files.last.$2;
-    expect(main, contains('function app_loop()'));
+    // the app, then main.lua, which loads it
+    expect(names.sublist(names.length - 2), [appFile, 'main.lua']);
+    expect(files.last.$2, contains("require('glaz_app')"));
+    expect(names, isNot(contains('glaz_boot.lua')));
+    final app = files[files.length - 2].$2;
+    expect(app, contains('function app_loop()'));
     // minified: no comment lines left
-    expect(main, isNot(contains('-- Startup banner')));
-    // the sprite is read as text on the glasses: never bytecode
-    expect(files.where((f) => readAsText(f.$2)).map((f) => f.$1), ['logo.lua']);
-    expect(files.firstWhere((f) => f.$1 == 'logo.lua').$3, isNull);
+    expect(app, isNot(contains('-- Startup banner')));
     // Frame-side Lua must be ASCII (AGENTS.md)
     for (final (name, text, _) in files) {
       expect(text.codeUnits.every((c) => c < 128), isTrue, reason: name);
@@ -35,13 +34,13 @@ void main() {
     'bytecode from tool/compile_lua.sh, when it matches the source',
     () async {
       final files = await luaFiles(rootBundle, (_) => true);
-      final main = files.last;
+      final app = files[files.length - 2];
       // not compiled before the tests ran: nothing to check
-      if (main.$3 == null) return;
+      if (app.$3 == null) return;
       // Lua 5.4 bytecode: ESC 'Lua', version 0x54, format 0
-      expect(main.$3!.sublist(0, 6), [0x1b, 0x4c, 0x75, 0x61, 0x54, 0x00]);
-      for (final (name, text, code) in files) {
-        if (!readAsText(text)) expect(code, isNotNull, reason: name);
+      expect(app.$3!.sublist(0, 6), [0x1b, 0x4c, 0x75, 0x61, 0x54, 0x00]);
+      for (final (name, _, code) in files) {
+        expect(code, isNotNull, reason: name);
       }
     },
   );
@@ -86,7 +85,6 @@ void main() {
       expect(uploadedBytes(('x.lua', 'a', code)), code);
       expect(checkable(('x.lua', 'a', code)), isTrue);
       expect(checkable(('x.lua', 'return 1', null)), isFalse);
-      expect(checkable(('logo.lua', '_M.art = {}', null)), isTrue);
     });
 
     // checkHelper itself, on Lua 5.4, with frame.file as the firmware's

@@ -22,13 +22,14 @@ The glasses run Lua; a laptop talks to them over Bluetooth using Python.
 
 - `frame_app.lua` — app that runs on the glasses (uploaded as `main.lua`)
 - `app/` — parts of `frame_app.lua` in files of their own (services, file
-  browsing, photo, splash): `main.lua` in one piece no longer fits the
-  glasses' memory to compile
+  browsing, photo), and `glaz_boot.lua`, uploaded as `main.lua`: it loads
+  the app (`glaz_app.lua` on the glasses) in pieces; see docs/FRAME.md
 - `modules/` — one Lua file per menu item
 - `host_test.py` — reference host: uploads everything, then listens
 - `utils/` — diagnostics, run individually
 - `check.sh` — static checks, no device needed
-- `sprites/` — pixel art for the splash, drawn by `frame_app.lua`
+- `sprites/` — the eye as glasses pixel art, for `utils/show_sprite.py`;
+  not uploaded: the phone draws the eye itself during Upload
 - `flutter-glaz/` — the Flutter companion app (phone side)
 - `devenv.nix` — the development environment
 - `flake.nix` — the companion app as a Linux desktop package (`nix run`)

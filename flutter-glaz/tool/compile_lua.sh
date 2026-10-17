@@ -36,7 +36,7 @@ for src in assets/lua/frame_app.lua assets/lua/lib/*.lua assets/lua/app/*.lua \
   # one folder, as Flutter takes an asset folder's files but not its
   # subfolders': modules/photo.lua -> modules.photo.luac
   dst="$out/$(echo "${rel%.lua}" | tr / .).luac"
-  hash=$("$tool" "$src" "$dst")
+  hash=$("$tool" "$src" "$dst" "$rel")
   echo "$src $hash" >> "$index"
 done
 echo "compiled $(wc -l < "$index") files into $out"

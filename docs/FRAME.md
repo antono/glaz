@@ -200,13 +200,25 @@ Everything below follows from that.
    sit in a bare REPL with `loading...` on screen. Nothing is broken; run the
    upload again.
 
-8. **BlueZ keeps the link after a script is killed.** Once bonded, the link
+8. **The glasses drop the link on start, saying nothing: the watchdog.**
+   The firmware's `require()` reads a file a byte at a time and grows its
+   buffer by one byte a time with `realloc` (`lua_file_require` in
+   `file.c`), unchecked, and no Lua runs meanwhile. The watchdog is fed
+   only from Lua's hook, every call and 2000 instructions, and resets the
+   glasses after 6 s (`watchdog.c`). The app's 19 KB of bytecode took 1 to
+   3 s, longer the more broken up the heap, and sometimes past 6 s. So
+   `main.lua` on the glasses is a loader (`app/glaz_boot.lua`): it replaces
+   `require()` with one that reads 512 bytes at a time through
+   `frame.file` into `load()`, and loads the app, `glaz_app.lua`. Also:
+   about 135 KB of heap is Lua's in all (measured: filled until 'not
+   enough memory'); the app starts at about 89 KB.
+9. **BlueZ keeps the link after a script is killed.** Once bonded, the link
    can stay up (`bluetoothctl info` says `Connected: yes`) after the Python
    process dies. A connected Frame does not advertise, so the next scan finds
    nothing. Run `bluetoothctl disconnect E0:EF:CE:1C:08:15` first.
-9. **`GATT Protocol Error: Unlikely Error` on the reset signal** -- the
+10. **`GATT Protocol Error: Unlikely Error` on the reset signal** -- the
    glasses reboot before acknowledging the write. Just run the upload again.
-10. **The app ran the glasses out of memory on start** ("not enough memory",
+11. **The app ran the glasses out of memory on start** ("not enough memory",
     or a reboot to "Frame is paired" right after Upload). Three causes,
     measured on a laptop with the same code:
     - `require()` holds the whole source while compiling it: the firmware
@@ -222,9 +234,10 @@ Everything below follows from that.
     the glasses compile each one to bytecode without debug information while
     their memory is free (`glaz_compile` in `upload.dart`); and
     `frame_app.lua` loads a module only while it is on screen or in the
-    background (`load_module`). Start went from 168 KB to 105 KB. Errors on
-    the glasses lose their line numbers. `host_test.py` still sends source
-    as it is.
+    background (`load_module`). Start went from 168 KB to 105 KB. Bytecode
+    built with the app (`tool/luac_frame.c`) drops only local variables'
+    names: errors keep the file and line, `frame_app.lua:1234: ...`, about
+    3 KB more for main. `host_test.py` still sends source as it is.
 
     Then main.lua itself grew past what the glasses could compile in one
     go, even first thing after a reset ("not enough memory" at "Compiling
