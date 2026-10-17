@@ -198,6 +198,23 @@ Three things about this that cost time to work out:
   only after the previous is patched. Version 6.1.7 would work but caps at
   Python 3.10.
 
+- **On NixOS `nrf5sdk-tools` will not start** (`stub-ld`, exit code 127):
+  it is a generic Linux binary that runs a second one inside. Run it in an
+  FHS environment, with the version the hex was built with:
+
+  ```bash
+  V=$(TZ= date +v%y.%j.%H%M)-stable   # suffix: anything after it is custom
+  make application BUILD_VERSION=$V
+  NIXPKGS_ALLOW_UNFREE=1 nix run --impure nixpkgs#steam-run -- \
+    ~/.nrfutil/bin/nrfutil-nrf5sdk-tools pkg generate \
+      --hw-version 52 --application-version 0 \
+      --application build/application.hex --sd-req 0x0123 \
+      --key-file source/bootloader/dfu_private_key.pem \
+      build/frame-firmware-$V.zip
+  ```
+
+  `flutter-glaz/tool/fetch_firmware.sh` then copies the zip into the app.
+
 Verified output:
 
 ```
