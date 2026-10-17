@@ -45,6 +45,11 @@ class Settings extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The language recordings are transcribed in, a BCP 47 tag
+  /// (services/speech.dart); 'auto' is the phone's own.
+  String get speechLanguage => _prefs.getString('speech.language') ?? 'auto';
+  set speechLanguage(String tag) => _set('speech.language', tag);
+
   /// A module's setting (glasses_menu.dart, ModuleSetting); null = its
   /// default.
   String? config(String module, String key) =>

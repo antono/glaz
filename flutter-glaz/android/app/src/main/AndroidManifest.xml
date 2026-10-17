@@ -21,6 +21,9 @@
         android:maxSdkVersion="29" />
     <!-- The Internet service fetches pages for apps on the glasses. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Transcripts (Speech.kt): ML Kit's recognizer will not run without
+         it, though the sound comes from the glasses, not the microphone. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <application
         android:label="Glaz"
         android:name="${applicationName}"

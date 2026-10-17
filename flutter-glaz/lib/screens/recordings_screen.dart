@@ -16,7 +16,7 @@ String _clock(Duration d) {
 String _two(int n) => n.toString().padLeft(2, '0');
 
 /// Recordings from the glasses' Recorder, newest first, by day; tap one to
-/// play it.
+/// play it. Each shows its transcript once it has one.
 class RecordingsScreen extends StatefulWidget {
   const RecordingsScreen({super.key});
 
@@ -97,6 +97,16 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
     }
   }
 
+  Future<void> _transcribe(Recording r) async {
+    try {
+      await Services.instance.transcripts.transcribe(r);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Transcribing failed: $e')));
+    }
+  }
+
   Future<void> _delete(Recording r) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -162,8 +172,15 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
     );
   }
 
-  Widget _tile(BuildContext context, Recording r) {
+  Widget _tile(BuildContext context, Recording r) => ListenableBuilder(
+    // a transcription started or finished; the text itself is _Transcript's
+    listenable: Services.instance.transcripts,
+    builder: (context, _) => _card(context, r),
+  );
+
+  Widget _card(BuildContext context, Recording r) {
     final scheme = Theme.of(context).colorScheme;
+    final transcripts = Services.instance.transcripts;
     final current = _playing == r.file.path;
     final playing = current && _state == PlayerState.playing;
     final total = r.length.inMilliseconds;
@@ -187,13 +204,30 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                         Text('${_clock(at)} / ${_clock(r.length)}'),
                   )
                 : Text(_clock(r.length)),
-            trailing: IconButton(
-              tooltip: 'Delete',
-              icon: Icon(Icons.delete_outline, color: scheme.onSurfaceVariant),
-              onPressed: () => _delete(r),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (transcripts.transcriber != null && r.transcript == null)
+                  IconButton(
+                    tooltip: 'Transcribe',
+                    icon: Icon(Icons.subject, color: scheme.onSurfaceVariant),
+                    onPressed: transcripts.live.containsKey(r.file.path)
+                        ? null
+                        : () => _transcribe(r),
+                  ),
+                IconButton(
+                  tooltip: 'Delete',
+                  icon: Icon(
+                    Icons.delete_outline,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  onPressed: () => _delete(r),
+                ),
+              ],
             ),
             onTap: () => _toggle(r),
           ),
+          _Transcript(r),
           if (current && total > 0 && _state != PlayerState.stopped)
             ValueListenableBuilder(
               valueListenable: _position,
@@ -203,6 +237,53 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                 onChanged: (v) =>
                     player.seek(Duration(milliseconds: v.round())),
               ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A recording's transcript, or what is being heard in it now.
+class _Transcript extends StatelessWidget {
+  const _Transcript(this.recording);
+  final Recording recording;
+
+  @override
+  Widget build(BuildContext context) {
+    final transcripts = Services.instance.transcripts;
+    final live = transcripts.live[recording.file.path];
+    final text = live ?? recording.transcript;
+    if (text == null) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    final style = Theme.of(context).textTheme.bodyMedium;
+    final downloading = transcripts.downloading;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (live != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: LinearProgressIndicator(value: downloading),
+            ),
+          if (live != null && downloading != null)
+            Text(
+              'Downloading the language: ${(downloading * 100).round()}%',
+              style: style?.copyWith(color: scheme.onSurfaceVariant),
+            )
+          else if (text.isEmpty)
+            Text(
+              live != null ? 'Listening...' : 'Nothing heard.',
+              style: style?.copyWith(color: scheme.onSurfaceVariant),
+            )
+          else
+            SelectableText(
+              text,
+              style: live != null
+                  ? style?.copyWith(color: scheme.onSurfaceVariant)
+                  : style,
             ),
         ],
       ),

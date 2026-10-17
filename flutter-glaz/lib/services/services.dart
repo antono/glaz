@@ -11,6 +11,8 @@ import 'notifications.dart';
 import 'photo_dir.dart';
 import 'photos.dart';
 import 'recordings.dart';
+import 'speech.dart';
+import 'transcripts.dart';
 
 /// The app's long-lived parts, made once at startup.
 class Services {
@@ -23,6 +25,7 @@ class Services {
     this.location,
     this.files,
     this.recorder,
+    this.transcripts,
     this.keys,
   );
 
@@ -34,6 +37,7 @@ class Services {
   final LocationService location;
   final GlassesFiles files;
   final RecorderService recorder;
+  final TranscriptService transcripts;
   final KeyRemote keys;
 
   static late Services instance;
@@ -49,6 +53,7 @@ class Services {
     final link = FrameLink();
     final dir = photoDir ?? await photoRoot();
     final recDir = recordingDir ?? await recordingRoot();
+    final recordings = RecordingStore(recDir);
     final services = Services._(
       s,
       link,
@@ -57,7 +62,8 @@ class Services {
       PhotoService(link, s, PhotoStore(dir)),
       LocationService(link, s),
       GlassesFiles(link),
-      RecorderService(link, s, RecordingStore(recDir)),
+      RecorderService(link, s, recordings),
+      TranscriptService(recordings, s, Transcriber.platform),
       KeyRemote(link, s),
     );
     SettingsSync(link, s);

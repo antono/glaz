@@ -19,7 +19,8 @@ android {
         applicationId = "dev.glaz.glaz"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // ML Kit's speech recognition (Speech.kt) needs 26
+        minSdk = maxOf(flutter.minSdkVersion, 26)
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
@@ -46,4 +47,9 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // speech to text on the phone, Speech.kt
+    implementation("com.google.mlkit:genai-speech-recognition:1.0.0-alpha1")
 }

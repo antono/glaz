@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../services/recordings.dart';
 import '../services/services.dart';
+import '../services/speech.dart';
 import '../theme.dart';
 
 /// How long the glasses have been recording, 'm:ss', counting every second;
@@ -143,6 +144,7 @@ class RecordRow extends StatelessWidget {
 /// phone keeps recordings at all (the Recordings service).
 Future<void> showRecordSettings(BuildContext context) {
   final settings = Services.instance.settings;
+  Services.instance.transcripts.prepare().ignore();
   return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
@@ -180,6 +182,24 @@ Future<void> showRecordSettings(BuildContext context) {
                   ),
                 ],
               ),
+              if (Services.instance.transcripts.transcriber != null) ...[
+                Row(
+                  children: [
+                    const Expanded(child: Text('Transcripts in')),
+                    DropdownButton<String>(
+                      value: settings.speechLanguage,
+                      onChanged: (v) {
+                        if (v != null) settings.speechLanguage = v;
+                      },
+                      items: [
+                        for (final (tag, name) in speechLanguages)
+                          DropdownMenuItem(value: tag, child: Text(name)),
+                      ],
+                    ),
+                  ],
+                ),
+                const _SpeechModelStatus(),
+              ],
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Save on the phone'),
@@ -289,6 +309,48 @@ class _RecordButtonState extends State<RecordButton> {
         ),
         label: Text('Record  ·  ${recordQuality(services)}'),
       ),
+    );
+  }
+}
+
+/// Whether the transcripts' language is ready on the phone: downloading it
+/// starts by itself once it is picked (TranscriptService.prepare).
+class _SpeechModelStatus extends StatelessWidget {
+  const _SpeechModelStatus();
+
+  @override
+  Widget build(BuildContext context) {
+    final transcripts = Services.instance.transcripts;
+    return ListenableBuilder(
+      listenable: transcripts,
+      builder: (context, _) {
+        final down = transcripts.downloading;
+        final text = transcripts.modelError != null
+            ? 'Could not get the language: ${transcripts.modelError}'
+            : down != null
+            ? 'Downloading the language: ${(down * 100).round()}%'
+            : switch (transcripts.model) {
+                SpeechModel.available => 'Ready, on the phone',
+                SpeechModel.unavailable => 'Not available on this phone',
+                SpeechModel.downloadable ||
+                SpeechModel.downloading => 'Waiting to download',
+                null => 'Checking...',
+              };
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (down != null) LinearProgressIndicator(value: down),
+              Text(
+                text,
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: FrameColors.grey),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

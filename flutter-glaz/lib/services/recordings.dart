@@ -9,11 +9,20 @@ import '../settings.dart';
 
 /// One recording on the phone.
 class Recording {
-  Recording(this.file, this.at, this.length);
+  Recording(this.file, this.at, this.length, [this.transcript]);
   final File file;
   final DateTime at;
   final Duration length;
+
+  /// What was said in it, once transcribed (services/transcripts.dart).
+  final String? transcript;
+
+  /// Where [transcript] is kept: next to the sound, '... 13-07-01.txt'.
+  File get transcriptFile => transcriptOf(file);
 }
+
+File transcriptOf(File wav) =>
+    File(wav.path.replaceFirst(RegExp(r'\.wav$'), '.txt'));
 
 String _two(int n) => n.toString().padLeft(2, '0');
 String _day(DateTime t) => '${t.year}-${_two(t.month)}-${_two(t.day)}';
@@ -111,9 +120,11 @@ class RecordingWriter {
   }
 }
 
-/// The recordings on the phone, one folder a day, like the photos:
+/// The recordings on the phone, one folder a day, like the photos, each
+/// with its transcript once it has one:
 ///
 ///     root/2026-10-15/2026-10-15 13-07-01.wav
+///     root/2026-10-15/2026-10-15 13-07-01.txt
 ///
 /// The folders are the whole state; [list] reads them back.
 class RecordingStore extends ChangeNotifier {
@@ -143,15 +154,23 @@ class RecordingStore extends ChangeNotifier {
         final f = await e.open();
         final header = await f.read(44);
         await f.close();
-        out.add(Recording(e, at, wavLength(header, size)));
+        final txt = transcriptOf(e);
+        final transcript = await txt.exists() ? await txt.readAsString() : null;
+        out.add(Recording(e, at, wavLength(header, size), transcript));
       } catch (_) {}
     }
     out.sort((a, b) => b.at.compareTo(a.at));
     return out;
   }
 
+  Future<void> saveTranscript(Recording r, String text) async {
+    await r.transcriptFile.writeAsString(text);
+    notifyListeners();
+  }
+
   Future<void> delete(Recording r) async {
     await r.file.delete();
+    if (await r.transcriptFile.exists()) await r.transcriptFile.delete();
     final dir = r.file.parent;
     if (await dir.list().isEmpty) await dir.delete();
     notifyListeners();
