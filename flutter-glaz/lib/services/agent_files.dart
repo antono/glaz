@@ -28,7 +28,7 @@ abstract class AgentQueries {
 }
 
 /// Glaz's photos and recordings for the agent, and a photo from the
-/// glasses taken for it, if the user allows (Glaz > More > Assistant).
+/// glasses taken for it, if the user allows (Glaz > Menu > Assistant).
 class GlazFiles implements AgentQueries {
   GlazFiles(
     this.link,

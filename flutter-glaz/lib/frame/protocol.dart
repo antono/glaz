@@ -34,6 +34,7 @@ const locationGet = 0x1C;
 const files = 0x1D;
 const fileData = 0x1E;
 const recStart = 0x1F;
+const recDrop = 0x10;
 
 // The frame_msg camera library's own codes, used by Camera and Time series
 const photoChunk = 0x07;
@@ -45,3 +46,43 @@ const audioEnd = 0x06;
 
 // REC_START's fourth byte: the sound is a question for the assistant
 const forAssistant = 1;
+
+/// The codes by name, for the log (services/glaz_log.dart).
+const codeNames = {
+  menuSet: 'MENU_SET',
+  menuHide: 'MENU_HIDE',
+  menuShow: 'MENU_SHOW',
+  clockSet: 'CLOCK_SET',
+  notify: 'NOTIFY',
+  netResponse: 'NET_RESPONSE',
+  statusGet: 'STATUS_GET',
+  settingsSet: 'SETTINGS_SET',
+  location: 'LOCATION',
+  filesGet: 'FILES_GET',
+  fileGet: 'FILE_GET',
+  input: 'INPUT',
+  photoTake: 'PHOTO_TAKE',
+  moduleCall: 'MODULE_CALL',
+  handsOff: 'HANDS_OFF',
+  appOpen: 'APP_OPEN',
+  menuSelect: 'MENU_SELECT',
+  menuCursor: 'MENU_CURSOR',
+  menuOpen: 'MENU_OPEN',
+  menuClose: 'MENU_CLOSE',
+  appStart: 'APP_START',
+  appStop: 'APP_STOP',
+  menuLevel: 'MENU_LEVEL',
+  appBackground: 'APP_BACKGROUND',
+  netRequest: 'NET_REQUEST',
+  photoFrom: 'PHOTO_FROM',
+  status: 'STATUS',
+  locationGet: 'LOCATION_GET',
+  files: 'FILES',
+  fileData: 'FILE_DATA',
+  recStart: 'REC_START',
+  recDrop: 'REC_DROP',
+  photoChunk: 'photo chunk',
+  photoEnd: 'photo end',
+  audioChunk: 'audio chunk',
+  audioEnd: 'audio end',
+};

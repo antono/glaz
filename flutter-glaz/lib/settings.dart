@@ -60,6 +60,12 @@ class Settings extends ChangeNotifier {
   String get agentModel => _prefs.getString('agent.model') ?? 'hermes-agent';
   set agentModel(String model) => _set('agent.model', model.trim());
 
+  /// The language the assistant hears questions in, a BCP 47 tag as
+  /// [speechLanguage]; the recordings' until the user picks one.
+  String get assistantLanguage =>
+      _prefs.getString('agent.language') ?? speechLanguage;
+  set assistantLanguage(String tag) => _set('agent.language', tag);
+
   /// Whether the agent may see Glaz's photos and recordings, and take a
   /// photo with the glasses (services/agent_files.dart).
   bool get agentFiles => _prefs.getBool('agent.files') ?? true;

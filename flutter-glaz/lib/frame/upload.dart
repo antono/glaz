@@ -1,9 +1,9 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:frame_ble/frame_ble.dart';
 
+import '../services/glaz_log.dart';
 import 'lua_min.dart';
 import 'update_screen.dart';
 
@@ -302,7 +302,11 @@ class Repl {
       await running;
     } catch (_) {
       final said = seen.where((s) => s != 'Frame app is running').toList();
-      debugPrint('glaz: the glasses said on start: ${said.join(' / ')}');
+      glazLog(
+        LogKind.task,
+        'the glasses said on start: ${said.join(' / ')}',
+        problem: true,
+      );
       throw Exception(
         said.isEmpty
             ? 'the app on the glasses did not start, and said nothing'
@@ -355,7 +359,10 @@ Future<void> uploadApp(
   report('Checking what changed');
   await picture.draw('Checking...', progress: 0);
   final same = await _unchanged(device, repl, files);
-  debugPrint('glaz Upload: ${same.length} of ${files.length} files unchanged');
+  glazLog(
+    LogKind.task,
+    'Upload: ${same.length} of ${files.length} files unchanged',
+  );
 
   // Lua files from earlier uploads -- modules switched off or gone, sprites
   // no longer drawn, files that changed -- go; those found the same stay.
@@ -373,7 +380,10 @@ Future<void> uploadApp(
     // its own line, not part of the count
     match: (l) => l.startsWith('cleared '),
   );
-  debugPrint('glaz Upload: ${cleared.isEmpty ? 'cleared' : cleared.last}');
+  glazLog(
+    LogKind.task,
+    'Upload: ${cleared.isEmpty ? 'cleared' : cleared.last}',
+  );
 
   // Bytecode built with the app goes up as it is. main.lua bytecode goes
   // last, after any compiling below: a reset with a main.lua on the glasses
@@ -417,7 +427,10 @@ Future<void> uploadApp(
       if (code == null) name,
   ]..sort((a, b) => a == 'main.lua' ? -1 : (b == 'main.lua' ? 1 : 0));
   if (toCompile.isNotEmpty) {
-    debugPrint('glaz Upload: compiling on the glasses: ${toCompile.join(' ')}');
+    glazLog(
+      LogKind.task,
+      'Upload: compiling on the glasses: ${toCompile.join(' ')}',
+    );
     await device.uploadScript('glaz_compile.lua', compileHelper);
     report('Resetting the glasses');
     await device.sendResetSignal();

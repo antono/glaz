@@ -150,6 +150,35 @@ void main() {
       expect(last(moduleCall), 'assistant\nh:Skolko?');
     });
 
+    test('heard in its own language, the recordings\' until picked', () {
+      final t = FakeTranscriber();
+      final a = AssistantService(link, settings, t, agent: (_) => agent);
+      settings.speechLanguage = 'de-DE';
+      a.onMessage([recStart, 16, 8, forAssistant]);
+      expect(t.language, 'de-DE');
+      settings.assistantLanguage = 'ru-RU';
+      a.onMessage([recStart, 16, 8, forAssistant]);
+      expect(t.language, 'ru-RU');
+      expect(settings.speechLanguage, 'de-DE');
+    });
+
+    test('dropped on the glasses: nothing is asked', () async {
+      assistant.onMessage([recStart, 16, 8, forAssistant]);
+      assistant.onMessage([audioChunk, 1, 2]);
+      assistant.onMessage([recDrop]);
+      await pumpEventQueue();
+      expect(agent.asked, isEmpty);
+      expect(assistant.state, AssistantState.idle);
+    });
+
+    test('dropped while the agent thinks: its answer is thrown away', () async {
+      final asked = assistant.ask('Сколько?');
+      assistant.onMessage([recDrop]);
+      await asked;
+      expect(agent.asked, hasLength(1));
+      expect(link.sent.where((s) => s.$1 == appOpen), isEmpty);
+    });
+
     test('a Recorder recording is not a question', () async {
       assistant.onMessage([recStart, 8, 8]);
       assistant.onMessage([audioEnd, 4]);

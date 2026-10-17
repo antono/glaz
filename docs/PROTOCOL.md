@@ -64,7 +64,9 @@ argument of the phone's `APP_OPEN`, when the phone opened it with one (see
 [Assistant](#assistant)).
 
 The returned text may hold up to **three lines** separated by `\n`; they are
-drawn on rows 3–5, below the breadcrumb. `modules/timeseries.lua` uses all
+drawn on rows 3–5, below the breadcrumb. A module that sets `_M.rows` (at
+most 5) gets that many lines from row 1, every row under the top bar:
+Assistant's answers. `modules/timeseries.lua` uses all
 three: interval scale, status, sent/failed counters.
 
 **Sleeping or background (`_M.background`).** Every module is one of two:
@@ -168,6 +170,12 @@ Two failures are contained deliberately:
   instead of taking the whole menu down;
 - a module whose `run()` throws shows `err: ...` in the status line and leaves
   the menu usable.
+
+Either way the error is also printed, once until it changes, as
+`Label err: file.lua:12: ...` -- with the line, as the bytecode keeps line
+numbers -- and the phone keeps what the app prints in its log (Glaz > More
+> Log), with the link going up and down, Upload's steps, the assistant and
+the messages either way.
 
 Selecting an item still emits `MENU_SELECT` to the host, so modules and a
 host-side reaction are not mutually exclusive — both run.
@@ -352,6 +360,7 @@ Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 | `0x07` | photo chunk | `[0x07, jpeg bytes...]` | part of a photo (Camera module) |
 | `0x08` | photo end | `[0x08]` | last chunk; the photo is complete |
 | `0x1F` | `REC_START` | `[0x1F, bits, rate / 1000, for]` | Recorder starts a recording — see [Recorder](#recorder); `for` = `1`: the Assistant listening, see [Assistant](#assistant) |
+| `0x10` | `REC_DROP` | `[0x10]` | Assistant was left mid-question (a double tap): forget it, ask nothing, drop an answer on its way — see [Assistant](#assistant) |
 | `0x05` | audio chunk | `[0x05, samples...]` | part of a recording |
 | `0x06` | audio end | `[0x06, samples...]` | last part; the recording is complete |
 
@@ -524,17 +533,22 @@ link cut a recording short -- is stopped at its next background tick.
 
 ### Assistant
 
-Assistant (`modules/assistant.lua`) is the glasses' voice assistant. It
-listens as soon as it opens; a tap stops it and asks. The phone also stops
-it once the speaker goes quiet: 1.5 s without a new word, or 8 s with none
-at all, and the glasses themselves after 30 s. The sound streams as
-Recorder's does, but `REC_START` has a fourth byte, `1`, and the phone does
-not save it as a recording.
+Assistant (`modules/assistant.lua`) is the glasses' voice assistant. A tap
+starts listening, the next stops it and asks; nothing guesses where a
+question ends (a pause cut questions short). Leaving it -- a double tap --
+drops the question: the glasses send `REC_DROP` (`0x10`) instead of the
+end of the sound, and the phone asks nothing, or throws away the answer
+if it already asked. The glasses stop on their own
+only after 120 s. The sound streams as Recorder's does, 16-bit unless
+Glaz > Menu > Assistant says 8 (8-bit was misheard), but `REC_START` has a
+fourth byte, `1`, and the phone does not save it as a recording. What the
+link did not take shows as `lost N KB` while listening.
 
 The phone (`flutter-glaz/lib/services/assistant.dart`) transcribes it as it
-comes, with ML Kit as for recordings, and asks the agent: any server with
+comes, with ML Kit as for recordings but in a language of its own (Glaz >
+Menu > Assistant; the recordings' until one is picked), and asks the agent: any server with
 the OpenAI chat completions API -- Hermes Agent's API server on the user's
-tailnet, model `hermes-agent` -- set in Glaz > More > Assistant. The phone
+tailnet, model `hermes-agent` -- set in Glaz > Menu > Assistant. The phone
 keeps the conversation, the last six questions and answers, and starts a new
 one after ten minutes of silence. Hermes runs its own tools on its own host
 and does not hand tool calls back, so what the glasses can do comes as
@@ -563,7 +577,7 @@ rounds a question; after that its last answer is what is shown.
 
 Photos go upright: the phone turns them as their Exif says, which models do
 not read (`withOrientation`). The conversation keeps the text of the
-results, not the photos. Glaz > More > Assistant, Photos and recordings,
+results, not the photos. Glaz > Menu > Assistant, Photos and recordings,
 takes all of this away from the agent, prompt included.
 
 The system prompt describes all the commands, with the installed apps,
@@ -573,15 +587,15 @@ module takes in `start()` or `remote()`:
 
 | Argument | Means |
 | --- | --- |
-| `stop` | the speaker went quiet: stop listening (`MODULE_CALL`) |
+| `stop` | stop listening and ask (`MODULE_CALL`) |
 | `h:text` | what was heard; the agent is thinking (`MODULE_CALL`, only seen with Assistant on screen) |
 | `a:text` | the answer |
 | `e:text` | went wrong: no agent set up, no answer, nothing heard |
 | `listen` | listen again |
 
 Text is ASCII, Cyrillic transliterated, in lines of at most 26 characters,
-24 lines at most. Three fit on screen; a longer answer shows two a page and
-`- 1/4 -` under them, and a tilt turns the page. With an `@open` the answer
+24 lines at most. Five fit on screen (`_M.rows`); a longer answer shows four
+a page and `- 1/4 -` under them, and a tilt turns the page. With an `@open` the answer
 is not shown: the app it opened covers it. A tap on an answer asks again.
 
 `APP_OPEN` brings Assistant back to the screen for the answer even if the

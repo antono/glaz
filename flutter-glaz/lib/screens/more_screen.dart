@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 import 'about_screen.dart';
 import 'app_settings_screen.dart';
-import 'assistant_screen.dart';
+import 'log_screen.dart';
 import 'services_screen.dart';
 
 /// What does not need a tab of its own: the phone's services for the
-/// glasses, the assistant's agent, and About.
+/// glasses, the log, and About.
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
 
@@ -39,19 +39,6 @@ class MoreScreen extends StatelessWidget {
               ),
               const Divider(height: 1),
               ListTile(
-                leading: const Icon(
-                  Icons.assistant,
-                  color: FrameColors.skyBlue,
-                ),
-                title: const Text('Assistant'),
-                subtitle: const Text('The agent the glasses ask'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () =>
-                    Navigator.of(context)
-                        .push(page('ASSISTANT', const AssistantScreen())),
-              ),
-              const Divider(height: 1),
-              ListTile(
                 leading: const Icon(Icons.tune, color: FrameColors.skyBlue),
                 title: const Text('Settings'),
                 subtitle: const Text('How the app works with the glasses'),
@@ -59,6 +46,20 @@ class MoreScreen extends StatelessWidget {
                 onTap: () =>
                     Navigator.of(context)
                         .push(page('SETTINGS', const AppSettingsScreen())),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(
+                  Icons.receipt_long,
+                  color: FrameColors.skyBlue,
+                ),
+                title: const Text('Log'),
+                subtitle: const Text(
+                  'The link, the glasses\' errors, Upload, the assistant',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () =>
+                    Navigator.of(context).push(page('LOG', const LogScreen())),
               ),
               const Divider(height: 1),
               ListTile(

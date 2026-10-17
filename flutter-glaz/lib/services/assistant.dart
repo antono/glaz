@@ -9,6 +9,7 @@ import '../glasses_menu.dart';
 import '../settings.dart';
 import 'agent.dart';
 import 'agent_files.dart';
+import 'glaz_log.dart';
 import 'notifications.dart';
 import 'speech.dart';
 
@@ -121,7 +122,7 @@ String systemPrompt(Settings settings) {
   }
   return '''
 You are the voice assistant of Glaz, smart glasses (Brilliant Labs Frame). The wearer said the message aloud; speech recognition may have misheard a word.
-The glasses show three lines of 26 characters at a time and cannot show Cyrillic (it is transliterated). Answer briefly: one to three short sentences, no markdown, no lists, no emoji, no links. Answer in the language of the question.
+The glasses show five lines of 26 characters at a time and cannot show Cyrillic (it is transliterated). Answer briefly: one to three short sentences, no markdown, no lists, no emoji, no links. Answer in the language of the question.
 You can control the glasses. Put each command on a line of its own, starting with @; the phone runs them and removes them from the text:
 @open <app>                 put an app on the glasses' screen
 @notify <text>              show a notification on the glasses
@@ -163,6 +164,12 @@ class AssistantService extends ChangeNotifier {
     link.addListener(() {
       if (!link.connected) _drop();
     });
+    // the language picked is made ready as soon as it is picked
+    settings.addListener(() {
+      if (_language != null && settings.assistantLanguage != _language) {
+        prepare().ignore();
+      }
+    });
   }
 
   final FrameLink link;
@@ -187,19 +194,53 @@ class AssistantService extends ChangeNotifier {
           model: s.agentModel,
         );
 
-  /// How long a pause ends the question, once something was heard; and
-  /// how long to wait for anything at all.
-  @visibleForTesting
-  static Duration pause = const Duration(milliseconds: 1500);
-  @visibleForTesting
-  static Duration nothing = const Duration(seconds: 8);
-
   /// A conversation goes on while questions come within [forget] of each
   /// other, the last [keep] questions and answers of it.
   static const forget = Duration(minutes: 10);
   static const keep = 6;
 
   AssistantState state = AssistantState.idle;
+
+  /// The language's speech model on the phone, as [prepare] last found it;
+  /// null before. [downloading]: how far its download is, 0..1, while it
+  /// downloads. [modelError]: why it could not be had.
+  SpeechModel? model;
+  double? downloading;
+  String? modelError;
+  String? _language;
+
+  /// Gets the language picked ([Settings.assistantLanguage]) onto the
+  /// phone, and the microphone permission the recognizer wants.
+  Future<void> prepare() async {
+    final t = transcriber;
+    if (t == null) return;
+    final language = _language = settings.assistantLanguage;
+    model = null;
+    modelError = null;
+    notifyListeners();
+    try {
+      await t.permit();
+      var m = await t.model(language);
+      if (m == SpeechModel.downloadable || m == SpeechModel.downloading) {
+        downloading = 0;
+        notifyListeners();
+        await t.download(
+          language,
+          progress: (got, total) {
+            downloading = total > 0 ? got / total : null;
+            notifyListeners();
+          },
+        );
+        m = await t.model(language);
+      }
+      if (language == _language) model = m;
+    } catch (e) {
+      if (language == _language) modelError = '$e';
+    } finally {
+      downloading = null;
+      notifyListeners();
+    }
+  }
 
   /// What is heard of the question being asked, as it is heard.
   String heard = '';
@@ -214,7 +255,6 @@ class AssistantService extends ChangeNotifier {
   Transcription? _transcription;
   StreamSubscription<Heard>? _heardSub;
   Future<void> _feed = Future.value();
-  Timer? _quiet;
   int _rate = 8000;
   int _bits = 8;
 
@@ -237,6 +277,16 @@ class AssistantService extends ChangeNotifier {
         if (_transcription == null) return;
         _add(m.sublist(1));
         _heardAll();
+      case recDrop:
+        // the wearer went back: nothing is asked, an answer on its way is
+        // thrown away
+        if (_transcription == null && state == AssistantState.idle) return;
+        _drop();
+        _turn++;
+        state = AssistantState.idle;
+        heard = '';
+        glazLog(LogKind.assistant, 'dropped on the glasses');
+        notifyListeners();
     }
   }
 
@@ -256,20 +306,14 @@ class AssistantService extends ChangeNotifier {
     _rate = rate;
     heard = '';
     state = AssistantState.listening;
-    final tr = _transcription = t.start(settings.speechLanguage);
+    if (_language != settings.assistantLanguage) prepare().ignore();
+    final tr = _transcription = t.start(settings.assistantLanguage);
+    // only the wearer's second tap ends the question: nothing here guesses
     _heardSub = tr.heard.listen((_) {
       heard = tr.text;
-      if (heard.isNotEmpty) _wait(pause);
       notifyListeners();
     });
-    _wait(nothing);
     notifyListeners();
-  }
-
-  /// Ask the glasses to stop listening after [d] with nothing new heard.
-  void _wait(Duration d) {
-    _quiet?.cancel();
-    _quiet = Timer(d, () => link.callModule('assistant', 'stop'));
   }
 
   void _add(List<int> samples) {
@@ -284,15 +328,16 @@ class AssistantService extends ChangeNotifier {
     final tr = _transcription!;
     final turn = _turn;
     _transcription = null;
-    _quiet?.cancel();
     await _feed;
     String text;
     try {
       await tr.finish();
       text = await tr.done;
     } on TranscriptionError catch (e) {
+      glazLog(LogKind.assistant, 'recognition: ${e.message}', problem: true);
       text = e.text;
-    } catch (_) {
+    } catch (e) {
+      glazLog(LogKind.assistant, 'recognition: $e', problem: true);
       text = tr.text;
     }
     if (turn != _turn) return;
@@ -313,17 +358,18 @@ class AssistantService extends ChangeNotifier {
   }
 
   Future<void> _ask(String question, int turn) async {
+    glazLog(LogKind.assistant, 'asked: $question');
     final t = AssistantTurn(question);
     turns.insert(0, t);
     if (turns.length > 20) turns.removeLast();
     heard = '';
     state = AssistantState.thinking;
     notifyListeners();
-    link.callModule('assistant', 'h:${wrapForGlasses(question, maxLines: 2)}');
+    link.callModule('assistant', 'h:${wrapForGlasses(question, maxLines: 4)}');
 
     final agent = _agentFor(settings);
     if (agent == null) {
-      _fail(t, turn, 'Set up the agent: Glaz > More > Assistant');
+      _fail(t, turn, 'Set up the agent: Glaz > Menu > Assistant');
       return;
     }
     final now = DateTime.now();
@@ -372,6 +418,7 @@ class AssistantService extends ChangeNotifier {
       _history.removeAt(0);
     }
 
+    glazLog(LogKind.assistant, 'answered: $reply');
     final (text, all) = splitReply(reply);
     final commands = [
       for (final c in all)
@@ -387,6 +434,7 @@ class AssistantService extends ChangeNotifier {
   }
 
   void _fail(AssistantTurn t, int turn, String why) {
+    glazLog(LogKind.assistant, why, problem: true);
     if (turn != _turn) return;
     t.error = why;
     state = AssistantState.idle;
@@ -475,7 +523,6 @@ class AssistantService extends ChangeNotifier {
 
   /// Stops listening without asking: the glasses gone, or a new question.
   void _drop() {
-    _quiet?.cancel();
     _heardSub?.cancel();
     _heardSub = null;
     final tr = _transcription;

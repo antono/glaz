@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'screens/home_screen.dart';
 import 'screens/menu_screen.dart';
@@ -7,12 +10,18 @@ import 'screens/photos_screen.dart';
 import 'screens/recordings_screen.dart';
 import 'screens/more_screen.dart';
 import 'screens/remote_screen.dart';
+import 'services/glaz_log.dart';
 import 'services/services.dart';
 import 'theme.dart';
 import 'widgets/recording.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // the log first, so it has the start too
+  try {
+    final dir = await getApplicationSupportDirectory();
+    await GlazLog.instance.attach(File('${dir.path}/glaz.log'));
+  } catch (_) {} // in memory only, then
   await Services.start();
   runApp(const GlazApp());
 }

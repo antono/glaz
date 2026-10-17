@@ -107,6 +107,15 @@ class ChatCompletionsAgent implements Agent {
     if (r.statusCode == 401 || r.statusCode == 403) {
       throw AgentError('the agent refused the key (${r.statusCode})');
     }
+    if (r.isRedirect || (r.statusCode >= 300 && r.statusCode < 400)) {
+      // a POST is not sent on to another address; the user fixes the one
+      // they gave: http:// for an https:// server, say
+      final to = r.headers['location'];
+      throw AgentError(
+        'the server sends elsewhere (${r.statusCode})'
+        '${to == null ? '' : ': $to'}; put that in Server',
+      );
+    }
     if (r.statusCode != 200) throw AgentError('agent error ${r.statusCode}');
     try {
       final json = jsonDecode(utf8.decode(r.bodyBytes)) as Map;

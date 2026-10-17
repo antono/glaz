@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
 
 import '../services/assistant.dart';
+import '../services/speech.dart';
 import '../services/services.dart';
 import '../theme.dart';
 
-/// The agent the glasses' Assistant asks, and what it was asked lately.
-class AssistantScreen extends StatefulWidget {
-  const AssistantScreen({super.key});
+/// The agent the glasses' Assistant asks, the language it hears, and what
+/// it was asked lately: on Assistant's page in the Menu tab, under its
+/// settings for the glasses. Phone only: none of it goes to the glasses.
+class AssistantSettings extends StatefulWidget {
+  const AssistantSettings({super.key});
 
   @override
-  State<AssistantScreen> createState() => _AssistantScreenState();
+  State<AssistantSettings> createState() => _AssistantSettingsState();
 }
 
-class _AssistantScreenState extends State<AssistantScreen> {
+class _AssistantSettingsState extends State<AssistantSettings> {
   final _settings = Services.instance.settings;
   final _assistant = Services.instance.assistant;
   late final _url = TextEditingController(text: _settings.agentUrl);
@@ -20,6 +23,12 @@ class _AssistantScreenState extends State<AssistantScreen> {
   late final _model = TextEditingController(text: _settings.agentModel);
   final _question = TextEditingController();
   bool _showKey = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _assistant.prepare().ignore();
+  }
 
   @override
   void dispose() {
@@ -43,17 +52,21 @@ class _AssistantScreenState extends State<AssistantScreen> {
     final scheme = Theme.of(context).colorScheme;
     return ListenableBuilder(
       listenable: _assistant,
-      builder: (context, _) => ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      builder: (context, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 24, 4, 8),
+            child: Text('Agent', style: text.titleMedium),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
             child: Text(
-              'Open Assistant on the glasses and ask aloud: the phone '
-              'transcribes it and asks your agent. Any server that speaks '
-              'the OpenAI chat API will do; for Hermes Agent, its API '
-              'server (hermes gateway) on your tailnet.',
-              style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+              'The phone transcribes what you ask and asks your agent: any '
+              'server that speaks the OpenAI chat API; for Hermes Agent, '
+              'its API server (hermes gateway) on your tailnet. Kept on the '
+              'phone, never sent to the glasses.',
+              style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ),
           Card(
@@ -104,6 +117,8 @@ class _AssistantScreenState extends State<AssistantScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 16),
+          _Language(_assistant),
           const SizedBox(height: 16),
           Card(
             clipBehavior: Clip.antiAlias,
@@ -174,6 +189,65 @@ class _AssistantScreenState extends State<AssistantScreen> {
   }
 }
 
+/// The language questions are heard in, and whether it is on the phone.
+class _Language extends StatelessWidget {
+  const _Language(this.assistant);
+  final AssistantService assistant;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = assistant.settings;
+    final scheme = Theme.of(context).colorScheme;
+    final down = assistant.downloading;
+    final status = assistant.transcriber == null
+        ? 'No speech recognition on this phone'
+        : assistant.modelError != null
+        ? 'Could not get the language: ${assistant.modelError}'
+        : down != null
+        ? 'Downloading the language: ${(down * 100).round()}%'
+        : switch (assistant.model) {
+            SpeechModel.available => 'Ready, on the phone',
+            SpeechModel.unavailable => 'This phone cannot recognize it',
+            SpeechModel.downloadable ||
+            SpeechModel.downloading => 'Waiting to download',
+            null => 'Checking...',
+          };
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: settings.assistantLanguage,
+              decoration: const InputDecoration(
+                labelText: 'Language you ask in',
+              ),
+              items: [
+                for (final (tag, name) in speechLanguages)
+                  DropdownMenuItem(value: tag, child: Text(name)),
+              ],
+              onChanged: (v) {
+                if (v != null) settings.assistantLanguage = v;
+              },
+            ),
+            const SizedBox(height: 8),
+            if (down != null) LinearProgressIndicator(value: down),
+            SelectableText(
+              status,
+              style: TextStyle(
+                color: assistant.modelError != null
+                    ? scheme.error
+                    : scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _Turn extends StatelessWidget {
   const _Turn(this.turn);
   final AssistantTurn turn;
@@ -201,11 +275,12 @@ class _Turn extends StatelessWidget {
               ),
             const SizedBox(height: 6),
             if (turn.error != null)
-              Text(turn.error!, style: TextStyle(color: scheme.error))
+              // selectable: an error is what one copies to ask about it
+              SelectableText(turn.error!, style: TextStyle(color: scheme.error))
             else if (turn.answer == null)
               const Text('...')
             else ...[
-              if (turn.answer!.isNotEmpty) Text(turn.answer!),
+              if (turn.answer!.isNotEmpty) SelectableText(turn.answer!),
               for (final c in turn.commands)
                 Text(
                   '$c',

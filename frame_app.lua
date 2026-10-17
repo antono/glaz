@@ -623,11 +623,17 @@ local function render()
 
   if running then
     draw_top_bar(run_name)
-    -- a module may return several lines, separated by '\n'
+    -- a module may return several lines, separated by '\n': TEXT_ROWS of
+    -- them at the bottom, or with _M.rows set, up to that many from the
+    -- first row under the top bar (Assistant's answers)
+    local mod = mods[running]
+    local rows = mod and mod.rows
+    local first = rows and 0 or 2
+    rows = rows and math.min(rows, VISIBLE_ROWS) or TEXT_ROWS
     local row = 0
     for line in string.gmatch(run_text, '[^\n]+') do
-      if row >= TEXT_ROWS then break end
-      frame.display.text(line, LEFT_X, TOP_Y + ROW_H * (2 + row),
+      if row >= rows then break end
+      frame.display.text(line, LEFT_X, TOP_Y + ROW_H * (first + row),
                          { color = 'WHITE' })
       row = row + 1
     end
@@ -815,6 +821,18 @@ local function menu_back()
   render()
 end
 
+-- A module's error, as its screen shows it: printed too, for the phone's
+-- log (Glaz > More > Log), once -- not on every tick that repeats it.
+local last_err = nil
+local function err_text(e)
+  local text = 'err: ' .. tostring(e)
+  if text ~= last_err then
+    last_err = text
+    print(run_name .. ' ' .. text)
+  end
+  return text
+end
+
 -- Put module id on screen. The module gets the whole display; the menu gets
 -- out of the way. A module coming back from the background is not started
 -- again -- it never stopped. arg: from the phone's APP_OPEN, for start().
@@ -859,18 +877,20 @@ local function run_module(id, arg)
   elseif mod.start then
     -- what the module may want to know about the rest of the app; today
     -- only which module runs in the background (Sleep warns about it)
-    pcall(mod.start, { background = bg and bg_name or nil, arg = arg })
+    local ok, e = pcall(mod.start, { background = bg and bg_name or nil,
+                                     arg = arg })
+    if not ok then err_text(e) end
   end
 
   -- an 'info' module produces its value once; an 'app' module is ticked
   if mod.mode == 'app' then
     if mod.tick then
       local ok, text = pcall(mod.tick)
-      run_text = ok and tostring(text or '') or ('err: ' .. tostring(text))
+      run_text = ok and tostring(text or '') or err_text(text)
     end
   else
     local ok, text = pcall(mod.run)
-    run_text = ok and tostring(text or '') or ('err: ' .. tostring(text))
+    run_text = ok and tostring(text or '') or err_text(text)
   end
 
   render()
@@ -904,7 +924,7 @@ local function module_input(handler, ...)
   run_at = frame.time.utc()
   local ok, text, done = pcall(handler, ...)
   if not ok then
-    run_text = 'err: ' .. tostring(text)
+    run_text = err_text(text)
   elseif text ~= nil then
     run_text = tostring(text)
   end
@@ -1384,8 +1404,7 @@ function app_loop()
             next_app = now + APP_TICK_PERIOD
             if mod.tick then
               local ok, text, done = pcall(mod.tick)
-              local fresh = ok and tostring(text or '')
-                              or ('err: ' .. tostring(text))
+              local fresh = ok and tostring(text or '') or err_text(text)
               if ok and done then
                 stop_app(true, true)   -- finished on its own
                 open_menu()

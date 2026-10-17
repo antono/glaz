@@ -122,7 +122,17 @@ const glassesMenu = <MenuSection>[
       'Assistant',
       ModuleKind.app,
       Icons.assistant,
-      'Opens listening: ask aloud, the agent answers. Tilt to page.',
+      'Tap, ask aloud, tap again: the agent answers. Tilt to page.',
+      settings: [
+        ModuleSetting.choice(
+          'bits',
+          'Quality',
+          '16',
+          ['8', '16'],
+          optionLabels: ['8 bit', '16 bit, heard better'],
+          help: '16 bit sends twice as much; on a busy link some is lost.',
+        ),
+      ],
     ),
     GlassesModule(
       'photo',

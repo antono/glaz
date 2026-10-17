@@ -5,8 +5,33 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:frame_ble/frame_ble.dart';
 
+import '../services/glaz_log.dart';
 import 'pairing.dart';
 import 'protocol.dart';
+
+/// Messages left out of the log: streams of pieces (sound, photos, web
+/// requests, file listings) and the minute's battery check.
+const _unlogged = {
+  audioChunk,
+  photoChunk,
+  netRequest,
+  files,
+  fileData,
+  statusGet,
+  status,
+};
+
+/// A message for the log: its code's name and a look at its payload --
+/// text if it is text, else the first bytes.
+String describeMessage(int code, List<int> payload) {
+  final name = codeNames[code] ?? '0x${code.toRadixString(16)}';
+  if (payload.isEmpty) return name;
+  final text = payload.every((b) => b == 10 || (b >= 32 && b < 127));
+  final shown = text
+      ? String.fromCharCodes(payload).replaceAll('\n', ' / ')
+      : payload.take(12).join(' ') + (payload.length > 12 ? ' ...' : '');
+  return '$name ${shown.length > 120 ? '${shown.substring(0, 120)}...' : shown}';
+}
 
 enum LinkState { disconnected, scanning, connecting, connected }
 
@@ -52,6 +77,7 @@ class FrameLink extends ChangeNotifier {
 
   BrilliantDevice? _device;
   StreamSubscription<List<int>>? _data;
+  StreamSubscription<String>? _prints;
   StreamSubscription<BrilliantDevice>? _conn;
   final _events = StreamController<List<int>>.broadcast();
 
@@ -67,6 +93,14 @@ class FrameLink extends ChangeNotifier {
   bool get busy => task != null;
 
   void _set(LinkState s) {
+    if (s != state) {
+      glazLog(LogKind.link, switch (s) {
+        LinkState.scanning => 'looking for the glasses',
+        LinkState.connecting => 'connecting',
+        LinkState.connected => 'connected to ${name ?? 'the glasses'}',
+        LinkState.disconnected => 'disconnected',
+      });
+    }
     state = s;
     notifyListeners();
   }
@@ -78,6 +112,7 @@ class FrameLink extends ChangeNotifier {
       await _connect(const Duration(seconds: 15));
     } catch (e) {
       error = '$e';
+      glazLog(LogKind.link, 'could not connect: $e', problem: true);
       _set(LinkState.disconnected);
     }
   }
@@ -166,9 +201,11 @@ class FrameLink extends ChangeNotifier {
       code: code,
       quickDrops: _quickDrops,
     );
-    debugPrint(
-      'glaz link: down, reason $code, bonded $bonded, '
-      'quick drops $_quickDrops -> ${trouble.name}',
+    glazLog(
+      LogKind.link,
+      'down, reason $code, bonded $bonded, quick drops $_quickDrops'
+      '${trouble == PairingTrouble.none ? '' : ': pairing trouble, ${trouble.name}'}',
+      problem: trouble != PairingTrouble.none,
     );
     if (trouble == PairingTrouble.none || trouble == pairing) return;
     pairing = trouble;
@@ -230,7 +267,7 @@ class FrameLink extends ChangeNotifier {
       // read; Android shows its pairing dialog
       _pairAfterConnect = false;
       device.device.createBond().catchError((Object e) {
-        debugPrint('glaz link: pairing: $e');
+        glazLog(LogKind.link, 'pairing: $e', problem: true);
       });
     }
     _data?.cancel();
@@ -240,7 +277,28 @@ class FrameLink extends ChangeNotifier {
         : device.device.advName;
     _data = device.dataResponse.listen((m) {
       if (m.isNotEmpty && m[0] == status) onStatus(m);
+      if (m.isNotEmpty && !_unlogged.contains(m[0])) {
+        glazLog(LogKind.message, '<- ${describeMessage(m[0], m.sublist(1))}');
+      }
       _events.add(m);
+    });
+    // what the app on the glasses prints: its errors, 'Frame app is
+    // running'; a task's own REPL chatter is the task's business
+    _prints?.cancel();
+    _prints = device.stringResponse.listen((s) {
+      if (busy) return;
+      for (final line in s.split('\n')) {
+        final l = line.trim();
+        if (l.isEmpty || l == '\x02') continue;
+        glazLog(
+          LogKind.glasses,
+          l,
+          problem: RegExp(
+            r'err|memory|attempt to',
+            caseSensitive: false,
+          ).hasMatch(l),
+        );
+      }
     });
     _set(LinkState.connected);
     _statusTimer?.cancel();
@@ -296,17 +354,17 @@ class FrameLink extends ChangeNotifier {
     notifyListeners();
     try {
       await job(device, (step, [progress]) {
-        // to the system log too (adb logcat -s flutter), to see what an
-        // upload did without looking at the phone
-        if (step != taskStep) debugPrint('glaz $name: $step');
+        // to the log, and the system log (adb logcat -s flutter), to see
+        // what an upload did without looking at the phone
+        if (step != taskStep) glazLog(LogKind.task, '$name: $step');
         taskStep = step;
         taskProgress = progress;
         notifyListeners();
       });
-      debugPrint('glaz $name: done');
+      glazLog(LogKind.task, '$name: done');
     } catch (e) {
       taskError = '$e';
-      debugPrint('glaz $name failed: $e');
+      glazLog(LogKind.task, '$name failed: $e', problem: true);
     } finally {
       task = null;
       notifyListeners();
@@ -319,6 +377,8 @@ class FrameLink extends ChangeNotifier {
     _statusTimer = null;
     _data?.cancel();
     _data = null;
+    _prints?.cancel();
+    _prints = null;
     _device = null;
     _set(next);
   }
@@ -360,6 +420,9 @@ class FrameLink extends ChangeNotifier {
       }
       await device.sendMessage(code, Uint8List.fromList(payload));
       _lastSent[code] = DateTime.now();
+      if (!_unlogged.contains(code)) {
+        glazLog(LogKind.message, '-> ${describeMessage(code, payload)}');
+      }
     });
     _tail = job.catchError((_) {});
     return job;
