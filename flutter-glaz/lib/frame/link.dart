@@ -397,6 +397,12 @@ class FrameLink extends ChangeNotifier {
   Future<void> callModule(String module, String arg) =>
       send(moduleCall, '$module\n$arg'.codeUnits);
 
+  /// Puts [module] on the glasses' screen (APP_OPEN), as if picked in the
+  /// menu. A non-empty [arg] goes to its start(), or to its remote() when
+  /// it is not started again.
+  Future<void> openModule(String module, [String arg = '']) =>
+      send(appOpen, utf8.encode(arg.isEmpty ? module : '$module\n$arg'));
+
   /// The remote: start or stop Recorder on the glasses. The sound comes back
   /// as when recording is started on the glasses.
   Future<void> remoteRecord(bool on) =>

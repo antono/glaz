@@ -36,6 +36,12 @@ const services = [
     true,
   ),
   GlazService(
+    'assistant',
+    'Assistant',
+    'Answers what you ask the glasses\' Assistant, with your agent',
+    true,
+  ),
+  GlazService(
     'location',
     'Location',
     "Tells the apps you allow where the phone is",

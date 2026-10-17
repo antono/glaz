@@ -16,6 +16,7 @@ const input = 0x2B;
 const photoTake = 0x2C;
 const moduleCall = 0x2D;
 const handsOff = 0x2E;
+const appOpen = 0x2F;
 
 // Frame -> Host
 const menuSelect = 0x11;
@@ -41,3 +42,6 @@ const photoEnd = 0x08;
 // The frame_msg audio library's own codes, used by Recorder
 const audioChunk = 0x05;
 const audioEnd = 0x06;
+
+// REC_START's fourth byte: the sound is a question for the assistant
+const forAssistant = 1;

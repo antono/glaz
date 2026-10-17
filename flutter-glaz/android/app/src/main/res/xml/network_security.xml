@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The assistant's agent may be a plain http:// server on the user's
+     tailnet (Hermes Agent's API server on :8642): WireGuard already
+     encrypts that traffic. Everything else stays HTTPS only. -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">ts.net</domain>
+    </domain-config>
+</network-security-config>

@@ -61,8 +61,8 @@ local data = require('data.min')
 -- submenus. Each module must return a table with a .label and either .run()
 -- (mode 'info') or .tick() (mode 'app'), and may set .background.
 local MENU = {
-  { label = 'Apps',     'photo', 'timeseries', 'recorder', 'stopwatch',
-                        'files', 'weather' },
+  { label = 'Apps',     'assistant', 'photo', 'timeseries', 'recorder',
+                        'stopwatch', 'files', 'weather' },
   { label = 'Sensors',  'battery', 'tilt', 'taptune' },
   { label = 'Settings', 'brightness', 'sleep' },
   { label = 'Info',     'notifications', 'bluetooth', 'uptime', 'firmware',
@@ -89,6 +89,8 @@ local MODULE_CALL = 0x2D  -- name .. '\n' .. arg: the phone calls a module's
 local INPUT     = 0x2B    -- [kind, value]: the phone's remote, as gestures --
                           -- kind 1 = that many taps, kind 2 = a tilt (value
                           -- 1 right / next, 255 left / previous)
+local APP_OPEN  = 0x2F    -- name .. '\n' .. arg: the phone puts a module on
+                          -- screen; arg goes to its start() or remote()
 local HANDS_OFF = 0x2E    -- [1]: the phone's remote is in front, so the
                           -- wearer's gestures are off but a triple tap and a
                           -- tap waking a blank screen; [0]: all back
@@ -280,6 +282,7 @@ data.parsers[FILE_GET]  = function(block) return block end
 data.parsers[INPUT]     = function(block) return block end
 data.parsers[PHOTO_TAKE] = function(block) return block end
 data.parsers[MODULE_CALL] = function(block) return block end
+data.parsers[APP_OPEN]  = function(block) return block end
 data.parsers[HANDS_OFF] = function(block) return block end
 
 -- Any other code is dropped quietly. data.lua prints 'No parser for flag'
@@ -819,8 +822,8 @@ end
 
 -- Put module id on screen. The module gets the whole display; the menu gets
 -- out of the way. A module coming back from the background is not started
--- again -- it never stopped.
-local function run_module(id)
+-- again -- it never stopped. arg: from the phone's APP_OPEN, for start().
+local function run_module(id, arg)
   if running then stop_app(true) end   -- the module draws next
 
   -- the breadcrumb, and where a double tap leads, follow the module's path
@@ -861,7 +864,7 @@ local function run_module(id)
   elseif mod.start then
     -- what the module may want to know about the rest of the app; today
     -- only which module runs in the background (Sleep warns about it)
-    pcall(mod.start, { background = bg and bg_name or nil })
+    pcall(mod.start, { background = bg and bg_name or nil, arg = arg })
   end
 
   -- an 'info' module produces its value once; an 'app' module is ticked
@@ -948,6 +951,24 @@ local function remote_call(name, arg)
   if mod.remote then pcall(mod.remote, arg) end
   if bg == id and not wants_background(mod) then quit(id) end
   if visible or running then render() end
+end
+
+-- The phone puts a module on screen (APP_OPEN), as if picked in the menu:
+-- the assistant's "show the weather". A non-empty arg goes to start(), or
+-- to remote() when the module is not started again: on screen already, or
+-- back from the background.
+local function open_call(name, arg)
+  local id
+  for i, n in ipairs(names) do
+    if n == name then id = i end
+  end
+  if not id then return end
+  arg = arg ~= '' and arg or nil
+  local again = running == id or bg == id
+  if running ~= id then run_module(id, arg) end
+  if again and arg and mods[id] and mods[id].remote then
+    module_input(mods[id].remote, arg)
+  end
 end
 
 -- Counting happens HERE, not in the loop, because this is the only place with
@@ -1205,6 +1226,14 @@ function app_loop()
           data.app_data[MODULE_CALL] = nil
           local name, arg = string.match(block, '^([%w_]+)\n?(.*)$')
           if name then remote_call(name, arg) end
+          last_act = frame.time.utc()
+        end
+
+        if data.app_data[APP_OPEN] ~= nil then
+          local block = data.app_data[APP_OPEN]
+          data.app_data[APP_OPEN] = nil
+          local name, arg = string.match(block, '^([%w_]+)\n?(.*)$')
+          if name then open_call(name, arg) end
           last_act = frame.time.utc()
         end
 

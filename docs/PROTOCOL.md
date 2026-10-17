@@ -58,7 +58,10 @@ There are two kinds, chosen with `_M.mode`:
 Going to deep sleep also closes it. Implement `tick()`,
 which is called periodically and returns the current string; the display is
 only redrawn when the text actually changes. Optional `start()` and `stop()`
-bracket the lifetime.
+bracket the lifetime. `start(info)` gets a table: `info.background` is the
+label of the module running in the background, if any, and `info.arg` the
+argument of the phone's `APP_OPEN`, when the phone opened it with one (see
+[Assistant](#assistant)).
 
 The returned text may hold up to **three lines** separated by `\n`; they are
 drawn on rows 3–5, below the breadcrumb. `modules/timeseries.lua` uses all
@@ -308,6 +311,7 @@ which splits long messages into MTU-sized packets and reassembles them.
 | `0x2B` | `INPUT` | `[kind, value]`: the phone's remote — `[1, n]` n taps, `[2, 1]` tilt right, `[2, 255]` tilt left; see [Remote](#remote) |
 | `0x2C` | `PHOTO_TAKE` | `>I2B`: size in px (square, even, 100..720), JPEG quality 1 very low .. 5 very high — the remote's photo; see [Remote](#remote) |
 | `0x2D` | `MODULE_CALL` | text, `module` `\n` `arg`: calls that module's `remote(arg)` — the remote's record button is `recorder\non` / `recorder\noff`; see [Recorder](#recorder) |
+| `0x2F` | `APP_OPEN` | text, `module`, optionally `\n` `arg`: puts that module on screen as if picked in the menu; `arg` goes to its `start()`, or to `remote(arg)` if it is not started again -- on screen already or back from the background; see [Assistant](#assistant) |
 | `0x2E` | `HANDS_OFF` | `[1]`: the remote is in front, the wearer's own gestures are off but a triple tap and a tap waking a blank screen; `[0]`: all back; see [Remote](#remote) |
 
 `MENU_SET` is an **override**: it replaces the module-defined menu with
@@ -347,7 +351,7 @@ Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 | `0x1E` | `FILE_DATA` | `[0x1E, id, more, bytes...]` | a file's contents, in packets — see [Files](#files) |
 | `0x07` | photo chunk | `[0x07, jpeg bytes...]` | part of a photo (Camera module) |
 | `0x08` | photo end | `[0x08]` | last chunk; the photo is complete |
-| `0x1F` | `REC_START` | `[0x1F, bits, rate / 1000]` | Recorder starts a recording — see [Recorder](#recorder) |
+| `0x1F` | `REC_START` | `[0x1F, bits, rate / 1000, for]` | Recorder starts a recording — see [Recorder](#recorder); `for` = `1`: the Assistant listening, see [Assistant](#assistant) |
 | `0x05` | audio chunk | `[0x05, samples...]` | part of a recording |
 | `0x06` | audio end | `[0x06, samples...]` | last part; the recording is complete |
 
@@ -517,6 +521,72 @@ over every screen with the time, a tap on the strip stops it; the glasses
 show a red dot in the top bar while Recorder's `_M.rec` is true. A
 background module that no longer wants the background -- Recorder after the
 link cut a recording short -- is stopped at its next background tick.
+
+### Assistant
+
+Assistant (`modules/assistant.lua`) is the glasses' voice assistant. It
+listens as soon as it opens; a tap stops it and asks. The phone also stops
+it once the speaker goes quiet: 1.5 s without a new word, or 8 s with none
+at all, and the glasses themselves after 30 s. The sound streams as
+Recorder's does, but `REC_START` has a fourth byte, `1`, and the phone does
+not save it as a recording.
+
+The phone (`flutter-glaz/lib/services/assistant.dart`) transcribes it as it
+comes, with ML Kit as for recordings, and asks the agent: any server with
+the OpenAI chat completions API -- Hermes Agent's API server on the user's
+tailnet, model `hermes-agent` -- set in Glaz > More > Assistant. The phone
+keeps the conversation, the last six questions and answers, and starts a new
+one after ten minutes of silence. Hermes runs its own tools on its own host
+and does not hand tool calls back, so what the glasses can do comes as
+commands in the answer, each on a line of its own:
+
+| Command | Does |
+| --- | --- |
+| `@open weather` | `APP_OPEN` (`0x2F`): the app on screen |
+| `@notify text` | `NOTIFY` from "Assistant" |
+| `@set weather.city=Minsk` | a module's setting, as in Glaz > Menu: only the settings it has, a choice only to one of its options |
+| `@press ok` | `INPUT`: `ok`, `back`, `menu`, `left`, `right` |
+
+Other commands bring the agent something instead -- tool calls, made in
+text. The agent writes only them; the phone runs them and sends what they
+bring as the next user message, photos as `image_url` parts with `data:`
+URLs, which Hermes takes; then the agent answers the wearer. At most three
+rounds a question; after that its last answer is what is shown.
+
+| Query | Brings |
+| --- | --- |
+| `@photo` | a photo from the glasses now, as the Remote's photo button takes it (`PHOTO_TAKE`; Camera's size and quality, saved in Photos) |
+| `@photos [day]` | the photos in Glaz, newest first, 20 at most: name and time; `day` is `today`, `yesterday` or `2026-10-17` |
+| `@getphoto name` | one of them |
+| `@recordings [day]` | the recordings, with their length and the start of the transcript |
+| `@transcript name` | a recording's whole transcript, transcribed first if it was not |
+
+Photos go upright: the phone turns them as their Exif says, which models do
+not read (`withOrientation`). The conversation keeps the text of the
+results, not the photos. Glaz > More > Assistant, Photos and recordings,
+takes all of this away from the agent, prompt included.
+
+The system prompt describes all the commands, with the installed apps,
+their settings and what they are set to. The phone runs the commands, takes them out, and
+sends the rest to the glasses as `APP_OPEN` `assistant` with an argument the
+module takes in `start()` or `remote()`:
+
+| Argument | Means |
+| --- | --- |
+| `stop` | the speaker went quiet: stop listening (`MODULE_CALL`) |
+| `h:text` | what was heard; the agent is thinking (`MODULE_CALL`, only seen with Assistant on screen) |
+| `a:text` | the answer |
+| `e:text` | went wrong: no agent set up, no answer, nothing heard |
+| `listen` | listen again |
+
+Text is ASCII, Cyrillic transliterated, in lines of at most 26 characters,
+24 lines at most. Three fit on screen; a longer answer shows two a page and
+`- 1/4 -` under them, and a tilt turns the page. With an `@open` the answer
+is not shown: the app it opened covers it. A tap on an answer asks again.
+
+`APP_OPEN` brings Assistant back to the screen for the answer even if the
+wearer went elsewhere meanwhile. An answer to a question that was asked
+again in between is dropped.
 
 ### Status
 

@@ -50,6 +50,21 @@ class Settings extends ChangeNotifier {
   String get speechLanguage => _prefs.getString('speech.language') ?? 'auto';
   set speechLanguage(String tag) => _set('speech.language', tag);
 
+  /// The assistant's agent (services/assistant.dart): an OpenAI-compatible
+  /// server -- Hermes Agent's API server -- its key and its model. Phone
+  /// only: none of it goes to the glasses.
+  String get agentUrl => _prefs.getString('agent.url') ?? '';
+  set agentUrl(String url) => _set('agent.url', url.trim());
+  String get agentKey => _prefs.getString('agent.key') ?? '';
+  set agentKey(String key) => _set('agent.key', key.trim());
+  String get agentModel => _prefs.getString('agent.model') ?? 'hermes-agent';
+  set agentModel(String model) => _set('agent.model', model.trim());
+
+  /// Whether the agent may see Glaz's photos and recordings, and take a
+  /// photo with the glasses (services/agent_files.dart).
+  bool get agentFiles => _prefs.getBool('agent.files') ?? true;
+  set agentFiles(bool on) => _set('agent.files', on);
+
   /// A module's setting (glasses_menu.dart, ModuleSetting); null = its
   /// default.
   String? config(String module, String key) =>

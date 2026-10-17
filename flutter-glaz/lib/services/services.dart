@@ -2,6 +2,8 @@ import 'dart:io';
 
 import '../frame/link.dart';
 import '../settings.dart';
+import 'agent_files.dart';
+import 'assistant.dart';
 import 'glasses_files.dart';
 import 'keys.dart';
 import 'location.dart';
@@ -27,6 +29,7 @@ class Services {
     this.recorder,
     this.transcripts,
     this.keys,
+    this.assistant,
   );
 
   final Settings settings;
@@ -39,6 +42,7 @@ class Services {
   final RecorderService recorder;
   final TranscriptService transcripts;
   final KeyRemote keys;
+  final AssistantService assistant;
 
   static late Services instance;
 
@@ -54,17 +58,25 @@ class Services {
     final dir = photoDir ?? await photoRoot();
     final recDir = recordingDir ?? await recordingRoot();
     final recordings = RecordingStore(recDir);
+    final photos = PhotoService(link, s, PhotoStore(dir));
+    final transcripts = TranscriptService(recordings, s, Transcriber.platform);
     final services = Services._(
       s,
       link,
       NetworkService(link, s),
       NotificationService(link, s),
-      PhotoService(link, s, PhotoStore(dir)),
+      photos,
       LocationService(link, s),
       GlassesFiles(link),
       RecorderService(link, s, recordings),
-      TranscriptService(recordings, s, Transcriber.platform),
+      transcripts,
       KeyRemote(link, s),
+      AssistantService(
+        link,
+        s,
+        Transcriber.platform,
+        queries: GlazFiles(link, s, photos, recordings, transcripts),
+      ),
     );
     SettingsSync(link, s);
     services.keys.attach();

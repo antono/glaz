@@ -118,6 +118,13 @@ class MenuSection {
 const glassesMenu = <MenuSection>[
   MenuSection('Apps', Icons.apps, [
     GlassesModule(
+      'assistant',
+      'Assistant',
+      ModuleKind.app,
+      Icons.assistant,
+      'Opens listening: ask aloud, the agent answers. Tilt to page.',
+    ),
+    GlassesModule(
       'photo',
       'Camera',
       ModuleKind.app,

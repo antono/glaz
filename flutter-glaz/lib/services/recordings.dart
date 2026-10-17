@@ -214,6 +214,8 @@ class RecorderService extends ChangeNotifier {
       case recStart:
         _finish();
         if (!settings.serviceOn('recordings')) return;
+        // the assistant listening (services/assistant.dart), not Recorder
+        if (m.length > 3 && m[3] == forAssistant) return;
         final bits = m.length > 1 && m[1] == 16 ? 16 : 8;
         final rate = m.length > 2 && m[2] > 0 ? m[2] * 1000 : 8000;
         final at = started = _now();
