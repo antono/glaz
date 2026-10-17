@@ -49,7 +49,8 @@
 --   * roll swings about +-30 degrees in use, far more than a nod
 --   * heading is always 0.0, the compass is dead => unusable for navigation
 --   * frame.display.clear() does NOT exist; the buffer resets itself after
---     show(), so each frame redraws everything
+--     show(), so each frame redraws everything -- and nothing may be drawn
+--     until that reset is over, see show()
 --   * x=1 is outside the visible field of view -- the first character gets
 --     clipped. Everything is drawn at LEFT_X instead.
 
@@ -465,11 +466,28 @@ local function send(code, value)
   pcall(frame.bluetooth.send, string.char(code, value))
 end
 
+-- show() only asks the FPGA to flip, and returns at once. The flip waits for
+-- the panel to finish its frame, and then the new back buffer is zeroed --
+-- about 30 ms in all (display_buffers.sv). A draw in that window lands in
+-- the buffer being shown or is wiped by the zeroing, so pixels go missing.
+-- So every flip waits here until the FPGA's buffer status (register 0x18,
+-- bit 1: switch pending or clearing) says the back buffer is free again.
+local SHOW_WAIT = 0.1   -- seconds; a stuck status must not hang the app
+
+local function show()
+  frame.display.show()
+  local deadline = frame.time.utc() + SHOW_WAIT
+  while frame.time.utc() < deadline do
+    local ok, status = pcall(frame.fpga_read, 0x18, 1)
+    if not ok or string.byte(status) & 2 == 0 then return end
+  end
+end
+
 -- There is no frame.display.clear() in this firmware, so "blank" means
 -- drawing a single space and flipping the buffer.
 local function blank()
   frame.display.text(' ', LEFT_X, TOP_Y)
-  frame.display.show()
+  show()
 end
 
 -- The micro-OLED keeps drawing power even with a blank frame on it, and the
@@ -597,7 +615,7 @@ local function render()
     for i, line in ipairs(wrap(notice[3], NOTICE_CHARS, VISIBLE_ROWS - 1)) do
       frame.display.text(line, LEFT_X, TOP_Y + ROW_H * i, { color = 'WHITE' })
     end
-    frame.display.show()
+    show()
     return
   end
 
@@ -614,7 +632,7 @@ local function render()
                          { color = 'WHITE' })
       row = row + 1
     end
-    frame.display.show()
+    show()
     return
   end
 
@@ -630,7 +648,7 @@ local function render()
   if #items == 0 then
     draw_top_bar()
     frame.display.text('empty', LEFT_X, TOP_Y + ROW_H * 2, { color = 'GREY' })
-    frame.display.show()
+    show()
     return
   end
 
@@ -655,7 +673,7 @@ local function render()
     row = row + 1
   end
 
-  frame.display.show()
+  show()
 end
 
 local function move(delta)
@@ -988,7 +1006,7 @@ local function draw_splash()
   elseif not drawn then
     draw_splash_text()
   end
-  frame.display.show()
+  show()
   collectgarbage('collect')
 end
 
@@ -1489,7 +1507,7 @@ function app_loop()
       if bg then pcall(quit, bg) end
       print(err)
       frame.display.text(' ', LEFT_X, TOP_Y)
-      frame.display.show()
+      show()
       break
     end
   end
