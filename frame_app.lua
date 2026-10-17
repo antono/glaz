@@ -280,6 +280,7 @@ data.parsers[FILE_GET]  = function(block) return block end
 data.parsers[INPUT]     = function(block) return block end
 data.parsers[PHOTO_TAKE] = function(block) return block end
 data.parsers[MODULE_CALL] = function(block) return block end
+data.parsers[HANDS_OFF] = function(block) return block end
 
 -- Any other code is dropped quietly. data.lua prints 'No parser for flag'
 -- for a code it has no parser for and keeps the message, so it prints again
