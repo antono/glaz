@@ -598,6 +598,16 @@ Text is ASCII, Cyrillic transliterated, in lines of at most 26 characters,
 a page and `- 1/4 -` under them, and a tilt turns the page. With an `@open` the answer
 is not shown: the app it opened covers it. A tap on an answer asks again.
 
+The answer is also read aloud, as the agent wrote it (Cyrillic and all),
+in headphones only: before each answer the phone asks Android where speech
+with these audio attributes would go (`getAudioDevicesForAttributes`), and
+says nothing unless that is wired, USB or hearing-aid headphones, or a
+Bluetooth device whose class says headphones or a headset -- never the
+phone's loudspeaker, a Bluetooth speaker or a car. Headphones gone mid-
+sentence (`ACTION_AUDIO_BECOMING_NOISY`) stop it; so do a new question and
+a drop. Glaz > Menu > Assistant, Read answers aloud, turns it off: then
+the glasses' screen only (`android/.../Voice.kt`).
+
 `APP_OPEN` brings Assistant back to the screen for the answer even if the
 wearer went elsewhere meanwhile. An answer to a question that was asked
 again in between is dropped.

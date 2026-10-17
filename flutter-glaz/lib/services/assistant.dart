@@ -12,6 +12,7 @@ import 'agent_files.dart';
 import 'glaz_log.dart';
 import 'notifications.dart';
 import 'speech.dart';
+import 'voice.dart';
 
 /// A command for the glasses in the agent's answer: a line of its own,
 /// '@open weather'.
@@ -159,6 +160,7 @@ class AssistantService extends ChangeNotifier {
     this.transcriber, {
     Agent? Function(Settings)? agent,
     this.queries,
+    this.voice,
   }) : _agentFor = agent ?? defaultAgent {
     link.events.listen(onMessage);
     link.addListener(() {
@@ -181,6 +183,9 @@ class AssistantService extends ChangeNotifier {
 
   /// What the agent may ask for: photos, recordings (agent_files.dart).
   final AgentQueries? queries;
+
+  /// Reads answers aloud, in headphones only; null where there is none.
+  final Voice? voice;
 
   /// Rounds of queries in one answer, at most: an agent that keeps asking
   /// gets its last answer shown.
@@ -279,7 +284,8 @@ class AssistantService extends ChangeNotifier {
         _heardAll();
       case recDrop:
         // the wearer went back: nothing is asked, an answer on its way is
-        // thrown away
+        // thrown away, and one being read stops
+        voice?.stop();
         if (_transcription == null && state == AssistantState.idle) return;
         _drop();
         _turn++;
@@ -291,6 +297,7 @@ class AssistantService extends ChangeNotifier {
   }
 
   void _listen(int bits, int rate) {
+    voice?.stop(); // a new question: the last answer has been heard enough
     _drop();
     _turn++;
     if (!_on) {
@@ -431,6 +438,23 @@ class AssistantService extends ChangeNotifier {
     notifyListeners();
     final opened = await run(commands);
     if (!opened) _show('a:', text.isEmpty ? 'OK' : text);
+    await _say(text);
+  }
+
+  /// [text] read aloud as well, if the user wants it and headphones are
+  /// what it would come out of; said as the agent wrote it, not
+  /// transliterated.
+  Future<void> _say(String text) async {
+    final v = voice;
+    if (v == null || text.isEmpty || !settings.assistantSpeaks) return;
+    final h = await v.headphones();
+    if (!h.ok) {
+      glazLog(LogKind.assistant, 'not read aloud: ${h.why ?? 'no headphones'}');
+      return;
+    }
+    if (await v.speak(text, settings.assistantLanguage)) {
+      glazLog(LogKind.assistant, 'read aloud in ${h.name ?? 'headphones'}');
+    }
   }
 
   void _fail(AssistantTurn t, int turn, String why) {

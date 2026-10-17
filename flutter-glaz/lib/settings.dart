@@ -66,6 +66,11 @@ class Settings extends ChangeNotifier {
       _prefs.getString('agent.language') ?? speechLanguage;
   set assistantLanguage(String tag) => _set('agent.language', tag);
 
+  /// Whether the assistant's answers are read aloud too -- in headphones
+  /// only (services/voice.dart); off, they are on the glasses' screen only.
+  bool get assistantSpeaks => _prefs.getBool('agent.speak') ?? true;
+  set assistantSpeaks(bool on) => _set('agent.speak', on);
+
   /// Whether the agent may see Glaz's photos and recordings, and take a
   /// photo with the glasses (services/agent_files.dart).
   bool get agentFiles => _prefs.getBool('agent.files') ?? true;

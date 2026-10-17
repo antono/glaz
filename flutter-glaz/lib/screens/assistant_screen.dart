@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/assistant.dart';
 import '../services/speech.dart';
+import '../services/voice.dart';
 import '../services/services.dart';
 import '../theme.dart';
 
@@ -140,6 +141,8 @@ class _AssistantSettingsState extends State<AssistantSettings> {
             ),
           ),
           const SizedBox(height: 16),
+          _ReadAloud(_assistant),
+          const SizedBox(height: 16),
           TextField(
             controller: _question,
             textInputAction: TextInputAction.send,
@@ -184,6 +187,83 @@ class _AssistantSettingsState extends State<AssistantSettings> {
             for (final t in _assistant.turns) _Turn(t),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Whether answers are read aloud too, and where they would go now: only
+/// headphones will do.
+class _ReadAloud extends StatefulWidget {
+  const _ReadAloud(this.assistant);
+  final AssistantService assistant;
+
+  @override
+  State<_ReadAloud> createState() => _ReadAloudState();
+}
+
+class _ReadAloudState extends State<_ReadAloud> {
+  late Future<Headphones>? _now = widget.assistant.voice?.headphones();
+
+  void _check() => setState(() => _now = widget.assistant.voice?.headphones());
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = widget.assistant.settings;
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: ListenableBuilder(
+        listenable: settings,
+        builder: (context, _) => Column(
+          children: [
+            SwitchListTile(
+              secondary: const Icon(
+                Icons.headphones,
+                color: FrameColors.skyBlue,
+              ),
+              title: const Text('Read answers aloud'),
+              subtitle: const Text(
+                'In headphones only -- never the phone\'s speaker or a '
+                'Bluetooth speaker. Off: on the glasses\' screen only.',
+              ),
+              value: settings.assistantSpeaks,
+              onChanged: (on) {
+                settings.assistantSpeaks = on;
+                _check();
+              },
+            ),
+            if (settings.assistantSpeaks && _now != null)
+              FutureBuilder<Headphones>(
+                future: _now,
+                builder: (context, snap) {
+                  final h = snap.data;
+                  return ListTile(
+                    dense: true,
+                    leading: Icon(
+                      h == null
+                          ? Icons.hourglass_empty
+                          : h.ok
+                          ? Icons.check_circle_outline
+                          : Icons.volume_off,
+                      color: h?.ok == true ? scheme.primary : scheme.outline,
+                    ),
+                    title: Text(
+                      h == null
+                          ? 'Checking...'
+                          : h.ok
+                          ? 'Now: ${h.name ?? 'headphones'}'
+                          : 'Now silent: ${h.why ?? 'no headphones'}',
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.refresh),
+                      onPressed: _check,
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
       ),
     );
   }

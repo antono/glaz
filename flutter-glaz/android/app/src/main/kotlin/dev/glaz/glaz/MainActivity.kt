@@ -8,6 +8,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var speech: Speech? = null
+    private var voice: Voice? = null
 
     /** "glaz/keys": the keyboard remote in the background, KeyRemoteService. */
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -30,11 +31,14 @@ class MainActivity : FlutterActivity() {
         }
         KeyRemoteService.channel = channel
         speech = Speech(flutterEngine.dartExecutor.binaryMessenger)
+        voice = Voice(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         speech?.close()
         speech = null
+        voice?.close()
+        voice = null
         KeyRemoteService.channel = null
         KeyRemoteService.taken = emptySet()
         super.cleanUpFlutterEngine(flutterEngine)

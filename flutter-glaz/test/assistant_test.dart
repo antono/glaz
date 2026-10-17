@@ -16,6 +16,7 @@ import 'package:glaz/services/assistant.dart';
 import 'package:glaz/services/photos.dart';
 import 'package:glaz/services/recordings.dart';
 import 'package:glaz/services/transcripts.dart';
+import 'package:glaz/services/voice.dart';
 import 'package:glaz/settings.dart';
 
 import 'speech_test.dart' show FakeTranscriber;
@@ -44,6 +45,26 @@ class FakeAgent implements Agent {
     asked.add(messages);
     return replies.isNotEmpty ? replies.removeAt(0) : reply;
   }
+}
+
+class FakeVoice implements Voice {
+  FakeVoice(this.now);
+  Headphones now;
+  final said = <(String, String)>[];
+  int stops = 0;
+
+  @override
+  Future<Headphones> headphones() async => now;
+
+  @override
+  Future<bool> speak(String text, String language) async {
+    if (!now.ok) return false;
+    said.add((text, language));
+    return true;
+  }
+
+  @override
+  Future<void> stop() async => stops++;
 }
 
 class FakeQueries implements AgentQueries {
@@ -177,6 +198,57 @@ void main() {
       await asked;
       expect(agent.asked, hasLength(1));
       expect(link.sent.where((s) => s.$1 == appOpen), isEmpty);
+    });
+
+    test('read aloud in headphones, as written, not transliterated', () async {
+      final voice = FakeVoice(const Headphones(true, name: 'Buds'));
+      final a = AssistantService(
+        link,
+        settings,
+        FakeTranscriber(),
+        agent: (_) => agent,
+        voice: voice,
+      );
+      settings.assistantLanguage = 'ru-RU';
+      agent.reply = 'Сорок два.';
+      await a.ask('Сколько?');
+      expect(voice.said, [('Сорок два.', 'ru-RU')]);
+    });
+
+    test('not read aloud to a speaker, nor when switched off', () async {
+      final voice = FakeVoice(
+        const Headphones(false, why: "the phone's loudspeaker"),
+      );
+      final a = AssistantService(
+        link,
+        settings,
+        FakeTranscriber(),
+        agent: (_) => agent,
+        voice: voice,
+      );
+      agent.reply = 'Сорок два.';
+      await a.ask('Сколько?');
+      expect(voice.said, isEmpty);
+      voice.now = const Headphones(true);
+      settings.assistantSpeaks = false;
+      await a.ask('Сколько?');
+      expect(voice.said, isEmpty);
+      // the glasses' screen has it all the same
+      expect(link.sent.last, (appOpen, 'assistant\na:Sorok dva.'));
+    });
+
+    test('a new question or a drop stops the reading', () async {
+      final voice = FakeVoice(const Headphones(true));
+      final a = AssistantService(
+        link,
+        settings,
+        FakeTranscriber(),
+        agent: (_) => agent,
+        voice: voice,
+      );
+      a.onMessage([recStart, 16, 8, forAssistant]);
+      a.onMessage([recDrop]);
+      expect(voice.stops, 2);
     });
 
     test('a Recorder recording is not a question', () async {

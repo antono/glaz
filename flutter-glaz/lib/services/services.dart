@@ -15,6 +15,7 @@ import 'photos.dart';
 import 'recordings.dart';
 import 'speech.dart';
 import 'transcripts.dart';
+import 'voice.dart';
 
 /// The app's long-lived parts, made once at startup.
 class Services {
@@ -76,6 +77,7 @@ class Services {
         s,
         Transcriber.platform,
         queries: GlazFiles(link, s, photos, recordings, transcripts),
+        voice: Voice.platform,
       ),
     );
     SettingsSync(link, s);
