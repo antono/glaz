@@ -17,8 +17,16 @@ by tapping them and tilting your head, so there are no buttons to press.
 On the phone, glaz stores your photos and recordings, sends your
 notifications to the glasses, and lets apps on the glasses use the internet.
 
-<!-- Screenshot: the menu on the glasses -->
-<!-- ![The glaz menu on the glasses](docs/images/glasses-menu.jpg) -->
+<p align="center">
+  <img src="docs/images/glasses-menu.jpg" height="360"
+       alt="The glaz menu seen through the Frame lens: Glaz > Apps, with Camera selected">
+  <img src="docs/images/phone-glasses.jpg" height="360"
+       alt="Phone, Glasses tab: connection, battery, Upload, Restart, Files">
+  <img src="docs/images/phone-remote.jpg" height="360"
+       alt="Phone, Remote tab: arrows, OK, Back, Menu, Take a photo, Record">
+  <img src="docs/images/phone-log.jpg" height="360"
+       alt="Phone, Log: what the app and the glasses did, filtered by kind">
+</p>
 
 ## Features
 
@@ -39,7 +47,7 @@ The menu has these apps:
 - **Apps**
   - **Assistant**: ask a question out loud and read the answer on the
     glasses. The answer is also read aloud, but only through headphones.
-  - **Photo**: take a photo. It is saved on the phone.
+  - **Camera**: take a photo. It is saved on the phone.
   - **Time series**: take a photo every 1 to 60 seconds. It keeps going
     in the background.
   - **Recorder**: a voice recorder. It keeps recording in the background,
@@ -76,16 +84,18 @@ iOS and macOS builds are in the code but need Xcode.
   sending notifications, internet access and location.
 - **Per-app settings**: photo quality, the place for Weather, which apps
   may use the internet, and the Assistant's language.
-- **Glasses files** and a **Log** for when something goes wrong.
+- **Lua console** (More > Lua console): a REPL into the app running on the
+  glasses. Type Lua, run it, and see what it printed and returned. Names
+  like `frame.display` complete as you type. The glasses stay connected to
+  the phone the whole time. Turn on **Open to a computer** to use the same
+  console from your laptop over USB:
 
-<!-- Screenshots: the phone app -->
-<!--
-<p>
-  <img src="docs/images/phone-glasses.png" width="240" alt="Glasses tab">
-  <img src="docs/images/phone-menu.png" width="240" alt="Menu tab">
-  <img src="docs/images/phone-photos.png" width="240" alt="Photos tab">
-</p>
--->
+  ```sh
+  python utils/phone_lua.py 'frame.battery_level()'   # one line
+  python utils/phone_lua.py                           # interactive, Tab completes
+  ```
+
+- **Glasses files** and a **Log** for when something goes wrong.
 
 ## Extended firmware
 

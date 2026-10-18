@@ -316,8 +316,8 @@ Two things that are easy to lose time on:
   itself drives **`gatttool`** from BlueZ. That makes it Linux-only, and
   `gatttool` has been deprecated since BlueZ 5.44 — distributions often ship
   it only if built with `--enable-deprecated`. Check before relying on it.
-- Addresses differ by platform. Linux uses the real MAC (ours is
-  `E0:EF:CE:1C:08:15`, the reverse of what AR Studio prints); macOS reports
+- Addresses differ by platform. Linux uses the real MAC (for example
+  `AA:BB:CC:DD:EE:FF`, the reverse of what AR Studio prints); macOS reports
   opaque CoreBluetooth UUIDs instead, which is one reason the tool is not
   portable.
 

@@ -67,7 +67,7 @@ system_profiler SPBluetoothDataType | grep -iA2 frame   # macOS still remembers 
 open "x-apple.systempreferences:com.apple.Bluetooth-Settings.extension"
 ```
 
-Forget `Frame E0` there — enable "Show all devices" if it is not listed, macOS
+Forget `Frame AA` there — enable "Show all devices" if it is not listed, macOS
 hides BLE-only hardware. Then reconnect and accept the pairing prompt.
 
 > ⚠️ **The pinhole reset wipes flash.** Firmware calls
