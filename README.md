@@ -4,6 +4,8 @@
 
 # glaz
 
+**[Download the Android APK from the releases page](https://github.com/antono/glaz/releases/latest)**
+
 An unofficial app for the
 [Brilliant Labs Frame](https://brilliant.xyz/products/frame) smart glasses,
 with a companion app for your phone. It is not made or endorsed by Brilliant
@@ -149,11 +151,62 @@ app. They bundle the extended firmware too, if you have built it in a
 checkout of `frame-codebase` (set `FRAME_CODEBASE` to its path; see
 `flutter-glaz/tool/fetch_firmware.sh`).
 
-If you only want the desktop app, you can skip devenv and use Nix:
+## Desktop app with Nix
+
+If you only want the companion app on a Linux laptop, you don't need
+devenv. The repository is a Nix flake that builds the app for
+`x86_64-linux` and `aarch64-linux`. It talks to the glasses through the
+laptop's own Bluetooth (BlueZ).
+
+Try it without installing:
 
 ```sh
 nix run github:antono/glaz
 ```
+
+Install it into your user profile, with a launcher in the app menu:
+
+```sh
+nix profile install github:antono/glaz
+```
+
+### NixOS
+
+Add the flake as an input and put the package in your system packages.
+Bluetooth must be on:
+
+```nix
+# flake.nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    glaz.url = "github:antono/glaz";
+  };
+
+  outputs = { nixpkgs, glaz, ... }: {
+    nixosConfigurations.my-laptop = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        ./configuration.nix
+        ({ pkgs, ... }: {
+          hardware.bluetooth.enable = true;
+          environment.systemPackages = [
+            glaz.packages.${pkgs.stdenv.hostPlatform.system}.default
+          ];
+        })
+      ];
+    };
+  };
+}
+```
+
+With [Home Manager](https://github.com/nix-community/home-manager), use
+`home.packages` instead of `environment.systemPackages`. Bluetooth still
+has to be on in the system configuration.
+
+Then run `sudo nixos-rebuild switch`, and start **Glaz** from the app menu
+or run `glaz` in a terminal. To update, run `nix flake update glaz` and
+rebuild.
 
 ## Documentation
 
