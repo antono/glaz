@@ -21,8 +21,9 @@ void main() {
     final list = await firmwarePackages(rootBundle);
     // the zips are fetched, not committed: nothing to check without them
     if (list.isEmpty) return;
+    // two builds of one minute (stable, file-space) may share a stamp
     for (var i = 1; i < list.length; i++) {
-      expect(list[i - 1].built!.isAfter(list[i].built!), isTrue);
+      expect(list[i - 1].built!.isBefore(list[i].built!), isFalse);
     }
     expect(list.every((p) => p.asset.endsWith('.zip')), isTrue);
   });
