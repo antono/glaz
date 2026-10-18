@@ -19,6 +19,8 @@ The glasses run Lua; a laptop talks to them over Bluetooth using Python.
   where the power goes.
 - [`docs/HERMES.md`](docs/HERMES.md) — connecting the Assistant to Hermes
   Agent: its API server, and Tailscale serve, tailnet HTTP or funnel.
+- [`docs/REMOTE.md`](docs/REMOTE.md) — a Bluetooth keyboard or Flipper
+  Zero as a remote for the glasses, through the phone.
 
 ## Layout
 

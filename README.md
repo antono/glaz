@@ -220,6 +220,8 @@ rebuild.
 - [docs/BATTERY.md](docs/BATTERY.md): where the battery goes.
 - [docs/HERMES.md](docs/HERMES.md): connecting the Assistant to Hermes
   Agent, over Tailscale.
+- [docs/REMOTE.md](docs/REMOTE.md): driving the glasses with a Bluetooth
+  remote, such as a Flipper Zero.
 - [flutter-glaz/README.md](flutter-glaz/README.md): the phone app.
 - [AGENTS.md](AGENTS.md): the rules for contributing (also used by coding
   agents).
