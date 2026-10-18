@@ -98,6 +98,8 @@ local APP_OPEN  = 0x2F    -- name .. '\n' .. arg: the phone puts a module on
 local HANDS_OFF = 0x2E    -- [1]: the phone's remote is in front, so the
                           -- wearer's gestures are off but a triple tap and a
                           -- tap waking a blank screen; [0]: all back
+local LUA_EVAL  = 0x30    -- [id] .. Lua: the phone's console runs it here,
+                          -- answered with LUA_RESULT (app/glaz_lua.lua)
 local LOCATION  = 0x28    -- '>BBi4i4I2I2' id, status, lat and lon in
                           -- microdegrees, accuracy m, age s; an answer to
                           -- LOCATION_GET
@@ -119,6 +121,7 @@ local STATUS      = 0x1B  -- [0x1B, battery %, firmware version...]; 255 =
 local LOCATION_GET = 0x1C -- [0x1C, id, module...] a module asks where it is
 local FILES     = 0x1D    -- [0x1D, id, more, bytes...] a folder listing
 local FILE_DATA = 0x1E    -- [0x1E, id, more, bytes...] a file's contents
+-- LUA_RESULT = 0x09, [0x09, id, more, bytes...]: sent by app/glaz_lua.lua
 
 -- Navigation tuning. Scrolling is driven by roll -- tilting the head toward
 -- a shoulder -- not by pitch. Roll has the wider usable swing of the two
@@ -284,6 +287,7 @@ data.parsers[PHOTO_TAKE] = function(block) return block end
 data.parsers[MODULE_CALL] = function(block) return block end
 data.parsers[APP_OPEN]  = function(block) return block end
 data.parsers[HANDS_OFF] = function(block) return block end
+data.parsers[LUA_EVAL]  = function(block) return block end
 
 -- Any other code is dropped quietly. data.lua prints 'No parser for flag'
 -- for a code it has no parser for and keeps the message, so it prints again
@@ -1246,6 +1250,16 @@ function app_loop()
               pcall(serve, code == FILES_GET, block, host)
             end
           end
+        end
+
+        -- The phone's Lua console (docs/PROTOCOL.md, "Lua console"):
+        -- glaz_lua.lua, loaded for the request and dropped after. What the
+        -- code draws stays until the app draws again.
+        if data.app_data[LUA_EVAL] ~= nil then
+          local block = data.app_data[LUA_EVAL]
+          data.app_data[LUA_EVAL] = nil
+          local ok, eval = try_require('glaz_lua')
+          if ok and #block >= 1 then pcall(eval, block, host) end
         end
 
         -- The phone's remote (Glaz > Remote). It goes through the same

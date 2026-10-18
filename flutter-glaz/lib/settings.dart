@@ -76,6 +76,12 @@ class Settings extends ChangeNotifier {
   bool get agentFiles => _prefs.getBool('agent.files') ?? true;
   set agentFiles(bool on) => _set('agent.files', on);
 
+  /// Whether the Lua console takes Lua from a computer too, over HTTP on
+  /// the phone's loopback (services/glasses_lua.dart, LuaBridge). Off until
+  /// asked for.
+  bool get luaBridge => _prefs.getBool('lua.bridge') ?? false;
+  set luaBridge(bool on) => _set('lua.bridge', on);
+
   /// A module's setting (glasses_menu.dart, ModuleSetting); null = its
   /// default.
   String? config(String module, String key) =>

@@ -342,6 +342,7 @@ which splits long messages into MTU-sized packets and reassembles them.
 | `0x2C` | `PHOTO_TAKE` | `>I2B`: size in px (square, even, 100..720), JPEG quality 1 very low .. 5 very high — the remote's photo; see [Remote](#remote) |
 | `0x2D` | `MODULE_CALL` | text, `module` `\n` `arg`: calls that module's `remote(arg)` — the remote's record button is `recorder\non` / `recorder\noff`; see [Recorder](#recorder) |
 | `0x2F` | `APP_OPEN` | text, `module`, optionally `\n` `arg`: puts that module on screen as if picked in the menu; `arg` goes to its `start()`, or to `remote(arg)` if it is not started again -- on screen already or back from the background; see [Assistant](#assistant) |
+| `0x30` | `LUA_EVAL` | `[id]` + Lua: runs it inside the app — see [Lua console](#lua-console) |
 | `0x2E` | `HANDS_OFF` | `[1]`: the remote is in front, the wearer's own gestures are off but a triple tap (sleep) and one or two taps on a blank screen; `[0]`: all back; see [Remote](#remote) |
 
 `MENU_SET` is an **override**: it replaces the module-defined menu with
@@ -379,6 +380,7 @@ Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 | `0x1C` | `LOCATION_GET` | `[0x1C, id, module...]` | a module asks where the phone is — see [Location](#location) |
 | `0x1D` | `FILES` | `[0x1D, id, more, bytes...]` | a folder listing, in packets — see [Files](#files) |
 | `0x1E` | `FILE_DATA` | `[0x1E, id, more, bytes...]` | a file's contents, in packets — see [Files](#files) |
+| `0x09` | `LUA_RESULT` | `[0x09, id, more, bytes...]` | what `LUA_EVAL`'s Lua printed and returned, or its error, in packets — see [Lua console](#lua-console) |
 | `0x07` | photo chunk | `[0x07, jpeg bytes...]` | part of a photo (Camera module) |
 | `0x08` | photo end | `[0x08]` | last chunk; the photo is complete |
 | `0x1F` | `REC_START` | `[0x1F, bits, rate / 1000, for]` | Recorder starts a recording — see [Recorder](#recorder); `for` = `1`: the Assistant listening, see [Assistant](#assistant) |
@@ -701,6 +703,36 @@ send each line with a `\n` after it, as they read it, never holding the
 whole file -- `frame_app.lua` alone is over 50 KB. The main loop waits while
 a file goes out, so a file stops at `FILE_MAX` (64 KB) with a
 `... cut at 65536 bytes` line. Viewing only: nothing is written or removed.
+
+### Lua console
+
+The phone can run Lua on the glasses while their app runs (Glaz > More >
+Lua console) -- the REPL is blocked then, so `frame_app.lua` runs it, in
+`app/glaz_lua.lua`, loaded for the request:
+
+- `LUA_EVAL` (`0x30`), `[id]` and the Lua, is answered with `LUA_RESULT`
+  (`0x09`), in packets as in [Files](#files), `+` and the text, or `-` and
+  the error.
+- The Lua is tried with `return ` in front first, so an expression answers
+  with its value: `frame.battery_level()` gives `100`. What it `print()`s
+  comes first, one line each, then each value it returns; a table shows
+  its first 40 entries, one level deep. The answer stops at 8 KB.
+- It runs in the app's globals: `frame.*`, the libraries, and the globals
+  of earlier requests, which stay. The app's own locals are out of reach.
+  It runs on the main loop, which waits for it; Lua that never ends hangs
+  the app, as it would in the REPL.
+- What it draws stays on screen until the app draws again.
+
+Completion asks the glasses too: the names in a table (`_G`, `frame`,
+`frame.display`...) are one `LUA_EVAL`, kept until the next Run.
+
+**From a computer.** With *Open to a computer* on, the phone also listens
+on its own loopback, `127.0.0.1:8137`: `POST /lua` with the Lua as the body
+(200 and the answer, 422 and the error, 503 when there is no answer), and
+`GET /complete?q=frame.disp`, one name a line. Nothing on the network
+reaches it; `adb forward` does. `utils/phone_lua.py` does both: a command,
+stdin, or an interactive prompt with Tab completion. The glasses stay
+connected to the phone the whole time.
 
 ### Remote
 

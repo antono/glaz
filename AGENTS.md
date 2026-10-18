@@ -46,7 +46,12 @@ check                    # ./check.sh
 upload                   # python host_test.py
 emulator-start &         # Android emulator for flutter-glaz/
 python utils/connect.py
+python utils/phone_lua.py 'frame.battery_level()'   # through the phone
 ```
+
+To try Lua on the glasses while the phone holds them, use
+`utils/phone_lua.py` (the phone app's Lua console, open to a computer);
+see docs/FRAME.md, "Quick connect".
 
 Without devenv, the host tools alone still work from a plain venv:
 

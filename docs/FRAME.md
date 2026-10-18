@@ -21,8 +21,8 @@ Two ways to work:
 
 | Field | Value |
 | --- | --- |
-| Device | `Frame E0` |
-| MAC | `15:08:1C:CE:EF:E0` (as shown by AR Studio); BlueZ/macOS: `E0:EF:CE:1C:08:15` |
+| Device | `Frame AA` |
+| MAC | `FF:EE:DD:CC:BB:AA` (as shown by AR Studio); BlueZ/macOS: `AA:BB:CC:DD:EE:FF` |
 | Firmware | `v25.080.0838` |
 | MTU | 243 bytes |
 | Display | 640 × 400, 16 colors |
@@ -53,7 +53,18 @@ Run anything with `.venv/bin/python <file>.py`.
 
 ## Quick connect
 
-Ready-made script: [`utils/connect.py`](../utils/connect.py).
+**Glasses connected to the phone?** Leave them there: the Glaz app's Lua
+console runs Lua inside the app on the glasses, and with *Open to a
+computer* on, a laptop reaches it over adb
+([`utils/phone_lua.py`](../utils/phone_lua.py), docs/PROTOCOL.md, "Lua
+console"):
+
+```bash
+python utils/phone_lua.py 'frame.file.space()'
+```
+
+Straight over Bluetooth instead, with the phone off the glasses:
+[`utils/connect.py`](../utils/connect.py).
 
 ```bash
 .venv/bin/python utils/connect.py
@@ -123,8 +134,8 @@ Code=15, this is it:
 
 ```bash
 system_profiler SPBluetoothDataType | grep -iA2 frame
-# Frame E0:
-#     Address: E0:EF:CE:1C:08:15        <- MAC reversed relative to
+# Frame AA:
+#     Address: AA:BB:CC:DD:EE:FF        <- MAC reversed relative to
 #                                          what AR Studio shows
 ```
 
@@ -132,7 +143,7 @@ system_profiler SPBluetoothDataType | grep -iA2 frame
 
 1. Open the Bluetooth pane:
    `open "x-apple.systempreferences:com.apple.Bluetooth-Settings.extension"`
-2. `Frame E0` → (ⓘ) → **Forget This Device**. If it is not listed, enable
+2. `Frame AA` → (ⓘ) → **Forget This Device**. If it is not listed, enable
    "Show all devices" — macOS hides BLE-only hardware.
 3. Reset the glasses through the pinhole button — it is on the **Mister Power
    charging dock**, not on the frame itself.
@@ -167,17 +178,17 @@ Everything below follows from that.
 2. **`devenv shell` can be busy/slow.** A parallel `devenv shell` (e.g. a
    Flutter build) makes a second one slow; the venv above avoids it.
 3. **Wrong MAC for BlueZ.** The table above lists the AR Studio form
-   `15:08:1C:CE:EF:E0`; BlueZ uses the reversed `E0:EF:CE:1C:08:15`.
+   `FF:EE:DD:CC:BB:AA`; BlueZ uses the reversed `AA:BB:CC:DD:EE:FF`.
    `bluetoothctl info 15:08:...` says "not available" even when all is fine.
-4. **"Settings sees Frame E0" does not mean it is on air.** GNOME Settings and
+4. **"Settings sees Frame AA" does not mean it is on air.** GNOME Settings and
    `bluetoothctl devices` list the **cached** device. Check that it is live:
 
    ```bash
-   bluetoothctl info E0:EF:CE:1C:08:15 | grep RSSI   # no RSSI -> not heard
+   bluetoothctl info AA:BB:CC:DD:EE:FF | grep RSSI   # no RSSI -> not heard
    bluetoothctl --timeout 30 scan le | grep -i frame
    ```
 
-   A `[DEL] Device E0:EF:CE:1C:08:15 Frame E0` line in the scan means BlueZ
+   A `[DEL] Device AA:BB:CC:DD:EE:FF Frame AA` line in the scan means BlueZ
    just dropped the stale cache entry — the glasses are *not* advertising.
 5. **`connect()` gives up after 10 s.** `FrameBle.connect()` scans 10 s for the
    Frame service UUID and raises `No matching Frame device found`. A sleeping
@@ -192,7 +203,7 @@ Everything below follows from that.
    disconnect handler sets `_client = None` mid-`connect()`. Pairing from
    Settings again gave `org.bluez.Error.AuthenticationCanceled`, and
    `bluetoothctl pair` with a `NoInputNoOutput` agent got no answer.
-   What worked: `bluetoothctl remove E0:EF:CE:1C:08:15`, put the glasses in
+   What worked: `bluetoothctl remove AA:BB:CC:DD:EE:FF`, put the glasses in
    pairing mode, then connect with bleak's `BleakClient(..., pair=True)`.
 7. **A half-done upload leaves `loading...` on the display.** `host_test.py`
    deletes `main.lua` before it writes the files. If a write fails (seen once:
@@ -215,7 +226,7 @@ Everything below follows from that.
 9. **BlueZ keeps the link after a script is killed.** Once bonded, the link
    can stay up (`bluetoothctl info` says `Connected: yes`) after the Python
    process dies. A connected Frame does not advertise, so the next scan finds
-   nothing. Run `bluetoothctl disconnect E0:EF:CE:1C:08:15` first.
+   nothing. Run `bluetoothctl disconnect AA:BB:CC:DD:EE:FF` first.
 10. **`GATT Protocol Error: Unlikely Error` on the reset signal** -- the
    glasses reboot before acknowledging the write. Just run the upload again.
 11. **The app ran the glasses out of memory on start** ("not enough memory",
@@ -263,7 +274,7 @@ import bleak
 
 _find = BleakScanner.find_device_by_filter
 async def by_address(_f, timeout=10, **_kw):
-    return await _find(lambda d, _a: d.address == "E0:EF:CE:1C:08:15", timeout=180)
+    return await _find(lambda d, _a: d.address == "AA:BB:CC:DD:EE:FF", timeout=180)
 BleakScanner.find_device_by_filter = staticmethod(by_address)
 
 _init = bleak.BleakClient.__init__

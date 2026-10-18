@@ -5,6 +5,7 @@ import '../settings.dart';
 import 'agent_files.dart';
 import 'assistant.dart';
 import 'glasses_files.dart';
+import 'glasses_lua.dart';
 import 'keys.dart';
 import 'location.dart';
 import 'module_settings.dart';
@@ -31,6 +32,7 @@ class Services {
     this.transcripts,
     this.keys,
     this.assistant,
+    this.lua,
   );
 
   final Settings settings;
@@ -44,6 +46,7 @@ class Services {
   final TranscriptService transcripts;
   final KeyRemote keys;
   final AssistantService assistant;
+  final GlassesLua lua;
 
   static late Services instance;
 
@@ -79,7 +82,9 @@ class Services {
         queries: GlazFiles(link, s, photos, recordings, transcripts),
         voice: Voice.platform,
       ),
+      GlassesLua(link),
     );
+    LuaBridge(s, services.lua);
     SettingsSync(link, s);
     services.keys.attach();
     link.onConnected.add(() async {

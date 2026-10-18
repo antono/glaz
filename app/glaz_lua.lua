@@ -1,0 +1,74 @@
+-- The phone's Lua console (LUA_EVAL): part of frame_app.lua, in a file of
+-- its own, loaded for a request and dropped after. ASCII only, see
+-- docs/PROTOCOL.md, "Lua console".
+--
+-- Called with the request -- [id] then the code -- and the host services
+-- table from glaz_host.lua. The code runs inside the app, in its globals:
+-- frame.*, the libraries, and whatever earlier requests left there; the
+-- app's own locals stay out of reach. It is tried with 'return ' first, so
+-- '1+1' and 'frame.battery_level()' answer with their value. What it
+-- print()s comes back too, before the values. The answer, LUA_RESULT, is
+-- '+' and the text, or '-' and the error.
+
+-- Must match frame_app.lua and docs/PROTOCOL.md.
+local LUA_RESULT = 0x09   -- [0x09, id, more, bytes...] the answer
+
+local MAX = 8 * 1024      -- an answer is cut here
+local SHOWN = 40          -- entries of a table shown
+
+local function show(v)
+  if type(v) == 'string' then return string.format('%q', v) end
+  if type(v) ~= 'table' then return tostring(v) end
+  local keys = {}
+  for k in pairs(v) do keys[#keys + 1] = k end
+  table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+  local out = {}
+  for i, k in ipairs(keys) do
+    if i > SHOWN then
+      out[#out + 1] = '... ' .. (#keys - SHOWN) .. ' more'
+      break
+    end
+    local x = v[k]
+    local s = type(x) == 'table' and '{...}'
+              or type(x) == 'function' and 'function'
+              or type(x) == 'string' and string.format('%q', x)
+              or tostring(x)
+    out[#out + 1] = tostring(k) .. ' = ' .. s
+  end
+  return '{ ' .. table.concat(out, ', ') .. ' }'
+end
+
+local function run(code)
+  local fn = load('return ' .. code, '=console')
+  if not fn then
+    local err
+    fn, err = load(code, '=console')
+    if not fn then return false, err end
+  end
+
+  local said = {}
+  local print_ = print
+  print = function(...)
+    local parts = table.pack(...)
+    for i = 1, parts.n do parts[i] = tostring(parts[i]) end
+    said[#said + 1] = table.concat(parts, '\t', 1, parts.n)
+  end
+  local r = table.pack(pcall(fn))
+  print = print_
+
+  if not r[1] then
+    said[#said + 1] = tostring(r[2])
+    return false, table.concat(said, '\n')
+  end
+  for i = 2, r.n do said[#said + 1] = show(r[i]) end
+  return true, table.concat(said, '\n')
+end
+
+return function(block, host)
+  local id = string.byte(block, 1)
+  local ok, text = run(string.sub(block, 2))
+  if #text > MAX then
+    text = string.sub(text, 1, MAX) .. '\n... cut at ' .. MAX .. ' bytes'
+  end
+  host.send_chunks(LUA_RESULT, id, (ok and '+' or '-') .. text)
+end

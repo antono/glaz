@@ -4,10 +4,11 @@ import '../theme.dart';
 import 'about_screen.dart';
 import 'app_settings_screen.dart';
 import 'log_screen.dart';
+import 'lua_screen.dart';
 import 'services_screen.dart';
 
 /// What does not need a tab of its own: the phone's services for the
-/// glasses, the log, and About.
+/// glasses, the log, the Lua console, and About.
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
 
@@ -60,6 +61,17 @@ class MoreScreen extends StatelessWidget {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () =>
                     Navigator.of(context).push(page('LOG', const LogScreen())),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.terminal, color: FrameColors.skyBlue),
+                title: const Text('Lua console'),
+                subtitle: const Text(
+                  'Run Lua on the glasses, from here or a computer',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () =>
+                    Navigator.of(context).push(page('LUA', const LuaScreen())),
               ),
               const Divider(height: 1),
               ListTile(

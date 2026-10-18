@@ -17,6 +17,7 @@ const photoTake = 0x2C;
 const moduleCall = 0x2D;
 const handsOff = 0x2E;
 const appOpen = 0x2F;
+const luaEval = 0x30;
 
 // Frame -> Host
 const menuSelect = 0x11;
@@ -35,6 +36,7 @@ const files = 0x1D;
 const fileData = 0x1E;
 const recStart = 0x1F;
 const recDrop = 0x10;
+const luaResult = 0x09;
 
 // The frame_msg camera library's own codes, used by Camera and Time series
 const photoChunk = 0x07;
@@ -65,6 +67,7 @@ const codeNames = {
   moduleCall: 'MODULE_CALL',
   handsOff: 'HANDS_OFF',
   appOpen: 'APP_OPEN',
+  luaEval: 'LUA_EVAL',
   menuSelect: 'MENU_SELECT',
   menuCursor: 'MENU_CURSOR',
   menuOpen: 'MENU_OPEN',
@@ -81,6 +84,7 @@ const codeNames = {
   fileData: 'FILE_DATA',
   recStart: 'REC_START',
   recDrop: 'REC_DROP',
+  luaResult: 'LUA_RESULT',
   photoChunk: 'photo chunk',
   photoEnd: 'photo end',
   audioChunk: 'audio chunk',
