@@ -1,0 +1,223 @@
+# A release of the phone app, with the firmware it can install.
+#
+# Runs when flutter-glaz/pubspec.yaml changes on main, and makes a release
+# only when the minor version is new: 2.15.0 -> 2.16.0 releases, 2.15.1
+# does not (no v2.15.* tag may exist yet). Run it by hand to release a
+# version whose minor has no release yet, after a failed run say.
+#
+# The release carries:
+#   glaz-<version>.apk                     the phone app (firmware inside)
+#   glaz-<version>-linux-x64.tar.gz        the same app for the Linux desktop
+#   frame-firmware-<official>.zip          the newest official firmware
+#   frame-firmware-v<yy.ddd.HHMM>-glaz.zip ours, built from branch glaz of
+#                                          antono/frame-codebase
+#
+# The -glaz version is the time of the branch's last commit (UTC), not of
+# the build, so the same source always gets the same name.
+#
+# Signing: the APK is signed with the debug key in the secret
+# ANDROID_DEBUG_KEYSTORE (base64 of .android/debug.keystore), so it
+# installs over a build from `apk`. Without the secret the runner makes a
+# key of its own, and every release then needs the old app uninstalled.
+name: release
+
+on:
+  push:
+    branches: [main]
+    paths: [flutter-glaz/pubspec.yaml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FIRMWARE_REPO: antono/frame-codebase
+  FIRMWARE_REF: glaz
+  OFFICIAL_REPO: brilliantlabsAR/frame-codebase
+  FLUTTER_VERSION: 3.47.4
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: v
+        run: |
+          version=$(sed -n 's/^version: *\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' flutter-glaz/pubspec.yaml)
+          minor=${version%.*}
+          if git tag -l "v$minor.*" | grep -q .; then
+            echo "v$minor.* is released already: $(git tag -l "v$minor.*" | xargs)"
+            release=false
+          else
+            echo "releasing v$version"
+            release=true
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+
+  firmware:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      glaz: ${{ steps.build.outputs.glaz }}
+      official: ${{ steps.official.outputs.official }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.FIRMWARE_REPO }}
+          ref: ${{ env.FIRMWARE_REF }}
+          submodules: recursive
+      - uses: carlosperate/arm-none-eabi-gcc-action@v1
+        with:
+          release: 13.3.Rel1
+      # nrfutil 8 is Nordic's Rust tool; pkg generate comes as a plug-in
+      # (docs/FIRMWARE.md). Off NixOS it runs as it is.
+      - name: nrfutil
+        run: |
+          mkdir -p "$HOME/bin"
+          curl -sSfL -o "$HOME/bin/nrfutil" \
+            'https://files.nordicsemi.com/ui/api/v1/download?repoKey=swtools&path=external/nrfutil/executables/x86_64-unknown-linux-gnu/nrfutil&isNativeBrowsing=false'
+          chmod +x "$HOME/bin/nrfutil"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          "$HOME/bin/nrfutil" install nrf5sdk-tools
+      - id: build
+        run: |
+          v=v$(TZ=UTC0 git log -1 --format=%cd --date=format-local:%y.%j.%H%M)-glaz
+          make application BUILD_VERSION="$v"
+          nrfutil nrf5sdk-tools pkg generate \
+            --hw-version 52 --application-version 0 \
+            --application build/application.hex --sd-req 0x0123 \
+            --key-file source/bootloader/dfu_private_key.pem \
+            "build/frame-firmware-$v.zip"
+          echo "glaz=$v" >> "$GITHUB_OUTPUT"
+          echo "built $v from $(git rev-parse --short HEAD)"
+      - id: official
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release view -R "$OFFICIAL_REPO" --json tagName --jq .tagName)
+          gh release download "$tag" -R "$OFFICIAL_REPO" -p "frame-firmware-$tag.zip" -D build
+          echo "official=$tag" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: build/frame-firmware-*.zip
+          if-no-files-found: error
+
+  # The phone and desktop apps. Both need what git does not carry
+  # (devenv.nix, appAssets): the Lua compiled by the firmware's own Lua,
+  # and the firmware for Update -- the three newest official releases and
+  # the -glaz build from the job above.
+  app:
+    needs: [version, firmware]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [apk, linux]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.FIRMWARE_REPO }}
+          ref: ${{ env.FIRMWARE_REF }}
+          path: frame-codebase
+      - uses: actions/download-artifact@v4
+        with:
+          name: firmware
+          path: frame-codebase/build
+      - uses: actions/setup-java@v4
+        if: matrix.target == 'apk'
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Linux build dependencies
+        if: matrix.target == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libunwind-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Assets
+        working-directory: flutter-glaz
+        env:
+          FRAME_CODEBASE: ${{ github.workspace }}/frame-codebase
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tool/compile_lua.sh
+          tool/fetch_firmware.sh
+      - name: Debug signing key
+        if: matrix.target == 'apk'
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_DEBUG_KEYSTORE }}
+        run: |
+          if [ -n "$KEYSTORE" ]; then
+            mkdir -p "$HOME/.android"
+            echo "$KEYSTORE" | base64 -d > "$HOME/.android/debug.keystore"
+          else
+            echo "::warning::ANDROID_DEBUG_KEYSTORE not set; the APK is signed with a new key"
+          fi
+      - name: Build
+        working-directory: flutter-glaz
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          mkdir -p ../dist
+          if [ "${{ matrix.target }}" = apk ]; then
+            flutter build apk --release
+            cp build/app/outputs/flutter-apk/app-release.apk "../dist/glaz-$VERSION.apk"
+          else
+            flutter build linux --release
+            tar -C build/linux/x64/release/bundle -czf \
+              "../dist/glaz-$VERSION-linux-x64.tar.gz" .
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: [version, firmware, app]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+          GLAZ: ${{ needs.firmware.outputs.glaz }}
+          OFFICIAL: ${{ needs.firmware.outputs.official }}
+        run: |
+          glasses=$(sed -n "s/^local VERSION *= *'\(.*\)'/\1/p" modules/about.lua)
+          cat > notes.md <<EOF
+          Phone app $VERSION, glasses app $glasses (uploaded by the phone app).
+
+          Firmware, for Glasses > Firmware in the app or for nRF Connect:
+
+          - \`frame-firmware-$GLAZ.zip\` -- ours, branch \`$FIRMWARE_REF\` of $FIRMWARE_REPO
+          - \`frame-firmware-$OFFICIAL.zip\` -- the newest official release
+
+          The Linux bundle needs GStreamer (base and good plugins) and BlueZ.
+          EOF
+          ls -l dist
+          gh release create "v$VERSION" dist/* \
+            --target "$GITHUB_SHA" --title "glaz $VERSION" \
+            --notes-file notes.md --generate-notes
