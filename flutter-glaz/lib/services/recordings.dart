@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
@@ -14,13 +17,13 @@ class Recording {
   final DateTime at;
   final Duration length;
 
-  /// What was said in it, once transcribed (services/transcripts.dart).
+  /// What was said in it, once transcribed (services/transcripts.dart);
+  /// kept in the WAV itself ([wavComment]).
   final String? transcript;
-
-  /// Where [transcript] is kept: next to the sound, '... 13-07-01.txt'.
-  File get transcriptFile => transcriptOf(file);
 }
 
+/// Where a transcript was kept before it went into the WAV: next to the
+/// sound, '... 13-07-01.txt'. Still read; [foldTranscripts] moves it in.
 File transcriptOf(File wav) =>
     File(wav.path.replaceFirst(RegExp(r'\.wav$'), '.txt'));
 
@@ -71,14 +74,123 @@ Uint8List wavHeader(int dataBytes, int rate, int bits) {
 }
 
 /// How long a WAV written by [RecordingWriter] plays, from its header and
-/// size; zero for anything else.
+/// size; zero for anything else. A recording cut short still has 0 for its
+/// samples' size: they run to the end of the file then.
 Duration wavLength(Uint8List header, int fileBytes) {
   if (header.length < 44) return Duration.zero;
   final b = ByteData.sublistView(header);
   final perSecond = b.getUint32(28, Endian.little);
   if (perSecond == 0) return Duration.zero;
-  final data = fileBytes - 44;
+  final said = b.getUint32(40, Endian.little);
+  final data = said == 0 || said > fileBytes - 44 ? fileBytes - 44 : said;
   return Duration(microseconds: data * 1000000 ~/ perSecond);
+}
+
+// The transcript lives in the WAV, after the samples, in the standard
+// comment: a LIST chunk of type INFO holding ICMT, UTF-8 ending in a zero.
+// Android lets an app read, with READ_MEDIA_AUDIO, the recordings an earlier
+// install of it left in Recordings/Glaz, but no .txt beside them: that
+// folder takes sound only. Inside the sound the text goes where it goes.
+
+/// The transcript kept in [wav]; null when it has none.
+Future<String?> wavComment(File wav) async {
+  final f = await wav.open();
+  try {
+    final length = await f.length();
+    var at = 12;
+    while (at + 8 <= length) {
+      await f.setPosition(at);
+      final head = await f.read(8);
+      final id = ascii.decode(head.sublist(0, 4), allowInvalid: true);
+      final size = ByteData.sublistView(head).getUint32(4, Endian.little);
+      if (id == 'LIST') {
+        return _icmt(await f.read(min(size, length - at - 8)));
+      }
+      // samples of a recording cut short: they run to the end
+      if (id == 'data' && size == 0) return null;
+      at += 8 + size + (size & 1);
+    }
+    return null;
+  } finally {
+    await f.close();
+  }
+}
+
+String? _icmt(Uint8List list) {
+  if (list.length < 4 || ascii.decode(list.sublist(0, 4)) != 'INFO') {
+    return null;
+  }
+  final b = ByteData.sublistView(list);
+  var at = 4;
+  while (at + 8 <= list.length) {
+    final id = ascii.decode(list.sublist(at, at + 4), allowInvalid: true);
+    final size = b.getUint32(at + 4, Endian.little);
+    final end = min(at + 8 + size, list.length);
+    if (id == 'ICMT') {
+      var text = list.sublist(at + 8, end);
+      final zero = text.indexOf(0);
+      if (zero >= 0) text = text.sublist(0, zero);
+      return utf8.decode(text, allowMalformed: true);
+    }
+    at += 8 + size + (size & 1);
+  }
+  return null;
+}
+
+/// Puts [text] in [wav] as its transcript, in place of any before. Only
+/// for a WAV of [RecordingWriter]'s shape, its samples at byte 44.
+Future<void> setWavComment(File wav, String text) async {
+  // append: read and write, kept as it is; the position is set below
+  final f = await wav.open(mode: FileMode.append);
+  try {
+    final length = await f.length();
+    await f.setPosition(0);
+    final header = await f.read(44);
+    if (header.length < 44 || ascii.decode(header.sublist(36, 40)) != 'data') {
+      throw const FormatException('not a WAV of Recorder');
+    }
+    final h = ByteData.sublistView(header);
+    var data = h.getUint32(40, Endian.little);
+    if (data == 0 || data > length - 44) data = length - 44;
+    final end = 44 + data + (data & 1);
+
+    final t = [...utf8.encode(text), 0];
+    if (t.length.isOdd) t.add(0);
+    final chunk = BytesBuilder()
+      ..add(ascii.encode('LIST'))
+      ..add(_u32(4 + 8 + t.length))
+      ..add(ascii.encode('INFOICMT'))
+      ..add(_u32(t.length))
+      ..add(t);
+
+    await f.truncate(end);
+    await f.setPosition(end);
+    await f.writeFrom(chunk.takeBytes());
+    await f.setPosition(4);
+    await f.writeFrom(_u32(end + 20 + t.length - 8));
+    await f.setPosition(40);
+    await f.writeFrom(_u32(data));
+  } finally {
+    await f.close();
+  }
+}
+
+Uint8List _u32(int n) =>
+    (ByteData(4)..setUint32(0, n, Endian.little)).buffer.asUint8List();
+
+/// Moves the transcripts kept beside the recordings under [dir] (the
+/// '.txt' of [transcriptOf]) into the recordings themselves.
+Future<void> foldTranscripts(Directory dir) async {
+  if (!await dir.exists()) return;
+  await for (final e in dir.list(recursive: true)) {
+    if (e is! File || !e.path.endsWith('.wav')) continue;
+    final txt = transcriptOf(e);
+    try {
+      if (!await txt.exists()) continue;
+      await setWavComment(e, await txt.readAsString());
+      await txt.delete();
+    } catch (_) {} // left as it was, still read from there
+  }
 }
 
 /// A recording being written, as the sound comes in. The file is a valid
@@ -124,13 +236,27 @@ class RecordingWriter {
 /// with its transcript once it has one:
 ///
 ///     root/2026-10-15/2026-10-15 13-07-01.wav
-///     root/2026-10-15/2026-10-15 13-07-01.txt
 ///
-/// The folders are the whole state; [list] reads them back.
+/// The transcript is in the WAV ([wavComment]); the folders are the whole
+/// state, and [list] reads them back.
 class RecordingStore extends ChangeNotifier {
-  RecordingStore(this.root);
+  RecordingStore(this.root, {this.notes});
 
   final Directory root;
+
+  /// Where a transcript goes when its WAV cannot take it: a recording an
+  /// earlier install left in Recordings/Glaz, which this one may read but
+  /// not change. The app's own folder: lost with the app, but transcribing
+  /// again is all it takes. Null: such a transcript is not kept.
+  final Directory? notes;
+
+  File? _note(File wav) {
+    final n = notes;
+    if (n == null || !wav.path.startsWith('${root.path}/')) return null;
+    return transcriptOf(
+      File('${n.path}/${wav.path.substring(root.path.length + 1)}'),
+    );
+  }
 
   void refresh() => notifyListeners();
 
@@ -154,23 +280,44 @@ class RecordingStore extends ChangeNotifier {
         final f = await e.open();
         final header = await f.read(44);
         await f.close();
-        final txt = transcriptOf(e);
-        final transcript = await txt.exists() ? await txt.readAsString() : null;
-        out.add(Recording(e, at, wavLength(header, size), transcript));
+        out.add(
+          Recording(e, at, wavLength(header, size), await _transcript(e)),
+        );
       } catch (_) {}
     }
     out.sort((a, b) => b.at.compareTo(a.at));
     return out;
   }
 
+  /// In the WAV, else beside it (from before), else in [notes].
+  Future<String?> _transcript(File wav) async {
+    final inside = await wavComment(wav).catchError((_) => null);
+    if (inside != null) return inside;
+    for (final f in [transcriptOf(wav), _note(wav)]) {
+      if (f != null && await f.exists()) return f.readAsString();
+    }
+    return null;
+  }
+
   Future<void> saveTranscript(Recording r, String text) async {
-    await r.transcriptFile.writeAsString(text);
+    try {
+      await setWavComment(r.file, text);
+      final beside = transcriptOf(r.file);
+      if (await beside.exists()) await beside.delete();
+    } on FileSystemException {
+      final note = _note(r.file);
+      if (note == null) rethrow;
+      await note.parent.create(recursive: true);
+      await note.writeAsString(text);
+    }
     notifyListeners();
   }
 
   Future<void> delete(Recording r) async {
     await r.file.delete();
-    if (await r.transcriptFile.exists()) await r.transcriptFile.delete();
+    for (final f in [transcriptOf(r.file), _note(r.file)]) {
+      if (f != null && await f.exists()) await f.delete();
+    }
     final dir = r.file.parent;
     if (await dir.list().isEmpty) await dir.delete();
     notifyListeners();

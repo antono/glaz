@@ -61,7 +61,10 @@ class Services {
     final link = FrameLink();
     final dir = photoDir ?? await photoRoot();
     final recDir = recordingDir ?? await recordingRoot();
-    final recordings = RecordingStore(recDir);
+    final recordings = RecordingStore(
+      recDir,
+      notes: recordingDir == null ? await recordingNotes() : null,
+    );
     final photos = PhotoService(link, s, PhotoStore(dir));
     final transcripts = TranscriptService(recordings, s, Transcriber.platform);
     final services = Services._(

@@ -88,6 +88,76 @@ void main() {
     expect(wavLength(header, 44 + 137 * 8000), const Duration(seconds: 137));
   });
 
+  group('the transcript inside the WAV', () {
+    late Directory tmp;
+    setUp(() => tmp = Directory.systemTemp.createTempSync('glaz_wav'));
+    tearDown(() => tmp.deleteSync(recursive: true));
+
+    Future<File> wav(int bytes, {bool cut = false}) async {
+      final w = await RecordingWriter.open(File('${tmp.path}/a.wav'), 8000, 8);
+      w.add(List.filled(bytes, 1));
+      if (cut) {
+        await Future<void>.delayed(Duration.zero);
+        return w.file; // never closed: its header still says 0
+      }
+      await w.close();
+      return w.file;
+    }
+
+    test('kept, read back, replaced; the sound stays as it was', () async {
+      final f = await wav(137);
+      expect(await wavComment(f), isNull);
+      await setWavComment(f, 'Купить молоко');
+      expect(await wavComment(f), 'Купить молоко');
+      await setWavComment(f, 'short');
+      expect(await wavComment(f), 'short');
+      final bytes = f.readAsBytesSync();
+      final h = ByteData.sublistView(bytes);
+      // RIFF size is the file's, less 8; the samples untouched
+      expect(h.getUint32(4, Endian.little), bytes.length - 8);
+      expect(h.getUint32(40, Endian.little), 137);
+      expect(bytes.sublist(44, 44 + 137).every((b) => b == 129), isTrue);
+      expect(
+        wavLength(bytes.sublist(0, 44), bytes.length).inMicroseconds,
+        137 * 1000000 ~/ 8000,
+      );
+    });
+
+    test('a recording cut short takes one too', () async {
+      final f = await wav(100, cut: true);
+      await setWavComment(f, 'x');
+      expect(await wavComment(f), 'x');
+    });
+
+    test('a transcript beside its recording moves into it', () async {
+      final f = await wav(10);
+      await transcriptOf(f).writeAsString('beside');
+      await foldTranscripts(tmp);
+      expect(transcriptOf(f).existsSync(), isFalse);
+      expect(await wavComment(f), 'beside');
+    });
+  });
+
+  test('files move to the shared folder, empty folders go', () async {
+    final tmp = Directory.systemTemp.createTempSync('glaz_adopt');
+    final from = Directory('${tmp.path}/own');
+    final to = Directory('${tmp.path}/shared');
+    File('${from.path}/2026-10-18/a.jpg').createSync(recursive: true);
+    File('${from.path}/2026-10-18/b.jpg')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('new');
+    File('${to.path}/2026-10-18/b.jpg')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('already');
+    expect(await adoptInto(from, to, 'jpg'), 1);
+    expect(File('${to.path}/2026-10-18/a.jpg').existsSync(), isTrue);
+    // one already there is left alone, and so is its source
+    expect(File('${to.path}/2026-10-18/b.jpg').readAsStringSync(), 'already');
+    expect(File('${from.path}/2026-10-18/b.jpg').existsSync(), isTrue);
+    expect(await adoptInto(Directory('${tmp.path}/none'), to, 'jpg'), 0);
+    tmp.deleteSync(recursive: true);
+  });
+
   test('recordings go to the shared Recordings/Glaz', () {
     expect(
       sharedDir(

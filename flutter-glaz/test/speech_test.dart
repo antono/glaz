@@ -136,7 +136,7 @@ void main() {
       return (await store.list()).single;
     }
 
-    test('the text lands next to the sound, in the language set', () async {
+    test('the text lands in the sound, in the language set', () async {
       settings.speechLanguage = 'ru-RU';
       final t = FakeTranscriber(SpeechModel.downloadable);
       final service = TranscriptService(store, settings, t);
@@ -147,7 +147,7 @@ void main() {
       expect(t.language, 'ru-RU');
       expect(t.got, hasLength(2000));
       expect(t.got.first, 128, reason: 'WAV bytes as they are');
-      expect(r.transcriptFile.readAsStringSync(), '1 2 3');
+      expect(await wavComment(r.file), '1 2 3');
       expect((await store.list()).single.transcript, '1 2 3');
       expect(service.live, isEmpty);
     });
@@ -158,16 +158,17 @@ void main() {
       final r = await record(1000);
       await service.transcribe(r);
       expect(t.starts, 2);
-      expect(r.transcriptFile.readAsStringSync(), '1 2');
+      expect(await wavComment(r.file), '1 2');
     });
 
     test('deleting a recording deletes its transcript', () async {
       final service = TranscriptService(store, settings, FakeTranscriber());
       final r = await record(10);
       await service.transcribe(r);
-      expect(r.transcriptFile.existsSync(), isTrue);
+      expect(await wavComment(r.file), isNotNull);
       await store.delete(r);
-      expect(r.transcriptFile.existsSync(), isFalse);
+      expect(r.file.existsSync(), isFalse);
+      expect(transcriptOf(r.file).existsSync(), isFalse);
     });
 
     test('a language the phone does not have is an error', () async {
@@ -178,7 +179,7 @@ void main() {
       );
       final r = await record(10);
       await expectLater(service.transcribe(r), throwsStateError);
-      expect(r.transcriptFile.existsSync(), isFalse);
+      expect(await wavComment(r.file), isNull);
       expect(service.live, isEmpty);
     });
   });

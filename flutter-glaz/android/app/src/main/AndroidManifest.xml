@@ -13,8 +13,10 @@
     <!-- Photos go to the shared Pictures/Glaz so they outlive the app
          (lib/services/photo_dir.dart). Writing there needs nothing from
          Android 11 on; before it, the storage permissions below. Reading
-         back the photos of an earlier install needs READ_MEDIA_IMAGES. -->
+         back the photos of an earlier install needs READ_MEDIA_IMAGES, its
+         recordings in Recordings/Glaz READ_MEDIA_AUDIO. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"

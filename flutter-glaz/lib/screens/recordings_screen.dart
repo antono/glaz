@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 
+import '../services/photo_dir.dart';
 import '../services/recordings.dart';
 import '../services/services.dart';
+import '../widgets/media_access.dart';
 import '../widgets/recording.dart';
 import 'photos_screen.dart' show dayLabel;
 
@@ -145,6 +147,15 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
         // start and stop from here too; red with the time while recording
         final children = <Widget>[
           const Padding(padding: EdgeInsets.only(top: 16), child: RecordRow()),
+          MediaAccess(
+            check: recordingAccess,
+            icon: Icons.library_music_outlined,
+            title: 'Show older recordings',
+            why:
+                'Recordings from an earlier install of the app stay in '
+                'Recordings/Glaz. Allow access to see them here too.',
+            onGranted: Services.instance.recorder.store.refresh,
+          ),
         ];
         DateTime? day;
         for (final r in all) {

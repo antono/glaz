@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/photo_dir.dart';
 import '../services/photos.dart';
 import '../services/services.dart';
+import '../widgets/media_access.dart';
 
 const _months = [
   'January',
@@ -78,7 +79,17 @@ class _PhotosScreenState extends State<PhotosScreen> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               sliver: SliverMainAxisGroup(
                 slivers: [
-                  SliverToBoxAdapter(child: _Access(onGranted: _store.refresh)),
+                  SliverToBoxAdapter(
+                    child: MediaAccess(
+                      check: photoAccess,
+                      icon: Icons.photo_library_outlined,
+                      title: 'Show older photos',
+                      why:
+                          'Photos from an earlier install of the app stay in '
+                          'Pictures/Glaz. Allow access to see them here too.',
+                      onGranted: _store.refresh,
+                    ),
+                  ),
                   if (days.isEmpty) const SliverToBoxAdapter(child: _Empty()),
                   for (final day in days) ..._day(context, day, now),
                 ],
@@ -127,49 +138,6 @@ class _PhotosScreenState extends State<PhotosScreen> {
 /// Photos from an earlier install of the app stay in Pictures/Glaz, but
 /// reading them takes the photos permission; this asks for it. Nothing is
 /// shown once it is granted, or where it does not apply.
-class _Access extends StatefulWidget {
-  const _Access({required this.onGranted});
-  final VoidCallback onGranted;
-
-  @override
-  State<_Access> createState() => _AccessState();
-}
-
-class _AccessState extends State<_Access> {
-  late Future<bool> _granted = photoAccess();
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _granted,
-      builder: (context, snap) {
-        if (snap.data != false) return const SizedBox.shrink();
-        return Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Card(
-            child: ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Show older photos'),
-              subtitle: const Text(
-                'Photos from an earlier install of the app stay in '
-                'Pictures/Glaz. Allow access to see them here too.',
-              ),
-              trailing: TextButton(
-                onPressed: () async {
-                  final ok = await photoAccess(request: true);
-                  setState(() => _granted = Future.value(ok));
-                  if (ok) widget.onGranted();
-                },
-                child: const Text('Allow'),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
 class _Empty extends StatelessWidget {
   const _Empty();
 

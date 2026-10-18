@@ -508,6 +508,19 @@ On Android `photos/` is the shared `Pictures/Glaz`, so the photos outlive the
 app and show in the phone's gallery; elsewhere it is the app's own documents
 folder (`flutter-glaz/lib/services/photo_dir.dart`).
 
+**Shared folders take one kind of file.** From Android 11 an app may create
+only images in `Pictures/` and only sound in `Recordings/`; anything else
+fails. The app checks that it can write there with a probe file, and up to
+2.14.0 the probe had no extension: it always failed, so every photo and
+recording went to the app's own folder instead -- and went with the app on
+an uninstall, settings too. The probe now has the folder's extension, and
+on start whatever is still in the app's own folder moves to the shared one.
+Reading what an earlier install left there takes the media permission:
+photos `READ_MEDIA_IMAGES`, recordings `READ_MEDIA_AUDIO`; each tab asks
+for it (*Allow*). The settings and the assistant's key are not in a shared
+folder and still go with an uninstall: update with `adb install -r`, never
+`flutter install`, which uninstalls first.
+
 A photo with the same `series` as the previous one, less than 10 minutes
 after it, goes into the same folder; anything else starts a new one. The
 counter lives on the glasses and restarts at 1 when they do, so the gap is
@@ -538,7 +551,16 @@ recordings/2026-10-15/2026-10-15 13-07-01.wav   by time started
 ```
 
 On Android `recordings/` is the shared `Recordings/Glaz`. The Voice tab lists
-them by day and plays them. The Recordings service (Services) turns saving
+them by day and plays them.
+
+A recording's transcript is **inside its WAV**, after the samples: a
+`LIST` chunk of type `INFO` holding `ICMT`, UTF-8 with a zero at the end,
+the standard place for a comment. `Recordings/` takes no `.txt`, and an
+app cannot read another install's text files at all, but it can read its
+sound. So a transcript outlives the app with its recording. The `.txt`
+beside a recording, where transcripts were kept before, is still read and
+is moved into the WAV on start. A recording this install did not make
+cannot be changed: a new transcript for it goes to the app's own folder. The Recordings service (Services) turns saving
 off.
 
 **From the phone.** The Remote tab's record button sends `MODULE_CALL`
