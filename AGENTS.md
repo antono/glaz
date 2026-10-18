@@ -17,6 +17,8 @@ The glasses run Lua; a laptop talks to them over Bluetooth using Python.
   states, input and design notes.
 - [`docs/BATTERY.md`](docs/BATTERY.md) — battery drain measurements and
   where the power goes.
+- [`docs/HERMES.md`](docs/HERMES.md) — connecting the Assistant to Hermes
+  Agent: its API server, and Tailscale serve, tailnet HTTP or funnel.
 
 ## Layout
 

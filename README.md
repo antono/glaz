@@ -218,6 +218,8 @@ rebuild.
   what can and cannot be bricked.
 - [docs/FIRMWARE.md](docs/FIRMWARE.md): the extended firmware.
 - [docs/BATTERY.md](docs/BATTERY.md): where the battery goes.
+- [docs/HERMES.md](docs/HERMES.md): connecting the Assistant to Hermes
+  Agent, over Tailscale.
 - [flutter-glaz/README.md](flutter-glaz/README.md): the phone app.
 - [AGENTS.md](AGENTS.md): the rules for contributing (also used by coding
   agents).
