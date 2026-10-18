@@ -32,8 +32,12 @@
 --   single -- select: run the item under the cursor, or enter a submenu;
 --             on the blank screen, return to the last module
 --   double -- back, one level up: module -> its menu level -> parent menu
---             -> ... -> root -> blank
---   triple -- toggle the menu, from any state. Hiding it returns to the root.
+--             -> ... -> root -> blank; on the blank screen, open the menu
+--             at the root. Two taps also wake the glasses (the firmware
+--             sends them back to sleep after one), into the last module,
+--             or the menu when there is none.
+--   triple -- deep sleep, from any state. The phone's remote sends a triple
+--             for its Menu button, and that one still toggles the menu.
 -- One meaning per count, everywhere. A single tap elsewhere is harmless: it
 -- flashes the banner when idle and nothing was launched yet, and keeps an
 -- 'app' module alive.
@@ -160,8 +164,9 @@ local INFO_TIMEOUT    = 5     -- seconds an 'info' module stays on screen
 local APP_TIMEOUT     = 60    -- seconds of inactivity before closing an 'app'
 local SLEEP_AFTER     = 30    -- idle seconds before parking in frame.sleep()
                               -- (never while a module runs in the background)
--- What the accelerometer wakes the glasses with: the firmware's defaults,
--- the ones known to wake them with one tap. See docs/FIRMWARE.md.
+-- What the accelerometer wakes the glasses with: the firmware's defaults.
+-- A tap wakes the nRF; since firmware glaz it then takes a second
+-- one for the glasses to stay awake. See docs/FIRMWARE.md.
 local WAKE_TAPS = { threshold = 7, quiet = 0, duration = 0, latch = true,
                     axes = 0x08, rate = 256 }
 
@@ -188,7 +193,7 @@ local SPLASH_SECONDS  = 3
 -- Tap tuning
 local TAP_BOUNCE = 0.15  -- taps closer than this are sensor bounce, not input
 local TAP_WINDOW = 0.75  -- max gap between taps belonging to one multi-tap
-local TAP_TOGGLE = 3     -- taps required to toggle the menu
+local TAP_TOGGLE = 3     -- taps that fire at once: sleep, or the remote's Menu
 
 -- Layout. Display is 640x400. x=1 is clipped, so nothing starts left of
 -- LEFT_X. A row is 55px. The breadcrumb sits above the list, close to the
@@ -387,6 +392,39 @@ local function load_module(id)
     mod.host = host_api(name)
     mods[id] = mod
     return mod
+  end
+  return nil
+end
+
+-- The last module, kept across deep sleep. Waking is a reset, so `last`
+-- is gone by then: its file name goes into LAST_FILE on the way into
+-- frame.sleep(), and the boot after a two-tap wake reads it and deletes it.
+-- A name, not an id: ids are positions in the menu as built.
+local LAST_FILE = 'last.txt'
+
+local function save_last(id)
+  pcall(frame.file.remove, LAST_FILE)
+  local name = id and names[id]
+  if not name then return end
+  pcall(function()
+    local fh = frame.file.open(LAST_FILE, 'write')
+    fh:write(name)
+    fh:close()
+  end)
+end
+
+-- the id of the module saved by save_last(), or nil; the file goes either way
+local function take_last()
+  local ok, name = pcall(function()
+    local fh = frame.file.open(LAST_FILE, 'read')
+    local text = fh:read()
+    fh:close()
+    return text
+  end)
+  pcall(frame.file.remove, LAST_FILE)
+  if not ok or not name then return nil end
+  for id, n in pairs(names) do
+    if n == name and paths[id] and load_module(id) then return id end
   end
   return nil
 end
@@ -1029,7 +1067,11 @@ end
 function app_loop()
   release_hardware()
 
-  draw_splash()
+  -- Woken by two taps (firmware glaz): carry on with the last module, or
+  -- the menu at the root when there was none. Otherwise the banner.
+  local woke = frame.imu.woke_by_tap and frame.imu.woke_by_tap()
+  local resume = take_last()   -- always, so a stale file never lingers
+  if not woke then draw_splash() end
 
   -- the host waits for this line on await_print
   print('Frame app is running')
@@ -1041,11 +1083,16 @@ function app_loop()
   -- first message immediately after start_frame_app() returns, and the loop
   -- has to stay responsive. render() is deliberately NOT called here -- in
   -- IDLE it would blank the screen and the banner would never be seen.
-  local splash_until = frame.time.utc() + SPLASH_SECONDS
+  local splash_until = woke and 0 or frame.time.utc() + SPLASH_SECONDS
 
   -- Start the idle clock now. Left at 0 it would already be older than
   -- SLEEP_AFTER, and the app would park itself the moment it booted.
   last_act = frame.time.utc()
+  if woke and resume then
+    run_module(resume)
+  elseif woke then
+    open_menu(true)
+  end
 
   local next_imu = 0   -- utc() of the next orientation sample
   local next_app = 0   -- utc() of the next 'app' module refresh
@@ -1312,11 +1359,20 @@ function app_loop()
         else
           tap_mute = now + TAP_WINDOW
           notice = nil   -- whatever comes next replaces it
-          -- The menu must ALWAYS be reachable, from every state.
-          if visible then
-            close_menu()
+          if tap_remote then
+            -- the remote's Menu button: show or hide the menu
+            if visible then
+              close_menu()
+            else
+              open_menu(not running)
+            end
           else
-            open_menu(not running)
+            -- Three taps on the arm: sleep, from any state. The deep-sleep
+            -- branch below only runs with nothing on screen, so clear it
+            -- here; it then stops a background module too, as Sleep does.
+            if running then stop_app(true, true) end
+            if visible then close_menu() end
+            sleep_requested = true
           end
         end
 
@@ -1330,9 +1386,9 @@ function app_loop()
           n = 0   -- trailing taps of a toggle mean nothing
         end
 
-        -- the phone's remote in front: of the wearer's taps only the one
-        -- waking a blank screen counts (the triple is taken above)
-        if hands_off and not tap_remote and (n ~= 1 or visible or running) then
+        -- the phone's remote in front: of the wearer's taps only one or two
+        -- on a blank screen count (the triple is taken above)
+        if hands_off and not tap_remote and (n > 2 or visible or running) then
           n = 0
         end
 
@@ -1365,11 +1421,15 @@ function app_loop()
             run_at = now     -- a tap keeps an 'app' module alive
           end
         elseif n == 2 then
-          -- back, one level up: module -> its level -> parent -> blank
+          -- back, one level up: module -> its level -> parent -> blank;
+          -- from the blank screen, the menu at the root
           if running then
             open_menu()   -- the module leaves the screen first
           elseif visible then
             menu_back()
+          else
+            splash_until = 0
+            open_menu(true)
           end
         end
       end
@@ -1509,6 +1569,7 @@ function app_loop()
         -- wake-up line where no tap can move it. Stock firmware has no
         -- tap_config, and needs neither.
         if frame.imu.tap_config then pcall(frame.imu.tap_config, WAKE_TAPS) end
+        save_last(last)
         frame.sleep()
 
         local woke = frame.time.utc()
@@ -1516,11 +1577,13 @@ function app_loop()
         armed, roll_dir, roll_hold = 0, 0, 0
         last_act = woke
 
-        -- Waking is a request to carry on: the last module comes back, as a
-        -- tap on the blank screen would bring it, or the menu (at the root)
-        -- when nothing was launched yet.
+        -- Only with the firmware's stay_awake does frame.sleep() return;
+        -- otherwise waking is a reset, and the boot carries on (see
+        -- woke_by_tap at the top of app_loop). Here too: the last module,
+        -- or the menu at the root.
+        save_last(nil)
         splash_until = 0
-        if last then run_module(last) else open_menu() end
+        if last then run_module(last) else open_menu(true) end
 
       else
         frame.sleep(IDLE_PERIOD)

@@ -428,10 +428,10 @@ class FrameLink extends ChangeNotifier {
     return job;
   }
 
-  /// Whether the wearer's own gestures are off but the triple tap and a tap
-  /// waking a blank screen, while the remote is in front (docs/PROTOCOL.md,
-  /// "Remote"). Sent again on every connect; the glasses drop it themselves
-  /// when the link goes.
+  /// Whether the wearer's own gestures are off but the triple tap (sleep)
+  /// and one or two taps on a blank screen, while the remote is in front
+  /// (docs/PROTOCOL.md, "Remote"). Sent again on every connect; the glasses
+  /// drop it themselves when the link goes.
   bool get remoteHandsOff => _handsOff;
   bool _handsOff = false;
   set remoteHandsOff(bool on) {

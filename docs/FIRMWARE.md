@@ -135,12 +135,51 @@ frame has stopped ringing from the tap that sent it to sleep. So waking no
 longer depends on what the Lua app remembers to do. Build
 `v26.289.1613-stable`.
 
-Rule: **every firmware of ours is built from `okulo/stable`**, and a fix goes
-in as a branch merged into it, never as a branch off upstream `main` alone.
+Rule: **every firmware of ours is built from branch `glaz`** in
+`antono/frame-codebase`, and a fix goes in as a branch merged into it,
+never as a branch off upstream `main` alone. `glaz` is `okulo/stable` with
+`okulo/double-tap-wake` and `okulo/file-space` (`frame.file.space()`)
+merged in; the `okulo/*` branches stay as history. Builds carry the suffix
+`-glaz`, the first one `v26.291.1045-glaz`.
 
 Also worth knowing: `frame.sleep()` with no argument is System OFF, and waking
 from it is a **reset**. Nothing after `frame.sleep()` in Lua runs; the glasses
 boot and `require('main')` again.
+
+### Two taps to wake
+
+One tap woke the glasses too often by accident: a bag, a table, putting
+them on. Branch `okulo/double-tap-wake`, merged into `glaz`, asks
+for two. The MC6470 cannot count taps, and an nRF in System OFF cannot run
+code, so it is done in two steps:
+
+1. Going to sleep with tap wakeup, `system_off()` (`main.c`) leaves the mark
+   `0x5A` in `GPREGRET2`. That register survives System OFF; only power-on
+   and brownout clear it. The bootloader reads `GPREGRET2` only for `0xA9`
+   in its masked bits, which `0x5A` never matches.
+2. The first tap wakes the nRF, which is a reset. Early in
+   `hardware_setup()`, before the PMIC rails, FPGA, display or Bluetooth,
+   the mark is read and cleared. If it was there and the glasses are not
+   charging, `imu_wait_for_second_tap()` (`imu.c`) reads the accelerometer's
+   status register `0x03` every 10 ms for 900 ms. Hits in the first 150 ms
+   are the frame ringing from the first tap and do not count. No second
+   tap: `system_off(true)`, straight back to sleep with the mark set again.
+
+The bootloader skips its CRC check when waking from System OFF
+(`NRF_BL_APP_CRC_CHECK_SKIPPED_ON_SYSTEMOFF_RESET`), so the wait starts soon
+after the first tap. The bootloader also clears `RESETREAS.OFF` there, which
+is why the mark is in `GPREGRET2` rather than read from the reset reason.
+
+In the charging case the wait is skipped and the case logic decides, as
+before. `frame.imu.woke_by_tap()` tells Lua that this boot was a two-tap
+wake; the app then brings back the last module (or the menu) instead of
+showing the banner.
+
+Still to measure on the device: how long the first tap takes to reach
+`imu_wait_for_second_tap()`. While the first tap is latched, a second one is
+ignored (`TAP_LATCH`), so a very quick double tap, inside the boot time,
+counts as one. If that happens, shorten `WAKE_TAP_MUTE_MS` or turn the latch
+off before sleeping.
 
 ---
 
@@ -203,7 +242,7 @@ Three things about this that cost time to work out:
   FHS environment, with the version the hex was built with:
 
   ```bash
-  V=$(TZ= date +v%y.%j.%H%M)-stable   # suffix: anything after it is custom
+  V=$(TZ= date +v%y.%j.%H%M)-glaz     # suffix: anything after it is custom
   make application BUILD_VERSION=$V
   NIXPKGS_ALLOW_UNFREE=1 nix run --impure nixpkgs#steam-run -- \
     ~/.nrfutil/bin/nrfutil-nrf5sdk-tools pkg generate \
@@ -314,3 +353,14 @@ glasses physically opened. This branch touches neither the bootloader nor the
 FPGA bitstream.
 
 Reverting is re-flashing the official release `.zip`.
+
+---
+
+## TODO
+
+- **Which side was tapped.** `lua_imu_tap_callback_handler()` (`imu.c`)
+  reads status register `0x03` only to clear the interrupt and throws the
+  value away. If that register holds per-axis, per-sign tap bits (check the
+  datasheet), pass it to the Lua callback and widen `axes` beyond `0x08`
+  (-Y). Taps on the left arm, the right arm and the front would then be
+  three different buttons, without counting taps.

@@ -96,8 +96,8 @@ exit path, for both kinds; a sleeping module leaves through `stop_app()`, and
 every stop goes through `quit()`:
 
 - the `INFO_TIMEOUT` / `APP_TIMEOUT` timeouts;
-- the menu opening over the module (a double or triple tap, or the host's
-  `MENU_SHOW`);
+- the menu opening over the module (a double tap, the remote's Menu, or
+  the host's `MENU_SHOW`);
 - the host replacing the menu with `MENU_SET`;
 - deep sleep;
 - the host's break signal.
@@ -127,8 +127,8 @@ hardware.
 
 Each returns the text to show (`nil` keeps the current text) and, optionally,
 `true` as a second value meaning "done": the module is stopped — even a
-background one — and the menu comes back. Double and triple taps are never passed to a module, so back and
-menu always work. `modules/brightness.lua` is the example: tilt previews a
+background one — and the menu comes back. Double and triple taps are never
+passed to a module, so back and sleep always work. `modules/brightness.lua` is the example: tilt previews a
 level, a single tap keeps it, a double tap cancels.
 
 ```lua
@@ -192,26 +192,28 @@ Each tap count means one thing everywhere:
 | Taps | Meaning |
 | --- | --- |
 | **1** | select — run the item under the cursor, or enter the submenu; on the blank screen, back to the last module |
-| **2** | back — one level up: module → its submenu → parent → … → root → blank |
-| **3** | menu — open or hide it, from any state |
+| **2** | back — one level up: module → its submenu → parent → … → root → blank; on the blank screen, the menu; asleep, wake into the last module (or the menu) |
+| **3** | sleep — deep sleep, from any state |
 
 ```
-              triple tap / MENU_SHOW
+              double tap / MENU_SHOW
         IDLE ─────────────────────────> MENU
           ▲  <─────────────────────────  │  ▲
-          │   double tap, triple tap,    │  │ double tap,
-          │   10s timeout                │  │ triple tap,
+          │   double tap at the root,    │  │
+          │   10s timeout                │  │ double tap
           │                       single │  │
           │ 5s info / 60s app     tap    ▼  │
           └──────────────────────────── RUNNING
             timeout
+
+        any state ── triple tap ──> SLEEP ── double tap ──> last module, or MENU
 ```
 
 | State | Display | 1 tap | 2 taps | 3 taps | Tilt |
 | --- | --- | --- | --- | --- | --- |
-| **IDLE** | blank | last module, or the banner if none yet | — | menu | not polled |
-| **MENU** | one level of the tree | launch / enter | up a level, hide at root | hide | scrolls |
-| **RUNNING** | the module | `on_tap()`, else keep `app` alive | back to menu (background modules keep running) | menu | `on_roll()` only, never leaves |
+| **IDLE** | blank | last module, or the banner if none yet | menu, at the root | sleep | not polled |
+| **MENU** | one level of the tree | launch / enter | up a level, hide at root | sleep | scrolls |
+| **RUNNING** | the module | `on_tap()`, else keep `app` alive | back to menu (background modules keep running) | sleep | `on_roll()` only, never leaves |
 
 Returning to the menu leaves the cursor on the module just closed, so it can
 be run again with a single tap. Each level keeps its own cursor, so going up
@@ -223,14 +225,30 @@ started afresh. The breadcrumb shows its full path, and a double tap from it
 lands in its submenu. Before anything was launched, the tap flashes the
 banner instead.
 
-**Waking from deep sleep carries on the same way**: the last module comes
-back, or the menu at the root when nothing was launched yet. The waking tap
-itself is not counted (see the deep-sleep branch in `frame_app.lua`).
+**Two taps wake the glasses and carry on**: the last module comes back, as
+a tap on the blank screen would bring it, or the menu at the root when
+nothing was launched yet. One tap is not enough: it woke them far too
+often by accident. The accelerometer cannot count taps, so the first wakes
+the nRF and the firmware waits up to about 0.9 s for the second, before
+anything else is powered; without it, straight back to sleep (firmware
+`glaz`, docs/FIRMWARE.md). Waking is a reset, so the app writes the last
+module's file name to `last.txt` on the way into `frame.sleep()`; the boot
+reads and deletes it, and on `frame.imu.woke_by_tap()` runs that module
+instead of showing the banner. Modules with `resume = false` (Sleep) are
+never the last one. On older firmware one tap wakes them and the banner
+shows.
 
-**Opening the menu from a blank screen starts at the root** — triple tap or
+**Three taps put the glasses to sleep**, from any state: the module on
+screen stops, the menu closes, a background module is stopped too (as the
+Sleep module does, without its warning), and the device parks in
+`frame.sleep()` -- with a phone connected as well. The remote's Menu button
+also sends a triple, and that one still shows or hides the menu: only taps
+on the arm mean sleep.
+
+**Opening the menu from a blank screen starts at the root** — double tap or
 `MENU_SHOW`, whether the screen went blank by hiding the menu, a timeout or
-deep sleep. Out of a running module (double or triple tap) the menu opens at
-the level the module was launched from.
+deep sleep. Out of a running module (double tap) the menu opens at the level
+the module was launched from.
 
 ### Breadcrumbs
 
@@ -278,7 +296,7 @@ Three tap constants do the work:
 ```lua
 local TAP_BOUNCE = 0.15  -- closer than this is sensor bounce, not input
 local TAP_WINDOW = 0.5   -- max gap between taps of one multi-tap
-local TAP_TOGGLE = 3     -- taps required to toggle the menu
+local TAP_TOGGLE = 3     -- taps that fire at once: sleep, or the remote's Menu
 ```
 
 `TAP_BOUNCE` exists because it was measured: a single physical tap fired the
@@ -324,7 +342,7 @@ which splits long messages into MTU-sized packets and reassembles them.
 | `0x2C` | `PHOTO_TAKE` | `>I2B`: size in px (square, even, 100..720), JPEG quality 1 very low .. 5 very high — the remote's photo; see [Remote](#remote) |
 | `0x2D` | `MODULE_CALL` | text, `module` `\n` `arg`: calls that module's `remote(arg)` — the remote's record button is `recorder\non` / `recorder\noff`; see [Recorder](#recorder) |
 | `0x2F` | `APP_OPEN` | text, `module`, optionally `\n` `arg`: puts that module on screen as if picked in the menu; `arg` goes to its `start()`, or to `remote(arg)` if it is not started again -- on screen already or back from the background; see [Assistant](#assistant) |
-| `0x2E` | `HANDS_OFF` | `[1]`: the remote is in front, the wearer's own gestures are off but a triple tap and a tap waking a blank screen; `[0]`: all back; see [Remote](#remote) |
+| `0x2E` | `HANDS_OFF` | `[1]`: the remote is in front, the wearer's own gestures are off but a triple tap (sleep) and one or two taps on a blank screen; `[0]`: all back; see [Remote](#remote) |
 
 `MENU_SET` is an **override**: it replaces the module-defined menu with
 host-supplied labels and resets the cursor. Those items have no module behind
@@ -333,7 +351,7 @@ them, so picking one only notifies the host — nothing runs on the glasses.
 Whether it also opens the menu depends on the current state:
 
 - **IDLE** — items load silently, the display stays blank. The user opens the
-  menu with a triple tap. Use `MENU_SHOW` to force it open.
+  menu with a double tap. Use `MENU_SHOW` to force it open.
 - **MENU** — the menu stays on screen. This is what makes **nested menus**
   work: the host answers `MENU_SELECT` with another `MENU_SET`, and the new
   level appears without a flicker through IDLE.
@@ -696,7 +714,7 @@ wearer's own gesture, through the same code:
 | down, right | `[2, 1]` | a tilt toward the right shoulder: next item |
 | OK | `[1, 1]` | a single tap: select, or bring back the last app |
 | Back | `[1, 2]` | a double tap |
-| Menu | `[1, 3]` | a triple tap: show or hide the menu |
+| Menu | `[1, 3]` | show or hide the menu (a triple on the arm is sleep instead) |
 
 Taps go into the tap counter as a finished gesture, classified at once
 (no waiting out the multi-tap window), and do not fall under the mute that
@@ -707,9 +725,9 @@ it does nothing. Either counts as activity, keeping the menu or an app up.
 **While the Remote tab is in front** the phone sends `HANDS_OFF` `[1]`, so
 the glasses do not also react to the wearer's head and fingers: tilts are
 not read (the IMU is not polled), raw hits do not reach `on_hit`, and taps
-on the arm count only as a triple tap -- the menu, always reachable -- or as
-a single tap on a blank screen: waking it, bringing back the last app or
-dismissing a notification. Taps from the remote work as before. Leaving the
+on the arm count only as a triple tap -- sleep, always reachable -- or as
+one or two taps on a blank screen: bringing back the last app, opening the
+menu or dismissing a notification. Taps from the remote work as before. Leaving the
 tab, or the app leaving the screen, sends `[0]`; the phone sends `[1]` again
 on every connect while the tab is open. The glasses drop it themselves the
 moment Bluetooth goes, so a lost phone never leaves them deaf. The user can

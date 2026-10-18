@@ -30,8 +30,8 @@ class AppSettingsScreen extends StatelessWidget {
               title: const Text('Glasses gestures off'),
               subtitle: const Text(
                 'While the Remote tab is open, the glasses ignore tilts and '
-                'taps on the arm, except a triple tap for the menu and a '
-                'tap that wakes a blank screen.',
+                'taps on the arm, except a triple tap to sleep and one or '
+                'two taps on a blank screen.',
               ),
               value: settings.remoteHandsOff,
               onChanged: (on) => settings.remoteHandsOff = on,

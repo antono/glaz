@@ -29,7 +29,7 @@ class Settings extends ChangeNotifier {
   void setLocAllowed(String module, bool on) => _set('loc.$module', on);
 
   /// Whether the Remote tab, while in front, turns the wearer's own gestures
-  /// off but the triple tap and a waking tap.
+  /// off but the triple tap (sleep) and one or two taps on a blank screen.
   bool get remoteHandsOff => _prefs.getBool('remote.handsOff') ?? true;
   set remoteHandsOff(bool on) => _set('remote.handsOff', on);
 
