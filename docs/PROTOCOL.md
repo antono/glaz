@@ -223,6 +223,10 @@ started afresh. The breadcrumb shows its full path, and a double tap from it
 lands in its submenu. Before anything was launched, the tap flashes the
 banner instead.
 
+**Waking from deep sleep carries on the same way**: the last module comes
+back, or the menu at the root when nothing was launched yet. The waking tap
+itself is not counted (see the deep-sleep branch in `frame_app.lua`).
+
 **Opening the menu from a blank screen starts at the root** — triple tap or
 `MENU_SHOW`, whether the screen went blank by hiding the menu, a timeout or
 deep sleep. Out of a running module (double or triple tap) the menu opens at

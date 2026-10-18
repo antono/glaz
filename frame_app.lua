@@ -1516,8 +1516,11 @@ function app_loop()
         armed, roll_dir, roll_hold = 0, 0, 0
         last_act = woke
 
-        draw_splash()
-        splash_until = frame.time.utc() + SPLASH_SECONDS
+        -- Waking is a request to carry on: the last module comes back, as a
+        -- tap on the blank screen would bring it, or the menu (at the root)
+        -- when nothing was launched yet.
+        splash_until = 0
+        if last then run_module(last) else open_menu() end
 
       else
         frame.sleep(IDLE_PERIOD)
