@@ -15,8 +15,22 @@ local FILE_DATA = 0x1E    -- [0x1E, id, more, bytes...] a file's contents
 -- goes, so it stops here.
 local FILE_MAX  = 64 * 1024
 
+-- The root's listing ends with 's\tfree\ttotal', the file system's bytes,
+-- where the firmware can tell: frame.file.space() is ours (firmware glaz),
+-- stock firmware has none, and then the line is not there. A phone that
+-- does not know the line skips it, as any line it does not know.
+local function space()
+  if not frame.file.space then return nil end
+  local ok, s = pcall(frame.file.space)
+  if not ok or type(s) ~= 'table' or not s.free or not s.total then
+    return nil
+  end
+  return 's\t' .. math.floor(s.free) .. '\t' .. math.floor(s.total)
+end
+
 local function listing(id, path, host)
-  local ok, entries = pcall(frame.file.listdir, path == '' and '/' or path)
+  local root = path == '' or path == '/'
+  local ok, entries = pcall(frame.file.listdir, root and '/' or path)
   if ok and type(entries) == 'table' then
     local out = {}
     for _, e in ipairs(entries) do
@@ -26,6 +40,7 @@ local function listing(id, path, host)
                         or ('f\t' .. e.size .. '\t' .. e.name)
       end
     end
+    if root then out[#out + 1] = space() end
     host.send_chunks(FILES, id, '+' .. table.concat(out, '\n'))
   else
     host.send_chunks(FILES, id, '-' .. tostring(entries))

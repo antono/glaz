@@ -15,6 +15,16 @@ class GlassesEntry {
   final bool folder;
 }
 
+/// A folder on the glasses: what is in it, and for the root, how much of
+/// the file system is free, when their firmware can tell (null with stock
+/// firmware, which has no frame.file.space()).
+class GlassesFolder {
+  const GlassesFolder(this.entries, {this.free, this.total});
+  final List<GlassesEntry> entries;
+  final int? free;
+  final int? total;
+}
+
 /// Looks at the files on the glasses while their app runs: FILES_GET and
 /// FILE_GET ask, FILES and FILE_DATA answer in packets (docs/PROTOCOL.md,
 /// "Files"). The first byte of an answer is '+', or '-' and why.
@@ -85,7 +95,7 @@ class GlassesFiles {
   }
 
   /// Folders first, then files, each by name. [path] '' is the root.
-  Future<List<GlassesEntry>> list(String path) async => parseListing(
+  Future<GlassesFolder> list(String path) async => parseListing(
     utf8.decode(
       await _ask(filesGet, files, path, listTimeout),
       allowMalformed: true,
@@ -96,13 +106,18 @@ class GlassesFiles {
       _ask(fileGet, fileData, path, readTimeout);
 }
 
-/// 'd\tname' and 'f\tsize\tname' lines.
+/// 'd\tname' and 'f\tsize\tname' lines, and for the root 's\tfree\ttotal'
+/// where the firmware can tell; any other line is skipped.
 @visibleForTesting
-List<GlassesEntry> parseListing(String text) {
+GlassesFolder parseListing(String text) {
   final out = <GlassesEntry>[];
+  int? free, total;
   for (final line in const LineSplitter().convert(text)) {
     final f = line.split('\t');
-    if (f.length == 2 && f[0] == 'd') {
+    if (f.length == 3 && f[0] == 's') {
+      free = int.tryParse(f[1]);
+      total = int.tryParse(f[2]);
+    } else if (f.length == 2 && f[0] == 'd') {
       out.add(GlassesEntry(f[1], folder: true));
     } else if (f.length >= 3 && f[0] == 'f') {
       out.add(GlassesEntry(f.sublist(2).join('\t'), size: int.tryParse(f[1])));
@@ -113,5 +128,5 @@ List<GlassesEntry> parseListing(String text) {
         ? (a.folder ? -1 : 1)
         : a.name.toLowerCase().compareTo(b.name.toLowerCase()),
   );
-  return out;
+  return GlassesFolder(out, free: free, total: total);
 }

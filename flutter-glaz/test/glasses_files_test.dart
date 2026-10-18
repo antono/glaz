@@ -7,10 +7,23 @@ import 'package:glaz/services/glasses_files.dart';
 
 void main() {
   test('a listing: folders first, then files by name, with sizes', () {
-    final list = parseListing('f\t137\tmain.lua\nd\tphotos\nf\t12\tabout.lua');
+    final folder = parseListing(
+      'f\t137\tmain.lua\nd\tphotos\nf\t12\tabout.lua',
+    );
+    final list = folder.entries;
     expect(list.map((e) => e.name), ['photos', 'about.lua', 'main.lua']);
     expect(list.first.folder, isTrue);
     expect(list.last.size, 137);
+    // stock firmware: nothing said about space
+    expect(folder.free, isNull);
+    expect(folder.total, isNull);
+  });
+
+  test('the root says how much is free, where the firmware can tell', () {
+    final folder = parseListing('f\t137\tmain.lua\ns\t122880\t270336');
+    expect(folder.entries.map((e) => e.name), ['main.lua']);
+    expect(folder.free, 122880);
+    expect(folder.total, 270336);
   });
 
   test('an answer in packets is put back together', () async {

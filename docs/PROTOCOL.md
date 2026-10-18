@@ -713,7 +713,12 @@ Glasses > Files) -- the REPL is blocked then, so `frame_app.lua` answers:
 
 - `FILES_GET` (`0x29`), `[id]` and a path, `''` for the root, is answered
   with `FILES` (`0x1D`): one line per entry, `d\tname` for a folder,
-  `f\tsize\tname` for a file; `.` and `..` left out.
+  `f\tsize\tname` for a file; `.` and `..` left out. The root's listing
+  ends with `s\tfree\ttotal`, the file system's bytes, where the firmware
+  can tell: `frame.file.space()` is in our firmware (`glaz`), not in stock
+  firmware, and there the line is simply missing. The phone shows the
+  free space only when the line is there, and skips any line it does not
+  know, so neither side has to match the other's version.
 - `FILE_GET` (`0x2A`), `[id]` and a path, is answered with `FILE_DATA`
   (`0x1E`): the file's text.
 

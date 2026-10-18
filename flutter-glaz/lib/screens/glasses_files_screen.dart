@@ -24,10 +24,9 @@ class GlassesFilesScreen extends StatefulWidget {
 }
 
 class _GlassesFilesScreenState extends State<GlassesFilesScreen> {
-  late Future<List<GlassesEntry>> _listing = _load();
+  late Future<GlassesFolder> _listing = _load();
 
-  Future<List<GlassesEntry>> _load() =>
-      Services.instance.files.list(widget.path);
+  Future<GlassesFolder> _load() => Services.instance.files.list(widget.path);
 
   String _child(String name) =>
       widget.path.isEmpty ? name : '${widget.path}/$name';
@@ -45,7 +44,7 @@ class _GlassesFilesScreenState extends State<GlassesFilesScreen> {
           ),
         ],
       ),
-      body: FutureBuilder<List<GlassesEntry>>(
+      body: FutureBuilder<GlassesFolder>(
         future: _listing,
         builder: (context, snap) {
           if (snap.hasError) {
@@ -54,15 +53,18 @@ class _GlassesFilesScreenState extends State<GlassesFilesScreen> {
               error: true,
             );
           }
-          final entries = snap.data;
-          if (entries == null) {
+          final folder = snap.data;
+          if (folder == null) {
             return const Center(child: CircularProgressIndicator());
           }
+          final entries = folder.entries;
           if (entries.isEmpty) return const _Message('Empty');
           final total = entries.fold<int>(0, (n, e) => n + (e.size ?? 0));
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
             children: [
+              if (folder.free != null && folder.total != null)
+                _Space(folder.free!, folder.total!),
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Text(
@@ -112,6 +114,40 @@ class _GlassesFilesScreenState extends State<GlassesFilesScreen> {
     if (name.endsWith('.txt')) return Icons.description_outlined;
     if (name.endsWith('.jpg') || name.endsWith('.png')) return Icons.image;
     return Icons.insert_drive_file_outlined;
+  }
+}
+
+/// How full the glasses' file system is: a bar and the free bytes. Only
+/// with firmware that can tell (GlassesFolder.free).
+class _Space extends StatelessWidget {
+  const _Space(this.free, this.total);
+  final int free;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final used = total <= 0 ? 0.0 : ((total - free) / total).clamp(0.0, 1.0);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${_size(free)} free of ${_size(total)}',
+            style: text.bodyMedium,
+          ),
+          const SizedBox(height: 6),
+          LinearProgressIndicator(
+            value: used,
+            minHeight: 6,
+            borderRadius: BorderRadius.circular(3),
+            color: used > 0.9 ? FrameColors.orange : FrameColors.seaBlue,
+            backgroundColor: FrameColors.outline,
+          ),
+        ],
+      ),
+    );
   }
 }
 
