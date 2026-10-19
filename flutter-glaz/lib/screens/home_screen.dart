@@ -399,11 +399,20 @@ class _StatusDot extends StatelessWidget {
 class _GesturesCard extends StatelessWidget {
   const _GesturesCard();
 
+  // As frame_app.lua handles them (its header comment, "Taps")
   static const _gestures = [
-    (Icons.looks_one_outlined, '1 tap', 'select, or open the last app'),
-    (Icons.looks_two_outlined, '2 taps', 'back, one level up'),
-    (Icons.looks_3_outlined, '3 taps', 'show or hide the menu'),
-    (Icons.swap_horiz, 'tilt head', 'toward a shoulder to scroll'),
+    (Icons.looks_one_outlined, '1 tap', 'select, or bring back the last app'),
+    (
+      Icons.looks_two_outlined,
+      '2 taps',
+      'back, one level up; on a blank screen, the menu; wakes the glasses',
+    ),
+    (Icons.looks_3_outlined, '3 taps', 'sleep, from anywhere'),
+    (
+      Icons.swap_horiz,
+      'tilt head',
+      'toward a shoulder and back to scroll; in an app, its own cursor',
+    ),
   ];
 
   @override
