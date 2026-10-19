@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -30,11 +32,29 @@ android {
         versionName = flutter.versionName
     }
 
+    // The canonical key, android/glaz.jks: from `git secret reveal`, or
+    // from the secrets in CI. Every build signed with it installs over any
+    // other. Without it, the machine's own debug key.
+    val keyFile = rootProject.file("key.properties")
+    val glaz =
+        if (keyFile.exists()) {
+            val key = Properties().apply { keyFile.inputStream().use { load(it) } }
+            signingConfigs.create("glaz") {
+                storeFile = rootProject.file(key.getProperty("storeFile"))
+                storePassword = key.getProperty("storePassword")
+                keyAlias = key.getProperty("keyAlias")
+                keyPassword = key.getProperty("keyPassword")
+            }
+        } else {
+            signingConfigs.getByName("debug")
+        }
+
     buildTypes {
+        debug {
+            signingConfig = glaz
+        }
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = glaz
         }
     }
 }

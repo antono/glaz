@@ -50,6 +50,7 @@ in
 {
   packages = [
     pkgs.git
+    pkgs.git-secret  # the app's signing key, flutter-glaz/android/*.secret
     pkgs.gnumake
     pkgs.lua5_4
   ]

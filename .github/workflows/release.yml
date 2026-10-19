@@ -15,10 +15,12 @@
 # The -glaz version is the time of the branch's last commit (UTC), not of
 # the build, so the same source always gets the same name.
 #
-# Signing: the APK is signed with the debug key in the secret
-# ANDROID_DEBUG_KEYSTORE (base64 of .android/debug.keystore), so it
-# installs over a build from `apk`. Without the secret the runner makes a
-# key of its own, and every release then needs the old app uninstalled.
+# Signing: the APK is signed with the canonical key, the one git-secret
+# keeps in flutter-glaz/android/ (glaz.jks, key.properties), so it installs
+# over any build from `apk`. CI has it in two secrets: ANDROID_KEYSTORE
+# (base64 of glaz.jks) and ANDROID_KEY_PROPERTIES (key.properties as is).
+# Without them the runner makes a debug key of its own, and every release
+# then needs the old app uninstalled.
 name: release
 
 on:
@@ -156,16 +158,18 @@ jobs:
         run: |
           tool/compile_lua.sh
           tool/fetch_firmware.sh
-      - name: Debug signing key
+      - name: Signing key
         if: matrix.target == 'apk'
+        working-directory: flutter-glaz/android
         env:
-          KEYSTORE: ${{ secrets.ANDROID_DEBUG_KEYSTORE }}
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
         run: |
-          if [ -n "$KEYSTORE" ]; then
-            mkdir -p "$HOME/.android"
-            echo "$KEYSTORE" | base64 -d > "$HOME/.android/debug.keystore"
+          if [ -n "$KEYSTORE" ] && [ -n "$KEY_PROPERTIES" ]; then
+            echo "$KEYSTORE" | base64 -d > glaz.jks
+            printf '%s\n' "$KEY_PROPERTIES" > key.properties
           else
-            echo "::warning::ANDROID_DEBUG_KEYSTORE not set; the APK is signed with a new key"
+            echo "::warning::ANDROID_KEYSTORE or ANDROID_KEY_PROPERTIES not set; the APK is signed with a new key"
           fi
       - name: Build
         working-directory: flutter-glaz

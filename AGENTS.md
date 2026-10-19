@@ -57,6 +57,15 @@ To try Lua on the glasses while the phone holds them, use
 `utils/phone_lua.py` (the phone app's Lua console, open to a computer);
 see docs/FRAME.md, "Quick connect".
 
+The phone app is signed with one key everywhere, so any build installs
+over any other: `flutter-glaz/android/glaz.jks` and `key.properties`,
+kept encrypted by [git-secret](https://sobolevn.me/git-secret/) as
+`*.secret`. `git secret reveal` decrypts them for those whose GPG key
+was added (`git secret tell`); without them a build is signed with the
+machine's own debug key and will not install over a release. After
+changing the key: `git secret hide`, and update the CI secrets
+`ANDROID_KEYSTORE` and `ANDROID_KEY_PROPERTIES` (.github/workflows/release.yml).
+
 Without devenv, the host tools alone still work from a plain venv:
 
 ```sh
