@@ -66,7 +66,7 @@ local data = require('data.min')
 -- (mode 'info') or .tick() (mode 'app'), and may set .background.
 local MENU = {
   { label = 'Apps',     'assistant', 'photo', 'timeseries', 'recorder',
-                        'stopwatch', 'files', 'weather' },
+                        'stopwatch', 'files', 'weather', 'flipper' },
   { label = 'Sensors',  'battery', 'tilt', 'taptune' },
   { label = 'Settings', 'brightness', 'sleep' },
   { label = 'Info',     'notifications', 'bluetooth', 'uptime', 'firmware',
@@ -664,11 +664,15 @@ local function render()
   if running or visible then set_display(true) end
 
   if running then
-    draw_top_bar(run_name)
+    -- a module may take the whole screen (_M.fullscreen), top bar too, and
+    -- draw for itself (_M.draw), under its text: Flipper's screen. A bad
+    -- draw must not take the screen down.
+    local mod = mods[running]
+    if not (mod and mod.fullscreen) then draw_top_bar(run_name) end
+    if mod and mod.draw then pcall(mod.draw) end
     -- a module may return several lines, separated by '\n': TEXT_ROWS of
     -- them at the bottom, or with _M.rows set, up to that many from the
     -- first row under the top bar (Assistant's answers)
-    local mod = mods[running]
     local rows = mod and mod.rows
     local first = rows and 0 or 2
     rows = rows and math.min(rows, VISIBLE_ROWS) or TEXT_ROWS

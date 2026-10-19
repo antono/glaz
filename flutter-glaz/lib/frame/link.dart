@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -19,6 +20,7 @@ const _unlogged = {
   fileData,
   statusGet,
   status,
+  flipper,
 };
 
 /// A message for the log: its code's name and a look at its payload --
@@ -31,6 +33,30 @@ String describeMessage(int code, List<int> payload) {
       ? String.fromCharCodes(payload).replaceAll('\n', ' / ')
       : payload.take(12).join(' ') + (payload.length > 12 ? ' ...' : '');
   return '$name ${shown.length > 120 ? '${shown.substring(0, 120)}...' : shown}';
+}
+
+/// A message for the glasses in Bluetooth packets, as frame_ble's
+/// sendMessage cuts it: each `0x01, code`, the first with the payload's
+/// length after (two bytes, big-endian), and as much payload as fits in
+/// [maxDataLength] + 1 bytes. No payload, no packets.
+List<Uint8List> messagePackets(int code, List<int> payload, int maxDataLength) {
+  final room = maxDataLength - 1;
+  final out = <Uint8List>[];
+  var at = 0;
+  while (at < payload.length) {
+    final first = at == 0;
+    final n = min(payload.length - at, first ? room - 2 : room);
+    out.add(
+      Uint8List.fromList([
+        0x01,
+        code & 0xFF,
+        if (first) ...[payload.length >> 8 & 0xFF, payload.length & 0xFF],
+        ...payload.sublist(at, at + n),
+      ]),
+    );
+    at += n;
+  }
+  return out;
 }
 
 enum LinkState { disconnected, scanning, connecting, connected }
@@ -77,6 +103,18 @@ class FrameLink extends ChangeNotifier {
 
   BrilliantDevice? _device;
   StreamSubscription<List<int>>? _data;
+
+  /// data.lua on the glasses answers every packet it has taken with `0x00`
+  /// (`0x01` when it failed). The firmware keeps one received packet until
+  /// Lua takes it, and the next one overwrites it: a packet sent while Lua
+  /// is busy -- drawing, collecting garbage -- was lost, and the message
+  /// with it, and data.lua never found its end (docs/PROTOCOL.md, "One
+  /// packet at a time"). So the next packet waits for the answer, at most
+  /// [ackWait]; glasses that never answer (an older data.lua) are not waited
+  /// for again until they do.
+  static const ackWait = Duration(milliseconds: 500);
+  Completer<void>? _ack;
+  bool _acks = true;
   StreamSubscription<String>? _prints;
   StreamSubscription<BrilliantDevice>? _conn;
   final _events = StreamController<List<int>>.broadcast();
@@ -275,7 +313,18 @@ class FrameLink extends ChangeNotifier {
     name = device.device.advName.isEmpty
         ? device.device.platformName
         : device.device.advName;
+    _acks = true;
     _data = device.dataResponse.listen((m) {
+      if (m.length == 1 && (m[0] == 0x00 || m[0] == 0x01)) {
+        // data.lua's answer for a packet, not a message
+        if (m[0] == 0x01) {
+          glazLog(LogKind.link, 'the glasses failed a packet', problem: true);
+        }
+        _acks = true;
+        _ack?.complete();
+        _ack = null;
+        return;
+      }
       if (m.isNotEmpty && m[0] == status) onStatus(m);
       if (m.isNotEmpty && !_unlogged.contains(m[0])) {
         glazLog(LogKind.message, '<- ${describeMessage(m[0], m.sublist(1))}');
@@ -406,8 +455,14 @@ class FrameLink extends ChangeNotifier {
   final _lastSent = <int, DateTime>{};
 
   /// [duringTask]: send even while a task has the glasses -- for a task
-  /// that has started the app again itself.
-  Future<void> send(int code, List<int> payload, {bool duringTask = false}) {
+  /// that has started the app again itself. [log]: false keeps a stream of
+  /// them (the Flipper's screen) out of the log.
+  Future<void> send(
+    int code,
+    List<int> payload, {
+    bool duringTask = false,
+    bool log = true,
+  }) {
     final job = _tail.then((_) async {
       final device = _device;
       // nothing for the app while a task has stopped it: a data packet's
@@ -418,9 +473,25 @@ class FrameLink extends ChangeNotifier {
         final wait = sameCodeGap - DateTime.now().difference(last);
         if (wait > Duration.zero) await Future.delayed(wait);
       }
-      await device.sendMessage(code, Uint8List.fromList(payload));
+      for (final packet in messagePackets(
+        code,
+        payload,
+        device.maxDataLength!,
+      )) {
+        final ack = _acks ? (_ack = Completer<void>()) : null;
+        await device.sendDataRaw(packet);
+        if (ack == null) continue;
+        await ack.future.timeout(
+          ackWait,
+          onTimeout: () {
+            _ack = null;
+            _acks = false;
+            glazLog(LogKind.link, 'no answer for a packet; not waiting');
+          },
+        );
+      }
       _lastSent[code] = DateTime.now();
-      if (!_unlogged.contains(code)) {
+      if (log && !_unlogged.contains(code)) {
         glazLog(LogKind.message, '-> ${describeMessage(code, payload)}');
       }
     });

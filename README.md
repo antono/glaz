@@ -57,6 +57,8 @@ The menu has these apps:
   - **Stopwatch**: keeps counting in the background.
   - **Files**: browse and preview the files stored on the glasses.
   - **Weather**: the weather where you are, from wttr.in.
+  - **Flipper**: a Flipper Zero's screen, four times the size, through the
+    phone. You press the Flipper's own buttons.
 - **Sensors**: battery level, a live readout of your head angle, and
   **Tap tune** for adjusting how sensitive tap detection is.
 - **Settings**: display brightness, and Sleep (put the glasses to sleep now).
@@ -222,6 +224,8 @@ rebuild.
   Agent, over Tailscale.
 - [docs/REMOTE.md](docs/REMOTE.md): driving the glasses with a Bluetooth
   remote, such as a Flipper Zero.
+- [docs/FLIPPER.md](docs/FLIPPER.md): a Flipper Zero's screen on the
+  glasses.
 - [flutter-glaz/README.md](flutter-glaz/README.md): the phone app.
 - [AGENTS.md](AGENTS.md): the rules for contributing (also used by coding
   agents).

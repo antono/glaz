@@ -21,6 +21,8 @@ The glasses run Lua; a laptop talks to them over Bluetooth using Python.
   Agent: its API server, and Tailscale serve, tailnet HTTP or funnel.
 - [`docs/REMOTE.md`](docs/REMOTE.md) — a Bluetooth keyboard or Flipper
   Zero as a remote for the glasses, through the phone.
+- [`docs/FLIPPER.md`](docs/FLIPPER.md) — a Flipper Zero's screen on the
+  glasses: the Flipper's RPC over Bluetooth, and how the phone passes it on.
 
 ## Layout
 

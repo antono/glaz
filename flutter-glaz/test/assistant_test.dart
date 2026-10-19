@@ -26,7 +26,12 @@ class SentLink extends FrameLink {
   final sent = <(int, String)>[];
 
   @override
-  Future<void> send(int code, List<int> payload, {bool duringTask = false}) {
+  Future<void> send(
+    int code,
+    List<int> payload, {
+    bool duringTask = false,
+    bool log = true,
+  }) {
     sent.add((code, utf8.decode(payload, allowMalformed: true)));
     return Future.value();
   }

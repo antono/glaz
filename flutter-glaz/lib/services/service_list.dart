@@ -54,4 +54,10 @@ const services = [
         'Zero drive the glasses',
     true,
   ),
+  GlazService(
+    'flipper',
+    'Flipper screen',
+    "A Flipper Zero's screen on the glasses, in Apps > Flipper",
+    true,
+  ),
 ];

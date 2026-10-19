@@ -92,6 +92,10 @@ The Flipper's USB Remote (**Apps > USB > Remote**) sends the same keys
 over a USB-C cable, to a phone that takes USB keyboards (USB OTG). Nothing
 to pair; the rest is the same.
 
+A Flipper in Bluetooth Remote is a keyboard and nothing else: its screen
+cannot reach the glasses meanwhile. For the screen, leave Remote and open
+Apps > Flipper on the glasses ([FLIPPER.md](FLIPPER.md)).
+
 ## Other remotes
 
 Anything that sends the keys in the first table works the same way: pair

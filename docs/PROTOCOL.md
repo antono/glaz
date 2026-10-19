@@ -109,6 +109,13 @@ on it; it exists so a buggy module cannot drain the battery. It is **skipped
 while a background module runs**, since that module may be using the
 hardware.
 
+**Drawing (optional, `app` modules).** `draw()` is called on every redraw
+while the module is on screen, after the top bar and before its text: the
+module draws what text cannot, with `frame.display.bitmap`. It runs
+guarded, and must not call `show()`. With `_M.fullscreen = true` the top
+bar is left out too, and the whole visible screen is the module's. Flipper
+draws the Flipper's screen with both ([FLIPPER.md](FLIPPER.md)).
+
 **Input hooks (optional, `app` modules).** A module can take input itself:
 
 - `on_roll(dir)` — a completed tilt-and-return, `1` right, `-1` left. This
@@ -381,6 +388,7 @@ Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 | `0x1D` | `FILES` | `[0x1D, id, more, bytes...]` | a folder listing, in packets — see [Files](#files) |
 | `0x1E` | `FILE_DATA` | `[0x1E, id, more, bytes...]` | a file's contents, in packets — see [Files](#files) |
 | `0x09` | `LUA_RESULT` | `[0x09, id, more, bytes...]` | what `LUA_EVAL`'s Lua printed and returned, or its error, in packets — see [Lua console](#lua-console) |
+| `0x0B` | `FLIPPER` | `[0x0B, 1]` / `[0x0B, 0]` / `[0x0B, 2, seq]` | Flipper: show the Flipper's screen, stop, frame `seq` taken — see [FLIPPER.md](FLIPPER.md) |
 | `0x07` | photo chunk | `[0x07, jpeg bytes...]` | part of a photo (Camera module) |
 | `0x08` | photo end | `[0x08]` | last chunk; the photo is complete |
 | `0x1F` | `REC_START` | `[0x1F, bits, rate / 1000, for]` | Recorder starts a recording — see [Recorder](#recorder); `for` = `1`: the Assistant listening, see [Assistant](#assistant) |
@@ -854,6 +862,25 @@ over Bluetooth -- a phone newer than the app on the glasses flooded the link
 that way (seen: thousands of notifications a minute after `SETTINGS_SET`
 reached an older app), and its own requests drowned. The phone also stops
 waiting for a folder listing after 8 s and says to Upload.
+
+### One packet at a time
+
+The firmware keeps one received Bluetooth packet until Lua takes it, in a
+single buffer (`lua_bluetooth_data_interrupt`, `bluetooth.c`): the next
+packet overwrites it, and the one before is gone. Lua takes it from a
+hook, between instructions, so not while a C call runs -- a full garbage
+collection, which `data.lua` makes on every pass of the main loop and twice
+for every finished message, or a long draw. A message sent packet after
+packet then lost one now and then; `data.lua` never found its end, kept
+adding to it, and the glasses ran out of memory or hung. The Flipper's
+screen, about 2 KB a frame, several frames a second, lost one within a
+minute.
+
+`data.lua` answers each packet it has taken with `0x00` (`0x01` when it
+failed), so the phone sends the next packet only once that came, waiting at
+most 500 ms (`FrameLink.send`, `messagePackets` in `link.dart`). Glasses
+that never answer -- an older `data.lua` -- are not waited for again until
+they do. The answers stay out of the log.
 
 ### One message per code at a time
 

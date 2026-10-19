@@ -4,6 +4,7 @@ import '../frame/link.dart';
 import '../settings.dart';
 import 'agent_files.dart';
 import 'assistant.dart';
+import 'flipper.dart';
 import 'glasses_files.dart';
 import 'glasses_lua.dart';
 import 'keys.dart';
@@ -33,6 +34,7 @@ class Services {
     this.keys,
     this.assistant,
     this.lua,
+    this.flipper,
   );
 
   final Settings settings;
@@ -47,6 +49,7 @@ class Services {
   final KeyRemote keys;
   final AssistantService assistant;
   final GlassesLua lua;
+  final FlipperMirror flipper;
 
   static late Services instance;
 
@@ -86,10 +89,12 @@ class Services {
         voice: Voice.platform,
       ),
       GlassesLua(link),
+      FlipperMirror(link, s),
     );
     LuaBridge(s, services.lua);
     SettingsSync(link, s);
     services.keys.attach();
+    services.flipper.attach();
     link.onConnected.add(() async {
       if (s.serviceOn('clock')) await link.sendClock();
     });

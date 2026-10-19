@@ -224,6 +224,14 @@ const glassesMenu = <MenuSection>[
         ),
       ],
     ),
+    GlassesModule(
+      'flipper',
+      'Flipper',
+      ModuleKind.app,
+      Icons.cast,
+      "A Flipper Zero's screen, through the phone; its own buttons "
+          'drive it.',
+    ),
   ]),
   MenuSection('Sensors', Icons.sensors, [
     GlassesModule(
