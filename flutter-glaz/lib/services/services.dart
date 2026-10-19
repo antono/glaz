@@ -59,7 +59,7 @@ class Services {
     Settings? settings,
     Directory? photoDir,
     Directory? recordingDir,
-    File? readerFile,
+    Directory? readerDir,
   }) async {
     final s = settings ?? await Settings.load();
     final link = FrameLink();
@@ -90,7 +90,7 @@ class Services {
         voice: Voice.platform,
       ),
       GlassesLua(link),
-      ReaderService(link, s, readerFile ?? await readerText()),
+      ReaderService(link, s, readerDir ?? await readerRoot()),
     );
     await services.reader.load();
     LuaBridge(s, services.lua);

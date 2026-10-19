@@ -15,9 +15,12 @@
 -- next BATCH with TEXT_GET when fewer than LOW are left, and the phone
 -- answers through remote(arg):
 --
---   't:<from>:<total>:<words>'  -- words from number <from> (0-based), one
---                                  space between them; <total> in the text
---   'new'                       -- the phone has a new text: start over
+--   't:<from>:<total>:<text>:<words>'
+--         words from number <from> (0-based), one space between them, of
+--         text number <text> (1..255), <total> words long. A <text> other
+--         than the one held: the phone reads another text now (its
+--         library, Glaz > Menu > Reader), from that text's place.
+--   'new' -- start again from the phone's place: Read on glasses
 --
 -- The phone has already turned the text into ASCII and cut long words into
 -- pieces that fit (flutter-glaz/lib/services/reader.dart).
@@ -27,8 +30,9 @@ _M.label = 'Reader'
 _M.mode = 'app'
 _M.period = 0.02          -- s between ticks: a word is due every 60/wpm
 
-local TEXT_GET = 0x0A     -- '>I4I4BI2': place, from, count, wpm; count 0
-                          -- only tells the phone the place and the speed
+local TEXT_GET = 0x0A     -- '>I4I4BI2B': place, from, count, wpm, text;
+                          -- count 0 only tells the phone the place and
+                          -- the speed
 local RESUME   = 0xFFFFFFFF  -- from: wherever the phone says the place is
 
 local WPM      = 300      -- default; Glaz > Menu > Reader
@@ -67,6 +71,7 @@ local words = {}          -- number -> word, for lo <= number < hi
 local lo, hi = 0, 0
 local pos = 0             -- the word on screen
 local total = nil         -- words in the text; nil until the phone says
+local text = 0            -- its number, 0 before the first answer
 local asked = nil         -- from of the request on its way, or nil
 local asked_at = 0
 local wpm = WPM
@@ -127,7 +132,7 @@ end
 
 local function send(from, count)
   local packet = string.char(TEXT_GET) ..
-                 string.pack('>I4I4BI2', pos, from, count, wpm)
+                 string.pack('>I4I4BI2B', pos, from, count, wpm, text)
   for _ = 1, 20 do
     if pcall(frame.bluetooth.send, packet) then return true end
     frame.sleep(0.005)
@@ -245,12 +250,15 @@ function _M.remote(arg)
     resume()
     return state()
   end
-  local from, count, body = string.match(arg, '^t:(%d+):(%d+):(.*)$')
+  local from, count, num, body =
+    string.match(arg, '^t:(%d+):(%d+):(%d+):(.*)$')
   if not from then return nil end
-  from, total = tonumber(from), tonumber(count)
+  from, total, num = tonumber(from), tonumber(count), tonumber(num)
   note = total == 0 and 'no text' or ''
-  if asked == RESUME then
+  if asked == RESUME or num ~= text then
+    -- the first words, or of another text: start over there
     words, lo, hi, pos = {}, from, from, from
+    text, timed = num, nil
   elseif from ~= hi then
     return nil            -- an answer to a request since replaced
   end

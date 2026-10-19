@@ -93,8 +93,8 @@ class ModuleSettingsScreen extends StatelessWidget {
             ],
             // the phone's side of the assistant: its agent, its language
             if (module.id == 'assistant') const AssistantSettings(),
-            // the text it reads, kept on the phone
-            if (module.id == 'reader') const ReaderText(),
+            // the texts it reads, kept on the phone
+            if (module.id == 'reader') const ReaderLibrary(),
           ],
         ),
       ),

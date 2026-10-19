@@ -16,7 +16,7 @@ void main() {
     await Services.start(
       photoDir: Directory('${dir.path}/photos'),
       recordingDir: Directory('${dir.path}/recordings'),
-      readerFile: File('${dir.path}/reader.txt'),
+      readerDir: Directory('${dir.path}/reader'),
     );
   });
 

@@ -391,7 +391,7 @@ Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 | `0x1C` | `LOCATION_GET` | `[0x1C, id, module...]` | a module asks where the phone is — see [Location](#location) |
 | `0x1D` | `FILES` | `[0x1D, id, more, bytes...]` | a folder listing, in packets — see [Files](#files) |
 | `0x1E` | `FILE_DATA` | `[0x1E, id, more, bytes...]` | a file's contents, in packets — see [Files](#files) |
-| `0x0A` | `TEXT_GET` | `[0x0A, place, from, count, wpm]` | Reader wants words, or says where it is -- see [Reader](#reader) |
+| `0x0A` | `TEXT_GET` | `[0x0A, place, from, count, wpm, text]` | Reader wants words, or says where it is -- see [Reader](#reader) |
 | `0x09` | `LUA_RESULT` | `[0x09, id, more, bytes...]` | what `LUA_EVAL`'s Lua printed and returned, or its error, in packets — see [Lua console](#lua-console) |
 | `0x07` | photo chunk | `[0x07, jpeg bytes...]` | part of a photo (Camera module) |
 | `0x08` | photo end | `[0x08]` | last chunk; the photo is complete |
@@ -673,12 +673,14 @@ again in between is dropped.
 ### Reader
 
 Reader (`modules/reader.lua`) is a speed reader (RSVP): one word at a
-time, at a speed in words a minute that is always on screen. The text
-lives on the phone (Glaz > Menu > Reader: paste it, or type it) with the
-place in it; the glasses hold a few dozen words and ask for more as they
-go, so a book costs them no more memory than a sentence.
+time, at a speed in words a minute that is always on screen. The texts
+live on the phone, in a library (Glaz > Menu > Reader: add by pasting or
+typing, open to read through, rename, delete), each with its own place;
+one of them is marked as the one the glasses read. The glasses hold a few
+dozen words and ask for more as they go, so a book costs them no more
+memory than a sentence.
 
-`TEXT_GET` (`0x0A`) is 11 bytes after the code, big-endian `>I4I4BI2`:
+`TEXT_GET` (`0x0A`) is 12 bytes after the code, big-endian `>I4I4BI2B`:
 
 | Field | Means |
 | --- | --- |
@@ -686,11 +688,20 @@ go, so a book costs them no more memory than a sentence.
 | `from` | the first word wanted; `0xFFFFFFFF`: from the place the phone keeps |
 | `count` | words wanted, `BATCH` (60); `0`: none, the glasses only say where they are and at what speed (on a pause, on leaving, at the end) |
 | `wpm` | the speed |
+| `text` | the number of the text the glasses hold, 1 to 255; 0 before the first answer |
 
-The phone answers with `MODULE_CALL` `reader` and `t:from:total:words`:
-the words from number `from`, one space between them, as many of `count`
-as fit in 900 bytes, and how many the text has. `t:0:0:` means there is
-no text. The glasses ask again when fewer than `LOW` (20) are left ahead,
+The phone answers with `MODULE_CALL` `reader` and
+`t:from:total:text:words`: the words from number `from`, one space
+between them, as many of `count` as fit in 900 bytes, how many the text
+has, and its number. `t:0:0:0:` means there is no text.
+
+**Another text.** The number is the text's id in the library, kept
+across restarts (`id % 255 + 1`). When the user marks another text, the
+glasses still hold the old one; their next request carries the old
+number. The phone keeps the place they report for the text with that
+number, and answers with the marked text from its own place, under its
+own number. A number other than the one they hold makes the glasses drop
+their words and start there, reading on if they were reading. The glasses ask again when fewer than `LOW` (20) are left ahead,
 keep `BEHIND` (30) behind for going back, and drop an answer that is not
 for the request they are waiting on. `APP_OPEN` `reader` with `new` (the
 phone's Read on glasses) starts again from the phone's place.
@@ -701,7 +712,10 @@ after it was left starts it in the background for `remote()`, and a
 reason it reports its place only if it was on screen.
 
 The phone keeps `place` as the reading position, except from a request
-with `from = 0xFFFFFFFF` (the glasses do not know it yet). It keeps `wpm`
+with `from = 0xFFFFFFFF` (the glasses do not know it yet). The library is
+`reader/library.json` in the app's own folder -- titles, word counts,
+places, the marked text -- and one `id.txt` per text, as the user gave it;
+only the marked text is held in memory, as words. It keeps `wpm`
 as Reader's speed setting only from a report (`count = 0`): a request for
 words sent just before a speed was picked on the phone would undo it. The
 glasses take a new setting while reading.

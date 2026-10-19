@@ -50,8 +50,8 @@ The menu has these apps:
   - **Assistant**: ask a question out loud and read the answer on the
     glasses. The answer is also read aloud, but only through headphones.
   - **Reader**: speed reading, one word at a time, with the letter your
-    eye should land on in red and always in the same spot. The text is
-    pasted on the phone; the speed (words per minute) is on screen and
+    eye should land on in red and always in the same spot. The texts are
+    kept in a library on the phone; the speed (words per minute) is on screen and
     changes with a tilt.
   - **Camera**: take a photo. It is saved on the phone.
   - **Time series**: take a photo every 1 to 60 seconds. It keeps going
@@ -89,8 +89,9 @@ iOS and macOS builds are in the code but need Xcode.
 - **Services** the phone does for the glasses: setting the clock,
   sending notifications, internet access and location.
 - **Per-app settings**: photo quality, the place for Weather, which apps
-  may use the internet, the Assistant's language, and the Reader's text
-  and speed.
+  may use the internet, the Assistant's language, and the Reader's speed
+  and its library of texts: add, read through, rename, delete, and pick
+  the one the glasses read, each keeping its own place.
 - **Lua console** (More > Lua console): a REPL into the app running on the
   glasses. Type Lua, run it, and see what it printed and returned. Names
   like `frame.display` complete as you type. The glasses stay connected to
