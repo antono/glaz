@@ -6,7 +6,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../frame/ascii.dart';
+import '../frame/glyphs.dart';
 import '../frame/link.dart';
 import '../frame/protocol.dart';
 import '../settings.dart';
@@ -19,12 +19,13 @@ const maxPiece = 13;
 /// TEXT_GET's from: wherever the phone says the place is.
 const resumeFrom = 0xFFFFFFFF;
 
-/// The text as the glasses show it, a word at a time: ASCII, and a word
+/// The text as the glasses show it, a word at a time: what their font has
+/// (Cyrillic and all), and a word
 /// longer than [maxPiece] cut into pieces of about equal length, each but
 /// the last ending in '-'. A hyphenated word is cut at its own hyphens
 /// first.
 List<String> readerWords(String text) => [
-  for (final w in toAscii(text).split(RegExp(r'\s+')))
+  for (final w in forGlasses(text).split(RegExp(r'\s+')))
     if (w.isNotEmpty) ...splitWord(w),
 ];
 
@@ -302,17 +303,23 @@ class ReaderService extends ChangeNotifier {
 
   /// MODULE_CALL's argument for modules/reader.lua:
   /// 't:from:total:version:words', as many of count words as fit in
-  /// [maxBytes]. No text: 't:0:0:0:'.
+  /// [maxBytes] of UTF-8. No text: 't:0:0:0:'.
   String answer(int from, int count) {
     final total = _words.length;
     final start = min(from, total);
     final out = StringBuffer('t:$start:$total:${current?.version ?? 0}:');
     final head = out.length;
+    var bytes = head;
     for (var i = start; i < min(total, start + count); i++) {
       final w = _words[i];
-      if (out.length > head && out.length + 1 + w.length > maxBytes) break;
-      if (out.length > head) out.write(' ');
+      final n = utf8.encode(w).length;
+      if (out.length > head && bytes + 1 + n > maxBytes) break;
+      if (out.length > head) {
+        out.write(' ');
+        bytes++;
+      }
       out.write(w);
+      bytes += n;
     }
     return out.toString();
   }

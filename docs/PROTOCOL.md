@@ -352,7 +352,7 @@ which splits long messages into MTU-sized packets and reassembles them.
 | `0x21` | `MENU_HIDE` | none — hide the menu, return to IDLE |
 | `0x22` | `MENU_SHOW` | none — open the menu without resending items |
 | `0x23` | `CLOCK_SET` | 6 bytes, big-endian: `uint32` unix time, `int16` UTC offset in minutes |
-| `0x24` | `NOTIFY` | ASCII text `app\ntitle\ntext` — see [Host services](#host-services) |
+| `0x24` | `NOTIFY` | UTF-8 text `app\ntitle\ntext` — see [Host services](#host-services) |
 | `0x25` | `NET_RESPONSE` | `uint8` request id, `uint16` HTTP status (big-endian), then the body |
 | `0x26` | `STATUS_GET` | any one byte — ask for `STATUS`; see [Status](#status) |
 | `0x27` | `SETTINGS_SET` | text, `module.key=value` per line — every module's settings; see [Settings](#settings) |
@@ -453,9 +453,13 @@ Glaz > Menu.
 ### Notifications
 
 `NOTIFY` (`0x24`) carries one notification as three lines: the app's name,
-the title, the text. The phone turns everything into ASCII before sending —
-the display font has nothing else — transliterating Cyrillic and dropping
-what it cannot map, and cuts the text to 200 bytes.
+the title, the text, in UTF-8. The phone keeps what the display font has
+-- ASCII, Latin-1, Cyrillic, `«» ° № €` (our firmware, docs/FIRMWARE.md) --
+gives the typography it lacks a look-alike (`“” — …` become `" - ...`),
+drops emoji, turns anything else into `?`
+(`flutter-glaz/lib/frame/glyphs.dart`), and cuts the whole to 200 bytes,
+between characters. The glasses count line lengths in characters
+(`utf8.len`), not bytes.
 
 On the glasses it covers whatever is on screen for `NOTICE_SECONDS` (5 s):
 the app name in the top bar, the title in yellow, the text wrapped over the
@@ -662,7 +666,7 @@ module takes in `start()` or `remote()`:
 | `e:text` | went wrong: no agent set up, no answer, nothing heard |
 | `listen` | listen again |
 
-Text is ASCII, Cyrillic transliterated, in lines of at most 26 characters,
+Text is what the font has, as for notifications, in lines of at most 26 characters,
 24 lines at most. Five fit on screen (`_M.rows`); a longer answer shows four
 a page and `- 1/4 -` under them, and a tilt turns the page. With an `@open` the answer
 is not shown: the app it opened covers it. A tap on an answer asks again.
@@ -732,7 +736,7 @@ words sent just before a speed was picked on the phone would undo it. The
 glasses take a new setting while reading.
 
 The phone prepares the words (`flutter-glaz/lib/services/reader.dart`):
-ASCII as for notifications, split on white space, and a word longer than
+what the font has, as for notifications, split on white space, and a word longer than
 13 characters cut into pieces of about equal length, each but the last
 ending in `-` (at its own hyphens first): `extraord-`, `inarily`. 13 is
 what fits right of the pivot at the largest glyphs.
@@ -743,7 +747,8 @@ punctuation not counted -- is red and centred on `x = 250`, a third of the
 way across what the eye sees, so the longer part, after it, has the room.
 The part before it is drawn to end at its left, the part after from its
 right; the widths come from the firmware's font table (`system_font.h`),
-kept in the module as one string. Grey rules above and below the word have
+kept in the module as strings: ASCII, Latin-1 and Cyrillic. Letters are
+counted as characters of UTF-8, and `»` closes a sentence as `"` does. Grey rules above and below the word have
 a notch pointing at the pivot. Under them: the speed, `paused` or `the
 end`, and how far through, in percent.
 
@@ -946,7 +951,8 @@ module reads one with `_M.host.setting(key, default)`: the default when it
 is unset or empty, converted to a number when the default is one. Modules
 read them when they need them -- at a shot, at a fetch -- so a change
 applies from the next one and nothing restarts. Values are UTF-8 (a city may
-be in Cyrillic); a module that shows one must make it ASCII first.
+be in Cyrillic, and is shown as it is); a module that cuts one counts
+characters with `utf8.len`, not bytes.
 
 ### Codes the glasses do not know
 
@@ -1105,14 +1111,15 @@ banners (`frame is paired`) after the link comes up, landing on top of whatever
 the app drew. The host works around it by drawing its loading text twice, a
 second apart.
 
-Text is drawn with the built-in font (`frame.display.text`), which is
-**ASCII only** — the firmware has no Cyrillic glyphs, and such a string simply
-does not render.
+Text is drawn with the built-in font (`frame.display.text`). On our
+firmware it has Cyrillic (docs/FIRMWARE.md), so labels and text in Russian
+render as they are; the stock firmware's font is ASCII only, and there such
+a string simply does not render.
 
-If non-ASCII labels are ever needed, the host must rasterize text into sprites
-and send `TxTextSpriteBlock` (available in both the Python and Flutter builds of
-`frame_msg`). That removes the font limit but makes the host considerably
-heavier, which defeats the thin-host design above.
+Scripts the font lacks (CJK, say) would need the host to rasterize text
+into sprites and send `TxTextSpriteBlock` (available in both the Python and
+Flutter builds of `frame_msg`). That makes the host considerably heavier,
+which defeats the thin-host design above.
 
 ---
 
@@ -1203,8 +1210,8 @@ while the limit is enforced in bytes at `frame_ble.py:178`. A 2-byte UTF-8
 character turns a 221-character chunk into up to 442 bytes, which overflows.
 
 > The limit applies to the **Lua source**, not to data. Non-ASCII in a
-> `MENU_SET` payload will not break the protocol — it just will not render,
-> because of the font.
+> `MENU_SET` payload will not break the protocol, and on our firmware
+> Cyrillic in it renders (on the stock firmware it does not).
 
 ### A broken upload leaves the glasses stuck
 

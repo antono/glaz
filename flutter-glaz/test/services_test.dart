@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:glaz/frame/ascii.dart';
+import 'package:glaz/frame/glyphs.dart';
 import 'package:glaz/frame/link.dart';
 import 'package:glaz/services/location.dart';
 import 'package:glaz/services/module_settings.dart';
@@ -15,28 +15,38 @@ import 'package:glaz/services/notifications.dart';
 import 'package:glaz/settings.dart';
 
 void main() {
-  group('toAscii', () {
-    test('transliterates Cyrillic, keeping capitals', () {
+  group('forGlasses', () {
+    test('keeps what the font has: Cyrillic, Latin-1, «», °', () {
       expect(
-        toAscii('Встречаемся в 137 кабинете'),
-        'Vstrechaemsya v 137 kabinete',
+        forGlasses('Встречаемся в 137 кабинете'),
+        'Встречаемся в 137 кабинете',
       );
-      expect(toAscii('Щука Ёж'), 'Shchuka Ezh');
+      expect(forGlasses('Щука Ёж, Ґанок, Қазақ'), 'Щука Ёж, Ґанок, Қазақ');
+      expect(forGlasses('«Да» +16°C, Größe №137'), '«Да» +16°C, Größe №137');
     });
 
-    test('maps typography, drops emoji, marks the unknown', () {
-      expect(toAscii('«Да» — ok… 👍🏻'), '"Da" - ok... ');
-      expect(toAscii('+16°C'), '+16C');
-      expect(toAscii('日本語'), '?');
+    test('maps the rest, drops emoji, marks the unknown', () {
+      expect(forGlasses('“Да” — ok… 👍🏻'), '"Да" - ok... ');
+      expect(forGlasses('Łódź Ść'), 'Łódz Sc');
+      expect(forGlasses('日本語'), '?');
+    });
+
+    test('cutToBytes cuts between characters', () {
+      expect(cutToBytes('Привет', 5), 'Пр');
+      expect(cutToBytes('Привет', 137), 'Привет');
+      expect(cutToBytes('ok 👍', 4), 'ok ');
     });
   });
 
   group('notifications', () {
-    test('encode makes three ASCII lines, cut to 200 bytes', () {
+    test('encode makes three UTF-8 lines, cut to 200 bytes', () {
       final bytes = NotificationService.encode('Telegram', 'Анна', 'а\nб');
-      expect(ascii.decode(bytes), 'Telegram\nAnna\na b');
+      expect(utf8.decode(bytes), 'Telegram\nАнна\nа б');
       final long = NotificationService.encode('A', 'B', 'x' * 500);
       expect(long.length, NotificationService.maxBytes);
+      final cyr = NotificationService.encode('A', 'B', 'ж' * 500);
+      expect(cyr.length, lessThanOrEqualTo(NotificationService.maxBytes));
+      expect(utf8.decode(cyr), endsWith('жж'));
     });
 
     test('appName', () {

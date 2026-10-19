@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../frame/ascii.dart';
+import '../frame/glyphs.dart';
 import '../frame/link.dart';
 import '../frame/protocol.dart';
 import '../glasses_menu.dart';
@@ -51,11 +51,11 @@ final _commandLine = RegExp(r'^@([a-z]+)\b\s*(.*)$');
   return (text.join('\n').trim(), commands);
 }
 
-/// [text] as the glasses show it: ASCII, in lines of at most [width]
-/// characters, at most [maxLines] of them, the last ending in '..' if cut.
+/// [text] as the glasses show it: what their font has, in lines of at
+/// most [width] characters, at most [maxLines] of them, the last ending in '..' if cut.
 String wrapForGlasses(String text, {int width = 26, int maxLines = 24}) {
   final lines = <String>[];
-  for (final para in toAscii(text).split('\n')) {
+  for (final para in forGlasses(text).split('\n')) {
     var line = '';
     for (var word in para.split(RegExp(r'\s+'))) {
       if (word.isEmpty) continue;

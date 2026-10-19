@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -24,8 +25,12 @@ List<int> request(int place, int from, int count, int wpm, int text) {
 
 void main() {
   group('words', () {
-    test('ASCII, split on any space', () {
-      expect(readerWords('  Привет,\n\tмир  137 '), ['Privet,', 'mir', '137']);
+    test('Cyrillic kept, split on any space', () {
+      expect(readerWords('  Привет,\n\tмир  137 '), ['Привет,', 'мир', '137']);
+      expect(splitWord('достопримечательность'), [
+        'достопримеч-',
+        'ательность',
+      ]);
     });
 
     test('a long word is cut evenly, the pieces hyphenated', () {
@@ -117,9 +122,16 @@ void main() {
       expect(second.place, 1);
     });
 
-    test('an answer fits in maxBytes', () {
+    test('an answer fits in maxBytes, of UTF-8', () async {
       expect(
         reader.answer(0, 255).length,
+        lessThanOrEqualTo(ReaderService.maxBytes),
+      );
+      await reader.add(List.filled(137, 'слово').join(' '));
+      final answer = reader.answer(0, 255);
+      expect(answer, contains('слово слово'));
+      expect(
+        utf8.encode(answer).length,
         lessThanOrEqualTo(ReaderService.maxBytes),
       );
     });

@@ -68,25 +68,12 @@ NET_BODY_MAX = 4096     # what fits next to the app in the glasses' memory
 NOTIFY_ON = os.environ.get("FRAME_NOTIFY", "1") != "0"
 NOTIFY_TEXT_MAX = 200
 
-# The display font is ASCII only. Cyrillic is transliterated like the phone
-# does; anything else that is not ASCII is dropped.
-TRANSLIT = dict(zip(
-    "абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
-    ["a", "b", "v", "g", "d", "e", "e", "zh", "z", "i", "y", "k", "l", "m",
-     "n", "o", "p", "r", "s", "t", "u", "f", "kh", "ts", "ch", "sh", "shch",
-     "", "y", "", "e", "yu", "ya"]))
-
-
-def to_ascii(text: str) -> str:
-    out = []
-    for ch in text:
-        low = ch.lower()
-        if low in TRANSLIT:
-            t = TRANSLIT[low]
-            out.append(t.capitalize() if ch != low else t)
-        elif ch.isascii():
-            out.append(ch)
-    return "".join(out)
+# Our firmware's font has ASCII, Latin-1 and Cyrillic (docs/FIRMWARE.md);
+# the rest is dropped. The phone does it more carefully (glyphs.dart).
+def for_glasses(text: str) -> str:
+    return "".join(ch for ch in text
+                   if " " <= ch <= "~" or "\u00a1" <= ch <= "\u00ff"
+                   or "\u0400" <= ch <= "\u045f")
 
 # Deploy as main.lua so the menu is autonomous: the firmware auto-runs main.lua
 # on power-on and after a reset, so the app survives disconnecting the host.
@@ -289,14 +276,15 @@ async def main():
 
     async def notify(app: str, title: str, text: str):
         # one line each: newlines inside a field would shift the fields
-        app, title, text = (to_ascii(" ".join(f.split())) for f in (app, title, text))
+        app, title, text = (for_glasses(" ".join(f.split())) for f in (app, title, text))
         if not frame.ble.is_connected():
             # frame_ble would crash on the zero MTU of a dropped link
             print(f"  notify: not sent, the glasses are gone: {app}: {title}")
             return
         print(f"  notify: {app}: {title}")
-        await frame.send_message(
-            NOTIFY, f"{app}\n{title}\n{text[:NOTIFY_TEXT_MAX]}".encode())
+        # cut in bytes, between characters
+        text = text.encode()[:NOTIFY_TEXT_MAX].decode(errors="ignore")
+        await frame.send_message(NOTIFY, f"{app}\n{title}\n{text}".encode())
 
     def on_notify(app, title, text):
         task = asyncio.create_task(notify(app, title, text))

@@ -18,9 +18,11 @@ local LINE_MAX = 26   -- characters that fit a line, roughly (proportional font)
 
 local sel = 1
 
+-- UTF-8: LINE_MAX counts characters (Cyrillic is two bytes each)
 local function clip(s)
-  if #s > LINE_MAX then return string.sub(s, 1, LINE_MAX - 2) .. '..' end
-  return s
+  if (utf8.len(s) or #s) <= LINE_MAX then return s end
+  local cut = utf8.len(s) and utf8.offset(s, LINE_MAX - 1) or LINE_MAX - 1
+  return string.sub(s, 1, cut - 1) .. '..'
 end
 
 function _M.start()

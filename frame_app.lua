@@ -81,7 +81,7 @@ local MENU_SET  = 0x20    -- override items, one per line; see docs/PROTOCOL.md
 local MENU_HIDE = 0x21    -- no payload; hide the menu
 local MENU_SHOW = 0x22    -- no payload; show the menu
 local CLOCK_SET = 0x23    -- '>I4i2': unix time, UTC offset in minutes
-local NOTIFY    = 0x24    -- 'app\ntitle\ntext', ASCII: a phone notification
+local NOTIFY    = 0x24    -- 'app\ntitle\ntext', UTF-8: a phone notification
 local NET_RESPONSE = 0x25 -- '>BI2' id, HTTP status; then the body
 local STATUS_GET = 0x26   -- any payload; answered with STATUS
 local SETTINGS_SET = 0x27 -- 'module.key=value' lines: every module's settings
@@ -476,19 +476,33 @@ local function split_lines(s)
   return out
 end
 
+-- Text is UTF-8 (the font has Cyrillic): lengths are in characters, not
+-- bytes. Not valid UTF-8, it is taken byte by byte.
+local function ulen(s)
+  return utf8.len(s) or #s
+end
+
+-- The first n characters of s.
+local function ucut(s, n)
+  if not utf8.len(s) then return string.sub(s, 1, n) end
+  local i = utf8.offset(s, n + 1)
+  return i and string.sub(s, 1, i - 1) or s
+end
+
 -- Words into lines of at most width characters; a word longer than a line
 -- is cut. Past max lines the last one ends in '..'.
 local function wrap(text, width, max)
   local lines, line = {}, ''
   for word in string.gmatch(text, '%S+') do
-    while #word > width do
+    while ulen(word) > width do
       if line ~= '' then lines[#lines + 1] = line; line = '' end
-      lines[#lines + 1] = string.sub(word, 1, width)
-      word = string.sub(word, width + 1)
+      local head = ucut(word, width)
+      lines[#lines + 1] = head
+      word = string.sub(word, #head + 1)
     end
     if line == '' then
       line = word
-    elseif #line + 1 + #word <= width then
+    elseif ulen(line) + 1 + ulen(word) <= width then
       line = line .. ' ' .. word
     else
       lines[#lines + 1] = line
@@ -498,7 +512,7 @@ local function wrap(text, width, max)
   if line ~= '' then lines[#lines + 1] = line end
   if #lines > max then
     for i = #lines, max + 1, -1 do lines[i] = nil end
-    lines[max] = string.sub(lines[max], 1, width - 2) .. '..'
+    lines[max] = ucut(lines[max], width - 2) .. '..'
   end
   return lines
 end
@@ -607,7 +621,7 @@ local function draw_crumbs(parts, right_x)
   local fit = (right_x - LEFT_X) // CHAR_W
   local text = table.concat(parts, CRUMB_SEP)
   local first = 1
-  while #text > fit and first < #parts do
+  while ulen(text) > fit and first < #parts do
     first = first + 1
     text = '..' .. CRUMB_SEP .. table.concat(parts, CRUMB_SEP, first)
   end
@@ -663,7 +677,7 @@ local function render()
     set_display(true)
     draw_top_bar(nil, { notice[1] })
     if notice[2] ~= '' then
-      frame.display.text(string.sub(notice[2], 1, NOTICE_CHARS), LEFT_X,
+      frame.display.text(ucut(notice[2], NOTICE_CHARS), LEFT_X,
                          TOP_Y, { color = 'YELLOW' })
     end
     for i, line in ipairs(wrap(notice[3], NOTICE_CHARS, VISIBLE_ROWS - 1)) do

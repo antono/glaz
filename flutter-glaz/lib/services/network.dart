@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-import '../frame/ascii.dart';
+import '../frame/glyphs.dart';
 import '../frame/link.dart';
 import '../frame/protocol.dart';
 import '../settings.dart';
@@ -99,8 +99,7 @@ class NetworkService extends ChangeNotifier {
         bytes.length > maxBody ? bytes.sublist(0, maxBody) : bytes,
       );
     } catch (e) {
-      final why = toAscii('$e');
-      return (0, ascii.encode(why.length > 200 ? why.substring(0, 200) : why));
+      return (0, utf8.encode(cutToBytes(forGlasses('$e'), 200)));
     }
   }
 }

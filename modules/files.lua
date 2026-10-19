@@ -33,9 +33,11 @@ local function human(size)
   return string.format('%.1fK', size / 1024)
 end
 
+-- UTF-8: LINE_MAX counts characters (Cyrillic is two bytes each)
 local function clip(s)
-  if #s > LINE_MAX then return string.sub(s, 1, LINE_MAX - 2) .. '..' end
-  return s
+  if (utf8.len(s) or #s) <= LINE_MAX then return s end
+  local cut = utf8.len(s) and utf8.offset(s, LINE_MAX - 1) or LINE_MAX - 1
+  return string.sub(s, 1, cut - 1) .. '..'
 end
 
 local function load_list()

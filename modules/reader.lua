@@ -1,5 +1,5 @@
 -- Menu module: speed reader (RSVP). ASCII only, see docs/PROTOCOL.md,
--- "Reader".
+-- "Reader". The words it shows are UTF-8: the font has Cyrillic.
 --
 -- One word at a time, always at the same spot: the letter the eye should
 -- land on (the optimal recognition point, a little left of the middle) is
@@ -22,7 +22,7 @@
 --         library, Glaz > Menu > Reader), from that text's place.
 --   'new' -- start again from the phone's place: Read on glasses
 --
--- The phone has already turned the text into ASCII and cut long words into
+-- The phone has already kept to what the font has and cut long words into
 -- pieces that fit (flutter-glaz/lib/services/reader.dart).
 local _M = {}
 
@@ -62,8 +62,14 @@ local SPACING  = 4        -- the firmware's default gap between glyphs
 
 -- Advance of each glyph of the firmware font, ' ' to '~': the byte minus
 -- 48 is its width in px (system_font.h in the firmware; '/' has no glyph).
+-- Then U+00A0..U+00FF and Cyrillic U+0400..U+045F the same way; 0: none.
 local WIDTHS = '=5=CARD5:;EC8A60B@@?B?A?BA68CCC>OFB@CAABC<>C@GCDBFDADCEGEGA' ..
                '9?:DI;CB=B@?DB5;B8LBBBB;?>ACNDD@<5<A'
+local LATIN1 = '06>B0F000L0A00M0?D000A06000A000>FGGGGGP@A@AA<;@?FCDDDDDBDCC' ..
+               'CCCFBCCCCCCCM>A@AA;;@?B@BBBABCBAA@ADBD'
+local CYRILLIC = 'AAH?AA<?>PPHCDECF@B?FAP@DDCDGCDCB@DEHEDALNEG@AMBCCB=F@P@BBCC' ..
+                 'HABAB=BDIDDAKNEF@@LBAAF=@?5?;MLFCBCC'
+local OTHER_W = 18        -- the font's other Cyrillic (Kazakh, Tatar..): an 'o'
 
 local RULE  = string.rep('\xFF', RULE_W * 2 // 8)        -- 2 px high
 local NOTCH = string.rep('\x18', NOTCH_H)                -- 8 wide, 2 lit
@@ -84,27 +90,65 @@ local lead = false        -- the first word of a run stays twice as long
 local note = ''           -- why there is no word: no phone, no text
 local shown = false       -- ticked on screen: only then is the place real
 
+-- c: a code point
 local function glyph_w(c)
-  local b = string.byte(c)
-  if b < 32 or b > 126 then return 0 end
-  local w = string.byte(WIDTHS, b - 31) - 48
+  local t, base
+  if c >= 32 and c <= 126 then
+    t, base = WIDTHS, 32
+  elseif c >= 0xA0 and c <= 0xFF then
+    t, base = LATIN1, 0xA0
+  elseif c >= 0x400 and c <= 0x45F then
+    t, base = CYRILLIC, 0x400
+  elseif c >= 0x490 and c <= 0x4FF then
+    return OTHER_W + SPACING
+  else
+    return 0
+  end
+  local w = string.byte(t, c - base + 1) - 48
   return w > 0 and w + SPACING or 0
+end
+
+-- s as code points and where each starts, one past the end last. Not
+-- valid UTF-8 (it always is from the phone), byte by byte.
+local function chars(s)
+  local cs, at = {}, {}
+  if utf8.len(s) then
+    for i, c in utf8.codes(s) do cs[#cs + 1] = c; at[#at + 1] = i end
+  else
+    for i = 1, #s do cs[i] = string.byte(s, i); at[i] = i end
+  end
+  at[#cs + 1] = #s + 1
+  return cs, at
 end
 
 local function text_w(s)
   local w = 0
-  for i = 1, #s do w = w + glyph_w(string.sub(s, i, i)) end
+  for _, c in ipairs((chars(s))) do w = w + glyph_w(c) end
   return w
+end
+
+-- A letter or digit: ASCII ones, and all from U+00C0 on but the times and
+-- divide signs
+local function letter(c)
+  if c < 128 then return string.find(string.char(c), '%w') ~= nil end
+  return c >= 0xC0 and c ~= 0xD7 and c ~= 0xF7
+end
+
+-- w with its closing guillemets as '"', for the patterns below
+local function plain(w)
+  return (string.gsub(w, '\xC2\xBB', '"'))
 end
 
 -- The letter to look at, by the length of the word without its
 -- punctuation: the second of two to five letters, the third of six to
 -- nine, and so on -- a little left of the middle, where a word is
 -- recognised fastest.
-local function pivot(w)
-  local a = string.find(w, '%w') or 1
-  local b = #w
-  while b > a and not string.find(string.sub(w, b, b), '%w') do b = b - 1 end
+local function pivot(cs)
+  local a = 1
+  while a < #cs and not letter(cs[a]) do a = a + 1 end
+  if not letter(cs[a]) then a = 1 end
+  local b = #cs
+  while b > a and not letter(cs[b]) do b = b - 1 end
   local n = b - a + 1
   local p = n <= 1 and 1 or n <= 5 and 2 or n <= 9 and 3 or n <= 13 and 4
             or 5
@@ -115,20 +159,20 @@ end
 -- for a long word.
 local function delay(w)
   local d = 60 / wpm
-  local mark = string.match(w, '([%.!?,;:])[%)"\']*$')
+  local mark = string.match(plain(w), '([%.!?,;:])[%)"\']*$')
   if mark == '.' or mark == '!' or mark == '?' then
     d = d * 2
   elseif mark then
     d = d * 1.5
   end
-  if #w > 8 then d = d * 1.25 end
+  if (utf8.len(w) or #w) > 8 then d = d * 1.25 end
   return d
 end
 
 local function sentence_start(i)
   if i <= 0 then return true end
   local prev = words[i - 1]
-  return prev ~= nil and string.find(prev, '[%.!?][%)"\']*$') ~= nil
+  return prev ~= nil and string.find(plain(prev), '[%.!?][%)"\']*$') ~= nil
 end
 
 local function send(from, count)
@@ -310,17 +354,19 @@ end
 -- Each piece is one text() call, so the firmware spaces each piece itself;
 -- only their starts come from WIDTHS.
 local function draw_word(w)
-  local p = pivot(w)
-  local c = string.sub(w, p, p)
-  local x = PIVOT_X - (glyph_w(c) - SPACING) // 2
-  local before, after = string.sub(w, 1, p - 1), string.sub(w, p + 1)
+  local cs, at = chars(w)
+  local p = pivot(cs)
+  local c = string.sub(w, at[p], at[p + 1] - 1)
+  local cw = glyph_w(cs[p] or 32)
+  local x = PIVOT_X - (cw - SPACING) // 2
+  local before, after = string.sub(w, 1, at[p] - 1), string.sub(w, at[p + 1])
   if before ~= '' then
     frame.display.text(before, x - text_w(before), WORD_Y,
                        { color = 'WHITE' })
   end
   frame.display.text(c, x, WORD_Y, { color = 'RED' })
   if after ~= '' then
-    frame.display.text(after, x + glyph_w(c), WORD_Y, { color = 'WHITE' })
+    frame.display.text(after, x + cw, WORD_Y, { color = 'WHITE' })
   end
 end
 

@@ -45,9 +45,11 @@ local loc = nil      -- id of the location request in flight
 local here = nil     -- 'lat,lon' when the place came from the phone's GPS
 local text = ''
 
+-- UTF-8: LINE_MAX counts characters (Cyrillic is two bytes each)
 local function clip(s)
-  if #s > LINE_MAX then return string.sub(s, 1, LINE_MAX - 2) .. '..' end
-  return s
+  if (utf8.len(s) or #s) <= LINE_MAX then return s end
+  local cut = utf8.len(s) and utf8.offset(s, LINE_MAX - 1) or LINE_MAX - 1
+  return string.sub(s, 1, cut - 1) .. '..'
 end
 
 local function fetch(place)
@@ -91,7 +93,6 @@ function _M.tick()
     local status, body = _M.host.result(req)
     if status == 200 then
       req = nil
-      body = string.gsub(body, '[\128-\255]', '')
       local place, temp, sky = string.match(body, '^([^|]*)|([^|]*)|(.-)%s*$')
       if place then
         -- for a position wttr.in names it by its numbers
