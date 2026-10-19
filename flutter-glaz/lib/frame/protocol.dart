@@ -37,6 +37,7 @@ const fileData = 0x1E;
 const recStart = 0x1F;
 const recDrop = 0x10;
 const luaResult = 0x09;
+const textGet = 0x0A;
 
 /// modules/flipper.lua: [1] show the Flipper, [0] stop, [2, seq] frame taken
 const flipper = 0x0B;
@@ -89,6 +90,7 @@ const codeNames = {
   recDrop: 'REC_DROP',
   luaResult: 'LUA_RESULT',
   flipper: 'FLIPPER',
+  textGet: 'TEXT_GET',
   photoChunk: 'photo chunk',
   photoEnd: 'photo end',
   audioChunk: 'audio chunk',

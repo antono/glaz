@@ -65,8 +65,9 @@ local data = require('data.min')
 -- submenus. Each module must return a table with a .label and either .run()
 -- (mode 'info') or .tick() (mode 'app'), and may set .background.
 local MENU = {
-  { label = 'Apps',     'assistant', 'photo', 'timeseries', 'recorder',
-                        'stopwatch', 'files', 'weather', 'flipper' },
+  { label = 'Apps',     'assistant', 'reader', 'photo', 'timeseries',
+                        'recorder', 'stopwatch', 'files', 'weather',
+                        'flipper' },
   { label = 'Sensors',  'battery', 'tilt', 'taptune' },
   { label = 'Settings', 'brightness', 'sleep' },
   { label = 'Info',     'notifications', 'bluetooth', 'uptime', 'firmware',
@@ -643,6 +644,18 @@ local function draw_top_bar(last, crumbs)
   end
 end
 
+-- A module's error, as its screen shows it: printed too, for the phone's
+-- log (Glaz > More > Log), once -- not on every tick that repeats it.
+local last_err = nil
+local function err_text(e)
+  local text = 'err: ' .. tostring(e)
+  if text ~= last_err then
+    last_err = text
+    print(run_name .. ' ' .. text)
+  end
+  return text
+end
+
 local function render()
   -- A notification covers everything; what was under it carries on and is
   -- drawn again when it goes.
@@ -665,11 +678,21 @@ local function render()
 
   if running then
     -- a module may take the whole screen (_M.fullscreen), top bar too, and
-    -- draw for itself (_M.draw), under its text: Flipper's screen. A bad
-    -- draw must not take the screen down.
+    -- draw for itself (_M.draw): Flipper's screen, under its tick() text,
+    -- or Reader's word, whose tick() text (_M.quiet) only says when the
+    -- screen is out of date. A bad draw must not take the screen down.
     local mod = mods[running]
     if not (mod and mod.fullscreen) then draw_top_bar(run_name) end
-    if mod and mod.draw then pcall(mod.draw) end
+    if mod and mod.draw then
+      local ok, e = pcall(mod.draw)
+      if not ok then
+        frame.display.text(err_text(e), LEFT_X, TOP_Y, { color = 'WHITE' })
+      end
+      if mod.quiet then
+        show()
+        return
+      end
+    end
     -- a module may return several lines, separated by '\n': TEXT_ROWS of
     -- them at the bottom, or with _M.rows set, up to that many from the
     -- first row under the top bar (Assistant's answers)
@@ -865,18 +888,6 @@ local function menu_back()
   last_act = frame.time.utc()
   send(MENU_LEVEL, #stack)
   render()
-end
-
--- A module's error, as its screen shows it: printed too, for the phone's
--- log (Glaz > More > Log), once -- not on every tick that repeats it.
-local last_err = nil
-local function err_text(e)
-  local text = 'err: ' .. tostring(e)
-  if text ~= last_err then
-    last_err = text
-    print(run_name .. ' ' .. text)
-  end
-  return text
 end
 
 -- Put module id on screen. The module gets the whole display; the menu gets
@@ -1475,11 +1486,18 @@ function app_loop()
 
         elseif mod and mod.mode == 'app' then
           -- keep refreshing until closed or left alone for APP_TIMEOUT;
-          -- a background module then carries on off screen
+          -- a background module then carries on off screen. A module busy
+          -- with the wearer (Reader, reading) is not left alone. _M.period
+          -- ticks it faster than APP_TICK_PERIOD (Reader: a word every 0.1 s
+          -- at 600 wpm).
+          if mod.busy then
+            local ok, busy = pcall(mod.busy)
+            if ok and busy then run_at = now end
+          end
           if now - run_at > APP_TIMEOUT then
             stop_app()
           elseif now >= next_app then
-            next_app = now + APP_TICK_PERIOD
+            next_app = now + (mod.period or APP_TICK_PERIOD)
             if mod.tick then
               local ok, text, done = pcall(mod.tick)
               local fresh = ok and tostring(text or '') or err_text(text)

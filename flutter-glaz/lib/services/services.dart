@@ -14,6 +14,7 @@ import 'network.dart';
 import 'notifications.dart';
 import 'photo_dir.dart';
 import 'photos.dart';
+import 'reader.dart';
 import 'recordings.dart';
 import 'speech.dart';
 import 'transcripts.dart';
@@ -35,6 +36,7 @@ class Services {
     this.assistant,
     this.lua,
     this.flipper,
+    this.reader,
   );
 
   final Settings settings;
@@ -50,6 +52,7 @@ class Services {
   final AssistantService assistant;
   final GlassesLua lua;
   final FlipperMirror flipper;
+  final ReaderService reader;
 
   static late Services instance;
 
@@ -59,6 +62,7 @@ class Services {
     Settings? settings,
     Directory? photoDir,
     Directory? recordingDir,
+    Directory? readerDir,
   }) async {
     final s = settings ?? await Settings.load();
     final link = FrameLink();
@@ -90,7 +94,9 @@ class Services {
       ),
       GlassesLua(link),
       FlipperMirror(link, s),
+      ReaderService(link, s, readerDir ?? await readerRoot()),
     );
+    await services.reader.load();
     LuaBridge(s, services.lua);
     SettingsSync(link, s);
     services.keys.attach();

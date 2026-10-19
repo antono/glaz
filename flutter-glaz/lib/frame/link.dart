@@ -218,11 +218,14 @@ class FrameLink extends ChangeNotifier {
       if (e.connectionState == BluetoothConnectionState.connected) {
         _upAt = DateTime.now();
       } else if (e.connectionState == BluetoothConnectionState.disconnected) {
-        final up = _upAt == null
-            ? Duration.zero
-            : DateTime.now().difference(_upAt!);
+        // a connect that never came up is no drop: frame_ble retrying
+        // glasses that are away, every 30 s
+        final upAt = _upAt;
         _upAt = null;
-        _quickDrops = up < quickDrop ? _quickDrops + 1 : 0;
+        if (upAt != null) {
+          final up = DateTime.now().difference(upAt);
+          _quickDrops = up < quickDrop ? _quickDrops + 1 : 0;
+        }
         _onDrop(e.device, e.device.disconnectReason?.code);
       }
     });

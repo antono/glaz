@@ -23,4 +23,10 @@ void main() {
     expect(t(false, 19, 0), PairingTrouble.none);
     expect(t(false, 61, 3), PairingTrouble.none); // nothing to forget here
   });
+
+  test('the glasses went quiet: timeouts, however many', () {
+    expect(t(true, 147, 3), PairingTrouble.none); // GATT_CONNECTION_TIMEOUT
+    expect(t(true, 8, 2), PairingTrouble.none); // supervision timeout
+    expect(t(false, 147, 3), PairingTrouble.none);
+  });
 }
