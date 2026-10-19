@@ -4,6 +4,7 @@ import '../glasses_menu.dart';
 import '../services/services.dart';
 import '../theme.dart';
 import 'assistant_screen.dart';
+import 'reader_screen.dart';
 
 /// A module's own page in the Menu tab: on the glasses or not, its
 /// settings, and for one that uses the Internet, the permission.
@@ -92,6 +93,8 @@ class ModuleSettingsScreen extends StatelessWidget {
             ],
             // the phone's side of the assistant: its agent, its language
             if (module.id == 'assistant') const AssistantSettings(),
+            // the text it reads, kept on the phone
+            if (module.id == 'reader') const ReaderText(),
           ],
         ),
       ),

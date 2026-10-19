@@ -82,6 +82,11 @@ class Settings extends ChangeNotifier {
   bool get luaBridge => _prefs.getBool('lua.bridge') ?? false;
   set luaBridge(bool on) => _set('lua.bridge', on);
 
+  /// Where the Reader is in its text: the number of the word on the
+  /// glasses' screen (services/reader.dart).
+  int get readerPlace => _prefs.getInt('reader.place') ?? 0;
+  set readerPlace(int word) => _set('reader.place', word);
+
   /// A module's setting (glasses_menu.dart, ModuleSetting); null = its
   /// default.
   String? config(String module, String key) =>
@@ -92,6 +97,7 @@ class Settings extends ChangeNotifier {
   void _set(String key, Object value) {
     if (value is bool) _prefs.setBool(key, value);
     if (value is String) _prefs.setString(key, value);
+    if (value is int) _prefs.setInt(key, value);
     notifyListeners();
   }
 }

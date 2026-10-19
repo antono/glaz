@@ -125,7 +125,18 @@ hardware.
   module not running is started into the background for it. Recorder's is
   the phone's record button: `'on'` / `'off'`.
 
-Each returns the text to show (`nil` keeps the current text) and, optionally,
+**Drawing and pace (optional, `app` modules).**
+
+- `draw()` -- the module paints everything under the top bar itself,
+  with `frame.display.*`; the app draws the top bar and calls `show()`.
+  What `tick()` returns then only says when to redraw: any change does.
+  Reader draws its word this way, the red letter at a fixed pixel.
+- `period` -- seconds between ticks, instead of `APP_TICK_PERIOD`
+  (0.25 s). Reader: 0.02, a word is due every 60/wpm seconds.
+- `busy()` -- while it returns true the module is in use without being
+  touched, so `APP_TIMEOUT` does not close it: Reader, reading.
+
+Each input hook returns the text to show (`nil` keeps the current text) and, optionally,
 `true` as a second value meaning "done": the module is stopped — even a
 background one — and the menu comes back. Double and triple taps are never
 passed to a module, so back and sleep always work. `modules/brightness.lua` is the example: tilt previews a
@@ -380,6 +391,7 @@ Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 | `0x1C` | `LOCATION_GET` | `[0x1C, id, module...]` | a module asks where the phone is — see [Location](#location) |
 | `0x1D` | `FILES` | `[0x1D, id, more, bytes...]` | a folder listing, in packets — see [Files](#files) |
 | `0x1E` | `FILE_DATA` | `[0x1E, id, more, bytes...]` | a file's contents, in packets — see [Files](#files) |
+| `0x0A` | `TEXT_GET` | `[0x0A, place, from, count, wpm]` | Reader wants words, or says where it is -- see [Reader](#reader) |
 | `0x09` | `LUA_RESULT` | `[0x09, id, more, bytes...]` | what `LUA_EVAL`'s Lua printed and returned, or its error, in packets — see [Lua console](#lua-console) |
 | `0x07` | photo chunk | `[0x07, jpeg bytes...]` | part of a photo (Camera module) |
 | `0x08` | photo end | `[0x08]` | last chunk; the photo is complete |
@@ -657,6 +669,72 @@ the glasses' screen only (`android/.../Voice.kt`).
 `APP_OPEN` brings Assistant back to the screen for the answer even if the
 wearer went elsewhere meanwhile. An answer to a question that was asked
 again in between is dropped.
+
+### Reader
+
+Reader (`modules/reader.lua`) is a speed reader (RSVP): one word at a
+time, at a speed in words a minute that is always on screen. The text
+lives on the phone (Glaz > Menu > Reader: paste it, or type it) with the
+place in it; the glasses hold a few dozen words and ask for more as they
+go, so a book costs them no more memory than a sentence.
+
+`TEXT_GET` (`0x0A`) is 11 bytes after the code, big-endian `>I4I4BI2`:
+
+| Field | Means |
+| --- | --- |
+| `place` | the number of the word on screen, 0-based |
+| `from` | the first word wanted; `0xFFFFFFFF`: from the place the phone keeps |
+| `count` | words wanted, `BATCH` (60); `0`: none, the glasses only say where they are and at what speed (on a pause, on leaving, at the end) |
+| `wpm` | the speed |
+
+The phone answers with `MODULE_CALL` `reader` and `t:from:total:words`:
+the words from number `from`, one space between them, as many of `count`
+as fit in 900 bytes, and how many the text has. `t:0:0:` means there is
+no text. The glasses ask again when fewer than `LOW` (20) are left ahead,
+keep `BEHIND` (30) behind for going back, and drop an answer that is not
+for the request they are waiting on. `APP_OPEN` `reader` with `new` (the
+phone's Read on glasses) starts again from the phone's place.
+
+Reader asks only from `tick()`, never from `start()`: an answer that comes
+after it was left starts it in the background for `remote()`, and a
+`start()` that asked would be answered again, for ever. For the same
+reason it reports its place only if it was on screen.
+
+The phone keeps `place` as the reading position, except from a request
+with `from = 0xFFFFFFFF` (the glasses do not know it yet). It keeps `wpm`
+as Reader's speed setting only from a report (`count = 0`): a request for
+words sent just before a speed was picked on the phone would undo it. The
+glasses take a new setting while reading.
+
+The phone prepares the words (`flutter-glaz/lib/services/reader.dart`):
+ASCII as for notifications, split on white space, and a word longer than
+13 characters cut into pieces of about equal length, each but the last
+ending in `-` (at its own hyphens first): `extraord-`, `inarily`. 13 is
+what fits right of the pivot at the largest glyphs.
+
+**On the glasses.** The pivot letter -- the second letter of a word of two
+to five, the third of six to nine, the fourth of ten to thirteen,
+punctuation not counted -- is red and centred on `x = 250`, a third of the
+way across what the eye sees, so the longer part, after it, has the room.
+The part before it is drawn to end at its left, the part after from its
+right; the widths come from the firmware's font table (`system_font.h`),
+kept in the module as one string. Grey rules above and below the word have
+a notch pointing at the pivot. Under them: the speed, `paused` or `the
+end`, and how far through, in percent.
+
+A word stays `60 / wpm` seconds; twice that at the end of a sentence,
+1.5 times after a comma, colon or semicolon, 1.25 times for a word over
+eight characters, and the first word after a pause twice as long, so the
+eye finds it.
+
+| Gesture | Reading | Paused |
+| --- | --- | --- |
+| tap | pause | go on; at the end, from the start |
+| tilt | faster / slower by 25 wpm (100 to 800) | back / on by a sentence |
+| double tap | leave; the phone keeps the place | the same |
+
+While reading Reader is `busy()`, so the app's minute without a tap does
+not close it; paused, it does.
 
 ### Status
 

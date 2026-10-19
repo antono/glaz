@@ -37,6 +37,7 @@ const fileData = 0x1E;
 const recStart = 0x1F;
 const recDrop = 0x10;
 const luaResult = 0x09;
+const textGet = 0x0A;
 
 // The frame_msg camera library's own codes, used by Camera and Time series
 const photoChunk = 0x07;
@@ -85,6 +86,7 @@ const codeNames = {
   recStart: 'REC_START',
   recDrop: 'REC_DROP',
   luaResult: 'LUA_RESULT',
+  textGet: 'TEXT_GET',
   photoChunk: 'photo chunk',
   photoEnd: 'photo end',
   audioChunk: 'audio chunk',
