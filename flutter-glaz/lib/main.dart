@@ -168,8 +168,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final settings = Services.instance.settings;
     final recorder = Services.instance.recorder;
+    final keys = Services.instance.keys;
     return ListenableBuilder(
-      listenable: Listenable.merge([settings, recorder]),
+      listenable: Listenable.merge([settings, recorder, keys]),
       builder: (context, _) {
         final order = _order;
         // a red dot on Recordings while the glasses record
@@ -179,10 +180,16 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           child: Icon(data),
         );
         return PopScope(
-          // back leaves the editing mode first
-          canPop: !_editing,
+          // back leaves the editing mode first; with the keyboard remote on,
+          // Glaz decides, or Keynote's Back would close it (keys.dart)
+          canPop: !_editing && !keys.holdsBack,
           onPopInvokedWithResult: (popped, _) {
-            if (!popped) _edit(false);
+            if (popped) return;
+            if (_editing) {
+              _edit(false);
+            } else {
+              SystemNavigator.pop();
+            }
           },
           child: Scaffold(
             appBar: AppBar(title: Text(_tab(_current).label.toUpperCase())),

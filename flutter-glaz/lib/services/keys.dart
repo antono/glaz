@@ -25,7 +25,13 @@ import '../settings.dart';
 /// same keys reach the glasses with another app in front, sent here on
 /// [channel]; the service keeps them from that app only while they are
 /// taken here: the glasses connected, the service on.
-class KeyRemote extends ChangeNotifier {
+///
+/// Android 16 (target SDK 36) has predictive back: Android's Back may never
+/// come as a key, but as a pop of the route ([didPopRoute]), or, with
+/// nothing to pop, close the app without asking. So while the keys are
+/// taken, [holdsBack] keeps the root route from popping by itself
+/// (main.dart), and a pop this soon after a Back key is dropped.
+class KeyRemote extends ChangeNotifier with WidgetsBindingObserver {
   KeyRemote(this.link, this.settings, {void Function(List<int>)? send})
     : _send = send ?? ((b) => link.send(input, b));
 
@@ -76,6 +82,9 @@ class KeyRemote extends ChangeNotifier {
   Duration? _okDown;
   Duration? _backAt;
 
+  /// Since the last Back key, for the pop that may follow it.
+  final _sinceBack = Stopwatch();
+
   /// The Back being dropped is still down.
   bool _echo = false;
   KeyEvent? _claimed;
@@ -105,15 +114,40 @@ class KeyRemote extends ChangeNotifier {
 
   bool? _sentActive;
 
+  /// Back should not close Glaz by itself: it may be Keynote's echo.
+  /// Listeners hear when it changes.
+  bool holdsBack = false;
+
+  void _hold() {
+    if (_active == holdsBack) return;
+    holdsBack = _active;
+    notifyListeners();
+  }
+
+  /// The pop is the echo of a Back key just taken: dropped, once.
+  @override
+  Future<bool> didPopRoute() async {
+    final echo = _sinceBack.isRunning && _sinceBack.elapsed < backEcho;
+    _sinceBack
+      ..stop()
+      ..reset();
+    return echo;
+  }
+
   /// Starts listening. The keys taken are also kept from the focus system,
   /// so arrows do not move the focus and Space does not press a button.
   void attach() {
+    // before the app's own observers: they would pop
+    WidgetsBinding.instance.addObserver(this);
     HardwareKeyboard.instance.addHandler(handle);
     FocusManager.instance.addEarlyKeyEventHandler(
       (event) => identical(event, _claimed)
           ? KeyEventResult.handled
           : KeyEventResult.ignored,
     );
+    link.addListener(_hold);
+    settings.addListener(_hold);
+    _hold();
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
     channel.setMethodCallHandler((call) async {
       if (call.method == 'key') fromBackground(call.arguments as List);
@@ -222,7 +256,12 @@ class KeyRemote extends ChangeNotifier {
       gesture = [2, 1];
     } else if (_back.contains(key)) {
       gesture = [1, 2];
-      if (down) _backAt = event.timeStamp;
+      if (down) {
+        _backAt = event.timeStamp;
+        _sinceBack
+          ..reset()
+          ..start();
+      }
     } else if (_menu.contains(key)) {
       gesture = [1, 3];
     } else {

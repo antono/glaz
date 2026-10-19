@@ -77,6 +77,10 @@ Flipper's Keynote follows its Backspace with Android's own Back key
 (`hid_keynote.c` in the Flipper firmware). glaz drops that second Back if
 it comes within 500 ms of the Backspace, so pressing Back on the Flipper
 goes back on the glasses without also closing glaz or the app in front.
+On Android 16 that Back may come not as a key but as the system's own
+back (predictive back); glaz drops it the same way, and so, while the
+remote drives the glasses, the phone's Back on glaz's main screen is
+handled by glaz itself rather than by Android.
 Hold Back on the Flipper to leave Keynote.
 
 The Flipper remembers the pairing: next time, open Remote > Keynote and it

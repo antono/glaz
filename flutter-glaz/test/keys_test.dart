@@ -72,6 +72,21 @@ void main() {
     expect(press(LogicalKeyboardKey.goBack, 5000), isFalse);
   });
 
+  test("Keynote's Back as a pop of the route: dropped, once", () async {
+    expect(await keys.didPopRoute(), isFalse, reason: 'no Back key yet');
+    press(LogicalKeyboardKey.backspace, 0);
+    expect(await keys.didPopRoute(), isTrue);
+    expect(await keys.didPopRoute(), isFalse, reason: 'the next is real');
+  });
+
+  test('Back is held while the keys are taken', () {
+    keys.attach();
+    expect(keys.holdsBack, isTrue);
+    link.state = LinkState.disconnected;
+    link.notifyListeners();
+    expect(keys.holdsBack, isFalse);
+  });
+
   test('other keys, and every key without the glasses, are left alone', () {
     expect(press(LogicalKeyboardKey.keyQ, 0), isFalse);
     link.state = LinkState.disconnected;
