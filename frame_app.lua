@@ -98,7 +98,9 @@ local APP_OPEN  = 0x2F    -- name .. '\n' .. arg: the phone puts a module on
                           -- screen; arg goes to its start() or remote()
 local HANDS_OFF = 0x2E    -- [1]: the phone's remote is in front, so the
                           -- wearer's gestures are off but a triple tap and a
-                          -- tap waking a blank screen; [0]: all back
+                          -- tap waking a blank screen; [2]: a keyboard
+                          -- remote drives, only the triple tap is left;
+                          -- [0]: all back. A lease: see HANDS_OFF_LEASE
 local LUA_EVAL  = 0x30    -- [id] .. Lua: the phone's console runs it here,
                           -- answered with LUA_RESULT (app/glaz_lua.lua)
 local LOCATION  = 0x28    -- '>BBi4i4I2I2' id, status, lat and lon in
@@ -254,6 +256,23 @@ local BT_OFF_PALETTE = 1
 local ICON_BT       = '\x00\x00\x01\x80\x01\xC0\x01\xB0\x19\x98\x0D\xB0' ..
                       '\x07\xC0\x03\x80\x07\xC0\x0D\xB0\x19\x98\x01\xB0' ..
                       '\x01\xC0\x01\x80\x00\x00\x00\x00'
+
+-- The link is checked, not only taken from the firmware: is_connected()
+-- stays true while a phone whose app has died or frozen still holds the
+-- link. The phone asks for STATUS every minute; with no word from it for
+-- LINK_QUIET the rune turns ORANGE (palette offset 6, index 7). While a
+-- keyboard remote drives the glasses (HANDS_OFF [2]) a keyboard takes the
+-- rune's place, SKYBLUE.
+local LINK_QUIET     = 150   -- seconds
+local BT_QUIET_PALETTE = 6
+local ICON_KEYS     = '\x00\x00\x00\x00\x00\x00\x00\x00\x7F\xFE\x40\x02' ..
+                      '\x55\x52\x40\x02\x4A\xAA\x40\x02\x4F\xF2\x40\x02' ..
+                      '\x7F\xFE\x00\x00\x00\x00\x00\x00'
+
+-- HANDS_OFF is a lease: the phone sends it again every 15 s for as long as
+-- it holds, and past HANDS_OFF_LEASE without it the wearer's gestures come
+-- back -- a phone gone quiet never leaves the glasses deaf.
+local HANDS_OFF_LEASE = 40   -- seconds
 
 -- The framebuffer is 640x400 but the wearer does not see all of it. Measured
 -- by probing: y=340 is visible, y=370 is not, so the bottom is clipped.
@@ -466,7 +485,10 @@ local hits_seen = 0   -- tap_hits already handed to a module
 local tap_mute  = 0   -- swallow taps until this time, after a toggle
 local remote_dir = 0  -- a tilt from the phone's remote, taken as if by roll
 local tap_remote = false  -- tap_n came from the phone's remote, not the arm
-local hands_off = false   -- HANDS_OFF: the wearer's gestures mostly off
+local hands_off = 0       -- HANDS_OFF: 0, or the wearer's gestures off --
+                          -- 1 the Remote tab, 2 a keyboard remote
+local hands_off_until = 0 -- utc() the phone's last HANDS_OFF runs out
+local heard_at = 0        -- utc() of the phone's last message
 
 local function split_lines(s)
   local out = {}
@@ -595,9 +617,19 @@ local function recording()
   return (m and m.rec or b and b.rec) == true
 end
 
+-- The link as the top bar shows it: 'off', 'quiet' (connected, but the
+-- phone has said nothing for LINK_QUIET), 'keys' (a keyboard remote
+-- drives) or 'on'.
+local function link_state()
+  if not bt_connected() then return 'off' end
+  if frame.time.utc() - heard_at > LINK_QUIET then return 'quiet' end
+  if hands_off == 2 then return 'keys' end
+  return 'on'
+end
+
 local function status_text()
   return clock_text() .. ' ' .. tostring(battery_level()) .. ' ' ..
-         tostring(bt_connected()) .. ' ' .. tostring(recording())
+         link_state() .. ' ' .. tostring(recording())
 end
 
 -- 'Glaz > Settings > Brightness'. When it is too wide for right_x, the
@@ -632,8 +664,15 @@ local function draw_top_bar(last, crumbs)
     pcall(frame.display.bitmap, ICON_X, ICON_Y, ICON_W, 2, ICON_PALETTE,
           ICON_PLAY)
   end
-  pcall(frame.display.bitmap, BT_X, ICON_Y, ICON_W, 2,
-        bt_connected() and BT_ON_PALETTE or BT_OFF_PALETTE, ICON_BT)
+  local link = link_state()
+  if link == 'keys' then
+    pcall(frame.display.bitmap, BT_X, ICON_Y, ICON_W, 2, BT_ON_PALETTE,
+          ICON_KEYS)
+  else
+    pcall(frame.display.bitmap, BT_X, ICON_Y, ICON_W, 2,
+          link == 'on' and BT_ON_PALETTE or link == 'quiet' and
+          BT_QUIET_PALETTE or BT_OFF_PALETTE, ICON_BT)
+  end
   draw_crumbs(parts, ((bg or rec) and ICON_X or BT_X) - CHAR_W // 2)
 
   frame.display.text(clock_text(), TIME_X, CRUMB_Y, { color = 'GREY' })
@@ -1092,6 +1131,9 @@ function app_loop()
   local resume = take_last()   -- always, so a stale file never lingers
   if not woke then draw_splash() end
 
+  -- the host that started the app has just spoken: the link is not quiet
+  heard_at = frame.time.utc()
+
   -- the host waits for this line on await_print
   print('Frame app is running')
   -- what everything above costs; Frame reboots when Lua runs out of memory
@@ -1178,6 +1220,7 @@ function app_loop()
 
       -- 1. incoming messages from the host
       if data.process_raw_items() > 0 then
+        heard_at = now
         if data.app_data[MENU_SET] ~= nil then
           -- Host overrides the module menu with one flat level. Such items
           -- have no module behind them, so launching one only notifies the
@@ -1328,7 +1371,8 @@ function app_loop()
         end
 
         if data.app_data[HANDS_OFF] ~= nil then
-          hands_off = string.byte(data.app_data[HANDS_OFF], 1) == 1
+          hands_off = string.byte(data.app_data[HANDS_OFF], 1) or 0
+          hands_off_until = now + HANDS_OFF_LEASE
           data.app_data[HANDS_OFF] = nil
         end
 
@@ -1367,8 +1411,11 @@ function app_loop()
         end
       end
 
-      -- the remote went with the link: the wearer has the glasses back
-      if hands_off and not bt_connected() then hands_off = false end
+      -- the remote went with the link, or the phone stopped renewing it:
+      -- the wearer has the glasses back
+      if hands_off ~= 0 and (now > hands_off_until or not bt_connected()) then
+        hands_off = 0
+      end
 
       -- 2. taps. The callback has already counted them; this only decides
       --    what the count means. Nothing here depends on the loop's pace.
@@ -1416,8 +1463,10 @@ function app_loop()
         end
 
         -- the phone's remote in front: of the wearer's taps only one or two
-        -- on a blank screen count (the triple is taken above)
-        if hands_off and not tap_remote and (n > 2 or visible or running) then
+        -- on a blank screen count; a keyboard remote, none (the triple, to
+        -- sleep, is taken above; waking from sleep is the firmware's)
+        if hands_off ~= 0 and not tap_remote
+           and (n > 2 or visible or running or hands_off == 2) then
           n = 0
         end
 
@@ -1471,7 +1520,7 @@ function app_loop()
       hits_seen = tap_hits
       if running then
         local mod = mods[running]
-        local dir = (mod and mod.on_roll and not hands_off) and roll_step(now)
+        local dir = (mod and mod.on_roll and hands_off == 0) and roll_step(now)
                     or 0
         if remote_dir ~= 0 then
           dir = (mod and mod.on_roll) and remote_dir or 0
@@ -1481,7 +1530,7 @@ function app_loop()
         if dir ~= 0 then
           module_input(mod.on_roll, dir)
 
-        elseif hits > 0 and mod and mod.on_hit and not hands_off then
+        elseif hits > 0 and mod and mod.on_hit and hands_off == 0 then
           module_input(mod.on_hit, hits)
 
         elseif mod and mod.mode == 'app' then
@@ -1519,7 +1568,7 @@ function app_loop()
       --    which saves battery. Nor under a notification: the cursor would
       --    move unseen.
       elseif visible and not notice and #level().items > 0 then
-        local dir = hands_off and 0 or roll_step(now)
+        local dir = hands_off ~= 0 and 0 or roll_step(now)
         if remote_dir ~= 0 then dir, remote_dir = remote_dir, 0 end
         if dir ~= 0 then move(dir) end
 

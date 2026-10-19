@@ -109,6 +109,22 @@ class KeyRemote extends ChangeNotifier with WidgetsBindingObserver {
   /// on its accessibility service. Android only.
   bool background = false;
 
+  /// A keyboard remote is attached to the phone (Keyboards.kt): while one
+  /// is, and drives the glasses ([drives]), their own gestures are off but
+  /// the triple tap to sleep (main.dart, HANDS_OFF). Android only.
+  bool keyboard = false;
+
+  /// The attached keyboard reaches the glasses: the service is on, and
+  /// Glaz is on screen ([shown]) or the background service takes the keys.
+  bool drives({required bool shown}) =>
+      keyboard && settings.serviceOn('keys') && (shown || background);
+
+  void _keyboard(bool on) {
+    if (on == keyboard) return;
+    keyboard = on;
+    notifyListeners();
+  }
+
   bool get _active =>
       settings.serviceOn('keys') && link.connected && !link.busy;
 
@@ -151,6 +167,7 @@ class KeyRemote extends ChangeNotifier with WidgetsBindingObserver {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
     channel.setMethodCallHandler((call) async {
       if (call.method == 'key') fromBackground(call.arguments as List);
+      if (call.method == 'keyboard') _keyboard(call.arguments as bool);
     });
     link.addListener(_sync);
     settings.addListener(_sync);
@@ -160,8 +177,10 @@ class KeyRemote extends ChangeNotifier with WidgetsBindingObserver {
     refresh();
   }
 
-  /// Asks Android whether the background service is on.
+  /// Asks Android whether the background service is on, and whether a
+  /// keyboard is attached.
   Future<void> refresh() async {
+    _keyboard(await _call<bool>('keyboard') ?? false);
     final on = await _call<bool>('background') ?? false;
     if (on == background) return;
     background = on;

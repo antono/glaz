@@ -34,6 +34,13 @@ text field in glaz has the focus; otherwise they do what they always do.
 Holding OK opens the menu because a clicker or a Flipper has no Menu key.
 Sleep (a triple tap) has no key: tap the arm three times.
 
+While the remote is connected to the phone, the glasses ignore your head
+and taps on the arm -- all but the triple tap to sleep -- so a nod or a
+touch does not get in the way of the remote; the top bar shows a keyboard
+where the Bluetooth icon was. Turn the remote off, or let it go out of
+range, and the gestures come back by themselves. To keep the gestures
+anyway: More > Settings, Glasses gestures off.
+
 ## 1. Turn on the Keyboard remote
 
 In glaz: **More > Services > Keyboard remote**, on.

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'frame/protocol.dart';
 import 'screens/home_screen.dart';
 import 'screens/menu_screen.dart';
 import 'screens/photos_screen.dart';
@@ -131,11 +132,13 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     Services.instance.settings.addListener(_handsOff);
+    Services.instance.keys.addListener(_handsOff);
   }
 
   @override
   void dispose() {
     Services.instance.settings.removeListener(_handsOff);
+    Services.instance.keys.removeListener(_handsOff);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -149,11 +152,18 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     _handsOff();
   }
 
-  // the Remote tab in front: the glasses take few gestures of their own
-  void _handsOff() => Services.instance.link.remoteHandsOff =
-      _shown &&
-      _current == 'remote' &&
-      Services.instance.settings.remoteHandsOff;
+  // a keyboard remote, or the Remote tab in front: the glasses take few
+  // gestures of their own, the keyboard's fewer still
+  void _handsOff() {
+    final s = Services.instance;
+    s.link.remoteHandsOff = !s.settings.remoteHandsOff
+        ? handsOffNone
+        : s.keys.drives(shown: _shown)
+        ? handsOffKeyboard
+        : _shown && _current == 'remote'
+        ? handsOffRemote
+        : handsOffNone;
+  }
 
   List<String> get _order => tabOrderFrom(Services.instance.settings.tabOrder);
 

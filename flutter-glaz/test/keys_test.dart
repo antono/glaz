@@ -137,4 +137,17 @@ void main() {
       [1, 2],
     ]);
   });
+
+  test('an attached keyboard drives the glasses only while it can', () {
+    settings.setService('keys', false);
+    keys.keyboard = true;
+    expect(keys.drives(shown: true), isFalse, reason: 'service off');
+    settings.setService('keys', true);
+    expect(keys.drives(shown: true), isTrue);
+    expect(keys.drives(shown: false), isFalse, reason: 'no background');
+    keys.background = true;
+    expect(keys.drives(shown: false), isTrue);
+    keys.keyboard = false;
+    expect(keys.drives(shown: true), isFalse);
+  });
 }

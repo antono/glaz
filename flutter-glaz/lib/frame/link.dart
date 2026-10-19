@@ -357,6 +357,10 @@ class FrameLink extends ChangeNotifier {
     _statusTimer = Timer.periodic(statusEvery, (_) {
       if (!busy) requestStatus();
     });
+    _handsOffTimer?.cancel();
+    _handsOffTimer = Timer.periodic(handsOffEvery, (_) {
+      if (_handsOff != handsOffNone) send(handsOff, [_handsOff], log: false);
+    });
     // during a task the app is stopped; runTask greets it when done
     if (!busy) _greet();
   }
@@ -365,7 +369,7 @@ class FrameLink extends ChangeNotifier {
     for (final f in onConnected) {
       f();
     }
-    if (_handsOff) send(handsOff, [1]);
+    if (_handsOff != handsOffNone) send(handsOff, [_handsOff]);
     requestStatus();
   }
 
@@ -427,6 +431,8 @@ class FrameLink extends ChangeNotifier {
   void _detach(LinkState next) {
     _statusTimer?.cancel();
     _statusTimer = null;
+    _handsOffTimer?.cancel();
+    _handsOffTimer = null;
     _data?.cancel();
     _data = null;
     _prints?.cancel();
@@ -502,16 +508,20 @@ class FrameLink extends ChangeNotifier {
     return job;
   }
 
-  /// Whether the wearer's own gestures are off but the triple tap (sleep)
-  /// and one or two taps on a blank screen, while the remote is in front
-  /// (docs/PROTOCOL.md, "Remote"). Sent again on every connect; the glasses
-  /// drop it themselves when the link goes.
-  bool get remoteHandsOff => _handsOff;
-  bool _handsOff = false;
-  set remoteHandsOff(bool on) {
-    if (on == _handsOff) return;
-    _handsOff = on;
-    send(handsOff, [on ? 1 : 0]);
+  /// Whether the wearer's own gestures are off, and for whom
+  /// (docs/PROTOCOL.md, "Remote"): [handsOffRemote] leaves the triple tap
+  /// (sleep) and one or two taps on a blank screen, [handsOffKeyboard] the
+  /// triple tap alone. Sent again on every connect and every
+  /// [handsOffEvery]: the glasses drop it themselves when the link goes or
+  /// it is not renewed.
+  int get remoteHandsOff => _handsOff;
+  int _handsOff = handsOffNone;
+  Timer? _handsOffTimer;
+  static const handsOffEvery = Duration(seconds: 15);
+  set remoteHandsOff(int kind) {
+    if (kind == _handsOff) return;
+    _handsOff = kind;
+    send(handsOff, [kind]);
   }
 
   /// The remote: [count] taps (1 select, 2 back, 3 the menu), as if on the

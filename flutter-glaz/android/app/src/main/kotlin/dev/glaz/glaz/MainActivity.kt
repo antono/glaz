@@ -9,11 +9,17 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private var speech: Speech? = null
     private var voice: Voice? = null
+    private var keyboards: Keyboards? = null
 
-    /** "glaz/keys": the keyboard remote in the background, KeyRemoteService. */
+    /**
+     * "glaz/keys": the keyboard remote in the background, KeyRemoteService,
+     * and whether one is attached, Keyboards.
+     */
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "glaz/keys")
+        val keyboards = Keyboards(applicationContext, channel)
+        this.keyboards = keyboards
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "take" -> {
@@ -22,6 +28,7 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "background" -> result.success(KeyRemoteService.running)
+                "keyboard" -> result.success(keyboards.attached)
                 "settings" -> {
                     startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     result.success(null)
@@ -39,6 +46,8 @@ class MainActivity : FlutterActivity() {
         speech = null
         voice?.close()
         voice = null
+        keyboards?.close()
+        keyboards = null
         KeyRemoteService.channel = null
         KeyRemoteService.taken = emptySet()
         super.cleanUpFlutterEngine(flutterEngine)

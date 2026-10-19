@@ -283,7 +283,7 @@ The same row is the **top bar**, left to right:
 | --- | --- | --- |
 | breadcrumb | 60 | sky blue |
 | background icon | 376 | green play triangle, a 16×16 1-bit `frame.display.bitmap`; only while a module runs in the background. A red dot instead while the module on screen or in the background sets `_M.rec` (Recorder, recording) |
-| Bluetooth icon | 400 | the Bluetooth rune, same bitmap format; sky blue while a host is connected, grey when not; always shown |
+| Bluetooth icon | 400 | the Bluetooth rune, same bitmap format; sky blue while a host is connected, grey when not, orange while connected but the host has sent nothing for 150 s (`LINK_QUIET`: the phone asks for `STATUS` every minute, so its app has died or frozen); a keyboard in its place while a keyboard remote drives the glasses (`HANDS_OFF` `[2]`); always shown, rechecked every second |
 | clock | 430 | `HH:MM`, grey; `--:--` until the host sends `CLOCK_SET` |
 | battery | 545 | `84%`, grey; red at 15 % or below |
 
@@ -364,7 +364,7 @@ which splits long messages into MTU-sized packets and reassembles them.
 | `0x2D` | `MODULE_CALL` | text, `module` `\n` `arg`: calls that module's `remote(arg)` — the remote's record button is `recorder\non` / `recorder\noff`; see [Recorder](#recorder) |
 | `0x2F` | `APP_OPEN` | text, `module`, optionally `\n` `arg`: puts that module on screen as if picked in the menu; `arg` goes to its `start()`, or to `remote(arg)` if it is not started again -- on screen already or back from the background; see [Assistant](#assistant) |
 | `0x30` | `LUA_EVAL` | `[id]` + Lua: runs it inside the app — see [Lua console](#lua-console) |
-| `0x2E` | `HANDS_OFF` | `[1]`: the remote is in front, the wearer's own gestures are off but a triple tap (sleep) and one or two taps on a blank screen; `[0]`: all back; see [Remote](#remote) |
+| `0x2E` | `HANDS_OFF` | `[1]`: the remote is in front, the wearer's own gestures are off but a triple tap (sleep) and one or two taps on a blank screen; `[2]`: a keyboard remote is attached, all off but the triple tap; `[0]`: all back. A lease, renewed every 15 s; see [Remote](#remote) |
 
 `MENU_SET` is an **override**: it replaces the module-defined menu with
 host-supplied labels and resets the cursor. Those items have no module behind
@@ -892,8 +892,22 @@ one or two taps on a blank screen: bringing back the last app, opening the
 menu or dismissing a notification. Taps from the remote work as before. Leaving the
 tab, or the app leaving the screen, sends `[0]`; the phone sends `[1]` again
 on every connect while the tab is open. The glasses drop it themselves the
-moment Bluetooth goes, so a lost phone never leaves them deaf. The user can
-turn it off: Glaz > More > Settings, Glasses gestures off.
+moment Bluetooth goes, so a lost phone never leaves them deaf; and it is a
+lease: the phone sends it again every 15 s, and with none for 40 s
+(`HANDS_OFF_LEASE`) the glasses drop it too -- a phone whose app froze with
+the link still up. The user can turn it off: Glaz > More > Settings, Glasses
+gestures off.
+
+**While a keyboard remote is attached** to the phone the phone sends
+`HANDS_OFF` `[2]`, whatever tab is open, with Glaz on screen or, with the
+background service on, behind another app: the keyboard drives, and of the
+wearer's gestures only the triple tap (sleep) is left -- not even taps on a
+blank screen. Waking from sleep is the firmware's and works as always. The
+phone learns of keyboards from Android's input devices (`Keyboards.kt`):
+an external keyboard, gamepad or D-pad, Bluetooth or USB. Unplugged or out
+of range, the phone sends `[0]` (or `[1]` on the Remote tab), and the
+gestures are back. The top bar shows a keyboard instead of the Bluetooth
+rune meanwhile.
 
 **A keyboard is a remote too** (`flutter-glaz/lib/services/keys.dart`, the
 Keyboard remote service). Any keyboard the phone has -- Bluetooth or USB, a

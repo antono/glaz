@@ -16,6 +16,11 @@ const input = 0x2B;
 const photoTake = 0x2C;
 const moduleCall = 0x2D;
 const handsOff = 0x2E;
+
+// HANDS_OFF's payload: who holds the glasses' own gestures off
+const handsOffNone = 0;
+const handsOffRemote = 1; // the Remote tab
+const handsOffKeyboard = 2; // a keyboard remote
 const appOpen = 0x2F;
 const luaEval = 0x30;
 
