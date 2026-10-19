@@ -105,11 +105,36 @@ in
       fi
       emulator -avd glaz -no-snapshot-save "$@"
     '';
+    # The app's signing key (flutter-glaz/android/*.secret): decrypted when
+    # missing or older than its .secret, after a pull say, and only on a
+    # machine with the GPG key of one of `git secret whoknows`. Without
+    # one, builds are signed with the machine's debug key (AGENTS.md).
+    reveal-key.exec = ''
+      cd "$DEVENV_ROOT"
+      stale=
+      while IFS=: read -r path _; do
+        [ "$path" -nt "$path.secret" ] || stale=1
+      done < .gitsecret/paths/mapping.cfg
+      [ -n "$stale" ] || exit 0
+      for who in $(git secret whoknows 2>/dev/null); do
+        if gpg --list-secret-keys "$who" >/dev/null 2>&1; then
+          if git secret reveal -f >/dev/null 2>&1; then
+            chmod 600 $(cut -d: -f1 .gitsecret/paths/mapping.cfg)
+            echo "signing key revealed"
+          else
+            echo "signing key: git secret reveal failed" >&2
+          fi
+          exit 0
+        fi
+      done
+      echo "signing key: no GPG key for it here; builds use the debug key" >&2
+    '';
     check.exec = ''./check.sh'';
     upload.exec = ''python host_test.py "$@"'';
     sprite.exec = ''python utils/show_sprite.py "$@"'';
     # The phone app, with its bytecode and firmware (appAssets above).
     apk.exec = ''
+      reveal-key
       ${appAssets}
       flutter build apk --debug "$@"
     '';
@@ -137,12 +162,15 @@ in
       flutter config --jdk-dir="$JAVA_HOME" >/dev/null 2>&1
     fi
 
+    reveal-key
+
     echo "glaz dev shell"
     echo "  check            static checks for the Lua side"
     echo "  upload           upload the app to the glasses and listen"
     echo "  sprite NAME N    show sprites/NAME.lua at N x on the glasses"
     echo "  emulator-start   boot the Android emulator (first run creates it)"
     echo "  apk              build the phone app (Lua bytecode and firmware first)"
+    echo "  reveal-key       decrypt the app's signing key (git-secret)"
     echo "  linux-app        the same app for the Linux desktop"
     echo "  cd flutter-glaz && tool/compile_lua.sh && flutter run    the companion app"
   '';
