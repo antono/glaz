@@ -32,6 +32,13 @@ const authFailures = {5, 6, 61, 137};
 /// with while it is paired already.
 const remoteTerminated = 19;
 
+/// Disconnect reasons that say the glasses went quiet, not that they
+/// refused: HCI 0x08 supervision timeout, 147 (0x93)
+/// GATT_CONNECTION_TIMEOUT. Out of range, or busy or rebooting -- seen
+/// right after a module starts or stops. Never pairing trouble, however
+/// many in a row.
+const timeouts = {8, 147};
+
 /// A link that goes down sooner than this after it came up counts as a
 /// quick drop: the glasses turned it down rather than went away.
 const quickDrop = Duration(seconds: 5);
@@ -45,6 +52,7 @@ PairingTrouble pairingTrouble({
   required int? code,
   required int quickDrops,
 }) {
+  if (timeouts.contains(code)) return PairingTrouble.none;
   if (bonded) {
     if (authFailures.contains(code) || quickDrops >= 2) {
       return PairingTrouble.phoneStale;
