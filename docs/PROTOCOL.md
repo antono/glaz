@@ -406,6 +406,8 @@ Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 | `0x1C` | `LOCATION_GET` | `[0x1C, id, module...]` | a module asks where the phone is — see [Location](#location) |
 | `0x1D` | `FILES` | `[0x1D, id, more, bytes...]` | a folder listing, in packets — see [Files](#files) |
 | `0x1E` | `FILE_DATA` | `[0x1E, id, more, bytes...]` | a file's contents, in packets — see [Files](#files) |
+| `0x0D` | `GEM_GET` | `[0x0D, op, page, n (2), top (2)]` | Gemini opens a link or wants lines -- see [Gemini](#gemini) |
+| `0x0E` | `NOTICES_GET` | `[0x0E, op, n (4)]` | the notification list or one of them -- see [Notifications](#notifications) |
 | `0x0A` | `TEXT_GET` | `[0x0A, place, from, count, wpm, text]` | Reader wants words, or says where it is -- see [Reader](#reader) |
 | `0x09` | `LUA_RESULT` | `[0x09, id, more, bytes...]` | what `LUA_EVAL`'s Lua printed and returned, or its error, in packets — see [Lua console](#lua-console) |
 | `0x0B` | `FLIPPER` | `[0x0B, 1]` / `[0x0B, 0]` / `[0x0B, 2, seq]` | Flipper: show the Flipper's screen, stop, frame `seq` taken — see [FLIPPER.md](FLIPPER.md) |
@@ -467,14 +469,39 @@ drops emoji, turns anything else into `?`
 between characters. The glasses count line lengths in characters
 (`utf8.len`), not bytes.
 
-On the glasses it covers whatever is on screen for `NOTICE_SECONDS` (5 s):
-the app name in the top bar, the title in yellow, the text wrapped over the
-four rows below. A tap dismisses it early, at once, not after the tap window,
+On the glasses it covers whatever is on screen for 5 s: the app name in
+the top bar, the title in yellow, the text wrapped over the four rows
+below. A tap dismisses it early, at once, not after the tap window,
 and that tap does nothing else -- nor do the taps that follow it in the same
 multi-tap, except three, which still sleep. What it covered keeps running
 and comes back as it was; while covered, a module gets no taps, raw hits or
-tilts, which would act unseen. The last `NOTICE_KEEP` (10)
-are kept for the Notifications module (Info > Notifications).
+tilts, which would act unseen. The glasses hold only the one on screen.
+
+**Pop-ups (Settings > Notifications, `modules/notifyset.lua`).** Picked on
+the glasses, not the phone: whether a notification pops up (`on` / `off`)
+and how long it stays (3, 5, 10 or 20 s). Tilt picks the setting, a tap
+its next value, kept at once. They live in `prefs.txt` on the glasses,
+through `_M.host.pref(key, default)` / `_M.host.set_pref(key, value)`
+(`app/glaz_host.lua`): settings the wearer picks there, which
+`SETTINGS_SET` leaves alone. Off, nothing covers the screen; the phone
+still keeps the notification for the list.
+
+**The list (Apps > Notifications, `modules/notifications.lua`).** The
+phone keeps the last 50 it forwarded, newest first, also those that came
+with the glasses away (`flutter-glaz/lib/services/notifications.dart`).
+The glasses hold a window of it and ask as the cursor leaves it, with
+`NOTICES_GET` (`0x0E`), 5 bytes after the code, `>BI4`: op, n.
+
+| op | Asks for | The phone answers `MODULE_CALL` `notifications` with |
+| --- | --- | --- |
+| `1` | the list from number `n`, 0 the newest | `l:<from>:<total>`, then `\n<id>\|<app>: <title>` for up to 10 |
+| `2` | notification `id` `n`, all of it | `f:<id>`, then a `\n<line>` each: the time and the app, the title, the text; `(gone)` when no longer kept |
+
+Every line is cut to fit the screen by the font's widths
+(`flutter-glaz/lib/frame/font.dart`, the table in `modules/reader.lua`),
+an answer to 900 bytes. Ids are the phone's and do not shift when a new
+one comes. Tilt moves the cursor (an open one: a screen down / up), a tap
+opens one and closes it again. Asked only from `tick()`, as Reader.
 
 The glasses park in deep sleep only with no host connected, so a connected
 phone always reaches them.
@@ -805,6 +832,50 @@ eye finds it.
 
 While reading Reader is `busy()`, so the app's minute without a tap does
 not close it; paused, it does.
+
+### Gemini
+
+Gemini (`modules/gemini.lua`) is a browser for
+[Gemini](https://geminiprotocol.net), the small web of plain text pages:
+`gemini://` URLs, one TLS connection per page on port 1965, the page in
+gemtext -- headings, paragraphs, links one to a line, lists, quotes,
+preformatted text. The glasses cannot open a socket, so the phone fetches
+(`flutter-glaz/lib/services/gemini.dart`), keeps the page open and the
+way back, and cuts the page into lines that fit the screen. The glasses
+hold a few dozen lines and ask for others as they scroll.
+
+The home page is the bookmarks, set on the phone (Glaz > Menu > Gemini);
+until the user sets their own, those Geopard (the GNOME Gemini browser)
+comes with: the Gemini project and the Antenna aggregator. Every other
+page starts with `< back` and where it is, and ends with `< back` and
+`home`. Fetching needs the Internet permission like any module's
+(Glaz > Menu > Gemini); without it a page says so. Any server
+certificate is taken: Gemini servers sign their own.
+
+`GEM_GET` (`0x0D`) is 6 bytes after the code, `>BBI2I2`: op, page, n,
+top. op `1` opens link `n` of the page -- `0` is back, `65535` home --
+and op `2` asks for its lines from line `n`. `page` is the number of the
+page the glasses hold, `top` the line on their first row: the phone keeps
+it, and going back shows a page where it was left.
+
+The phone answers with `MODULE_CALL` `gemini` and
+`p:<page>:<from>:<total>:<top>`, then `\n<kind><link>|<text>` per line,
+from line `from`, as many as fit in 900 bytes (at most 40). `page` is 1
+to 255, new on every page opened; a `page` other than the one held makes
+the glasses drop what they hold and show the new one from `top`. A
+request about a page the phone no longer has open (the phone restarted,
+say) is answered with the one it has. Kinds: `T` text, `H` heading
+(orange), `L` link, with its number (blue; yellow under the cursor), `Q`
+quote (grey), `P` preformatted (green, cut, not wrapped). A link to
+another scheme carries it, `[https]`, and opens a page saying to open it
+on the phone. Redirects are followed, five at most; an input request
+(`1x`), a certificate request (`6x`) or an error page says so.
+
+| Gesture | Does |
+| --- | --- |
+| tilt right / left | the next / previous link on screen; past the last / first, a screen down / up |
+| tap | open the link under the cursor; with none, a screen down |
+| double tap | leave; the page stays and is there on the next visit |
 
 ### Status
 

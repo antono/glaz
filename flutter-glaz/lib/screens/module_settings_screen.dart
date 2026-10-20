@@ -4,6 +4,7 @@ import '../glasses_menu.dart';
 import '../services/services.dart';
 import '../theme.dart';
 import 'assistant_screen.dart';
+import 'gemini_screen.dart';
 import 'reader_screen.dart';
 
 /// A module's own page in the Menu tab: on the glasses or not, its
@@ -95,6 +96,8 @@ class ModuleSettingsScreen extends StatelessWidget {
             if (module.id == 'assistant') const AssistantSettings(),
             // the texts it reads, kept on the phone
             if (module.id == 'reader') const ReaderLibrary(),
+            // its home page: the bookmarks, kept on the phone
+            if (module.id == 'gemini') const GeminiBookmarks(),
           ],
         ),
       ),

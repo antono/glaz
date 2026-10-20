@@ -58,6 +58,10 @@ The menu has these apps:
 - **Apps**
   - **Assistant**: ask a question out loud and read the answer on the
     glasses. The answer is also read aloud, but only through headphones.
+  - **Notifications**: your phone's notifications, newest first. Tilt to
+    pick one, tap to read all of it. The phone keeps the list.
+  - **Gemini**: a browser for Gemini, the small text-only web. Its home
+    page is the bookmarks set on the phone; tilt to a link, tap to open.
   - **Reader**: speed reading, one word at a time, with the letter your
     eye should land on in red and always in the same spot. The texts are
     kept in a library on the phone; the speed (words per minute) is on screen and
@@ -74,9 +78,9 @@ The menu has these apps:
     phone. You press the Flipper's own buttons.
 - **Sensors**: battery level, a live readout of your head angle, and
   **Tap tune** for adjusting how sensitive tap detection is.
-- **Settings**: display brightness, and Sleep (put the glasses to sleep now).
-- **Info**: your recent phone notifications, Bluetooth status, uptime,
-  firmware version, and About.
+- **Settings**: display brightness, Notifications (whether they pop up,
+  and for how long), and Sleep (put the glasses to sleep now).
+- **Info**: Bluetooth status, uptime, firmware version, and About.
 
 Apps marked "background" keep running when you leave them, and an icon in
 the top bar shows this. New phone notifications pop up on the glasses as

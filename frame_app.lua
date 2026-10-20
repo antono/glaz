@@ -65,13 +65,12 @@ local data = require('data.min')
 -- submenus. Each module must return a table with a .label and either .run()
 -- (mode 'info') or .tick() (mode 'app'), and may set .background.
 local MENU = {
-  { label = 'Apps',     'assistant', 'reader', 'photo', 'timeseries',
-                        'recorder', 'stopwatch', 'files', 'weather',
-                        'flipper', 'term' },
+  { label = 'Apps',     'assistant', 'notifications', 'gemini', 'reader',
+                        'photo', 'timeseries', 'recorder', 'stopwatch',
+                        'files', 'weather', 'flipper', 'term' },
   { label = 'Sensors',  'battery', 'tilt', 'taptune' },
-  { label = 'Settings', 'brightness', 'sleep' },
-  { label = 'Info',     'notifications', 'bluetooth', 'uptime', 'firmware',
-                        'about' },
+  { label = 'Settings', 'brightness', 'notifyset', 'sleep' },
+  { label = 'Info',     'bluetooth', 'uptime', 'firmware', 'about' },
 }
 local ROOT_LABEL = 'Glaz'   -- first crumb of the breadcrumb
 local CRUMB_SEP  = ' > '
@@ -181,11 +180,13 @@ local WAKE_TAPS = { threshold = 7, quiet = 0, duration = 0, latch = true,
                     axes = 0x08, rate = 256 }
 
 -- Host services (docs/PROTOCOL.md). A notification pops up over whatever is
--- on screen and goes away by itself, or with a tap; the last few are kept
--- for the Notifications module. An HTTP request the phone never answers is
--- given up on after NET_TIMEOUT -- the phone has its own, shorter, timeout.
+-- on screen and goes away by itself, or with a tap -- unless pop-ups are off
+-- in Settings > Notifications (modules/notifyset.lua), which also sets how
+-- long it stays. The phone keeps the list (Apps > Notifications); the
+-- glasses hold only the one on screen. An HTTP request the phone never
+-- answers is given up on after NET_TIMEOUT -- the phone has its own,
+-- shorter, timeout.
 local NOTICE_SECONDS = 5
-local NOTICE_KEEP    = 10
 local NOTICE_CHARS   = 26     -- characters per line, under the 29 of
                               -- (640 - LEFT_X) / CHAR_W: the font is
                               -- proportional and overflow is dropped
@@ -324,7 +325,7 @@ setmetatable(data.parsers, { __index = function() return function() end end })
 -- on its own: main.lua in one piece did not fit the glasses' memory to
 -- compile (FRAME.md 11). Its tables and functions keep their names here.
 local host = require('glaz_host')
-local notices, requests, fixes = host.notices, host.requests, host.fixes
+local requests, fixes = host.requests, host.fixes
 local send_packet, send_chunks = host.send_packet, host.send_chunks
 local host_api, store_settings = host.api, host.store_settings
 local LOCATION_WHY = host.LOCATION_WHY
@@ -1331,11 +1332,10 @@ function app_loop()
           local app, title, text = string.match(data.app_data[NOTIFY],
                                                 '^([^\n]*)\n([^\n]*)\n?(.*)$')
           data.app_data[NOTIFY] = nil
-          if app then
-            table.insert(notices, 1, { app, title, text })
-            notices[NOTICE_KEEP + 1] = nil
-            notice = notices[1]
-            notice_until = now + NOTICE_SECONDS
+          if app and host.pref('notifyset', 'popup', 'on') == 'on' then
+            notice = { app, title, text }
+            notice_until = now + host.pref('notifyset', 'seconds',
+                                           NOTICE_SECONDS)
             notice_at = now
             splash_until = 0
             last_act = now

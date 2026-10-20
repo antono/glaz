@@ -44,6 +44,14 @@ const recDrop = 0x10;
 const luaResult = 0x09;
 const textGet = 0x0A;
 
+/// modules/gemini.lua: [op, page, n (2), top (2)] -- op 1 opens link n,
+/// op 2 asks for lines from n
+const geminiGet = 0x0D;
+
+/// modules/notifications.lua: [op, n (4)] -- op 1 the list from number n,
+/// op 2 notification n, all of it
+const noticesGet = 0x0E;
+
 /// modules/flipper.lua: [1] show the Flipper, [0] stop, [2, seq] frame taken
 const flipper = 0x0B;
 
@@ -101,6 +109,8 @@ const codeNames = {
   flipper: 'FLIPPER',
   term: 'TERM',
   textGet: 'TEXT_GET',
+  geminiGet: 'GEM_GET',
+  noticesGet: 'NOTICES_GET',
   photoChunk: 'photo chunk',
   photoEnd: 'photo end',
   audioChunk: 'audio chunk',

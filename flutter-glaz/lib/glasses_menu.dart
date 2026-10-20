@@ -200,6 +200,23 @@ const glassesMenu = <MenuSection>[
       ],
     ),
     GlassesModule(
+      'notifications',
+      'Notifications',
+      ModuleKind.app,
+      Icons.notifications,
+      'The phone\'s notifications, newest first: tilt to pick one, tap to '
+          'read all of it. The phone keeps the last 50.',
+    ),
+    GlassesModule(
+      'gemini',
+      'Gemini',
+      ModuleKind.app,
+      Icons.travel_explore,
+      'A Gemini browser: the bookmarks below are its home page. Tilt to the '
+          'next link, tap to open it.',
+      network: true,
+    ),
+    GlassesModule(
       'reader',
       'Reader',
       ModuleKind.app,
@@ -372,6 +389,14 @@ const glassesMenu = <MenuSection>[
       'Tilt to preview a level, tap to keep it.',
     ),
     GlassesModule(
+      'notifyset',
+      'Notifications',
+      ModuleKind.app,
+      Icons.notifications_active,
+      'Whether notifications pop up, and for how long: picked on the '
+          'glasses, tilt and tap.',
+    ),
+    GlassesModule(
       'sleep',
       'Sleep',
       ModuleKind.app,
@@ -380,13 +405,6 @@ const glassesMenu = <MenuSection>[
     ),
   ]),
   MenuSection('Info', Icons.info_outline, [
-    GlassesModule(
-      'notifications',
-      'Notifications',
-      ModuleKind.app,
-      Icons.notifications,
-      'The last phone notifications; tilt to page.',
-    ),
     GlassesModule(
       'bluetooth',
       'Bluetooth',

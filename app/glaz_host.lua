@@ -30,6 +30,47 @@ local function parse_settings(text)
 end
 
 local function load_settings()
+
+-- Settings picked on the glasses themselves (Settings > Notifications):
+-- the phone never sends these, so SETTINGS_SET leaves them alone. Lines
+-- 'module.key=value' in PREFS_FILE, read at start, written on a change.
+local PREFS_FILE = 'prefs.txt'
+local prefs = {}
+
+local function load_prefs()
+  local ok, fh = pcall(frame.file.open, PREFS_FILE, 'read')
+  if not ok or not fh then return end
+  local lines = {}
+  while true do
+    local line = fh:read()
+    if line == nil then break end
+    lines[#lines + 1] = line
+  end
+  fh:close()
+  prefs = parse_settings(table.concat(lines, '\n'))
+end
+
+local function save_prefs()
+  local lines = {}
+  for m, t in pairs(prefs) do
+    for k, v in pairs(t) do lines[#lines + 1] = m .. '.' .. k .. '=' .. v end
+  end
+  pcall(function()
+    local fh = frame.file.open(PREFS_FILE, 'write')
+    fh:write(table.concat(lines, '\n'))
+    fh:close()
+  end)
+end
+
+-- owner's pref key: default when unset, a number when default is one
+local function pref(owner, key, default)
+  local v = prefs[owner] and prefs[owner][key]
+  if v == nil or v == '' then return default end
+  if type(default) == 'number' then return tonumber(v) or default end
+  return v
+end
+
+load_prefs()
   local ok, fh = pcall(frame.file.open, SETTINGS_FILE, 'read')
   if not ok or not fh then return end
   local lines = {}
@@ -59,17 +100,16 @@ load_settings()
 --
 --   local id, err = _M.host.http('GET', url[, body])  -- nil, why on failure
 --   local status, body = _M.host.result(id)  -- nil while pending; then once
---   _M.host.notices()  -- the kept notifications, newest first:
---                      -- { app, title, text }
 --   local id = _M.host.locate()        -- where the phone is: ask, then
 --   local fix, why = _M.host.location(id)  -- nil while pending; then once
 --                      -- { lat, lon, accuracy, age } or nil, why
 --   _M.host.setting(key, default)  -- this module's setting from the phone;
 --                      -- default when unset, and a number when default is
+--   _M.host.pref(key, default)     -- one picked on the glasses, the same way
+--   _M.host.set_pref(key, value)   -- keeps it, in PREFS_FILE
 --
 -- status 0 means the request never got an answer from the server; body says
 -- why. Results are handed out once and then forgotten.
-local notices  = {}
 local requests = {}   -- id -> { owner, at, status, body }; status nil = pending
 local next_req = 0
 local fixes    = {}   -- id -> { owner, at, fix or why }; LOCATION_GET answers
@@ -134,8 +174,6 @@ local function host_api(owner)
     return r.status, r.body
   end
 
-  function api.notices() return notices end
-
   -- Where the phone is: locate() asks, location(id) gives nil while
   -- pending, then once { lat, lon, accuracy, age } -- degrees, metres,
   -- seconds -- or nil and why: 'not allowed' (Glaz > Menu), 'no fix',
@@ -175,11 +213,19 @@ local function host_api(owner)
     return v
   end
 
+  function api.pref(key, default) return pref(owner, key, default) end
+
+  function api.set_pref(key, value)
+    prefs[owner] = prefs[owner] or {}
+    prefs[owner][key] = tostring(value)
+    save_prefs()
+  end
+
   return api
 end
 
 return {
-  notices = notices, requests = requests, fixes = fixes,
+  requests = requests, fixes = fixes, pref = pref,
   LOCATION_WHY = LOCATION_WHY,
   send_packet = send_packet, send_chunks = send_chunks,
   api = host_api, store_settings = store_settings,

@@ -6,6 +6,7 @@ import '../term/hosts.dart';
 import 'agent_files.dart';
 import 'assistant.dart';
 import 'flipper.dart';
+import 'gemini.dart';
 import 'glasses_files.dart';
 import 'glasses_lua.dart';
 import 'keys.dart';
@@ -40,6 +41,7 @@ class Services {
     this.flipper,
     this.reader,
     this.term,
+    this.gemini,
   );
 
   final Settings settings;
@@ -57,6 +59,7 @@ class Services {
   final FlipperMirror flipper;
   final ReaderService reader;
   final TermService term;
+  final GeminiService gemini;
 
   static late Services instance;
 
@@ -101,6 +104,7 @@ class Services {
       FlipperMirror(link, s),
       ReaderService(link, s, readerDir ?? await readerRoot()),
       TermService(link, s, hosts),
+      GeminiService(link, s),
     );
     await services.reader.load();
     LuaBridge(s, services.lua);
