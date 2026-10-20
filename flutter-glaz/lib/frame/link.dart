@@ -542,7 +542,7 @@ class FrameLink extends ChangeNotifier {
   /// not running is started in the background; the screen stays as it is.
   /// What [arg] means is up to the module.
   Future<void> callModule(String module, String arg) =>
-      send(moduleCall, '$module\n$arg'.codeUnits);
+      send(moduleCall, utf8.encode('$module\n$arg'));
 
   /// Puts [module] on the glasses' screen (APP_OPEN), as if picked in the
   /// menu. A non-empty [arg] goes to its start(), or to its remote() when

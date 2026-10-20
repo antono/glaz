@@ -113,14 +113,14 @@ void main() {
   });
 
   group('wrapForGlasses', () {
-    test('ASCII lines of at most 26 characters', () {
+    test('lines of at most 26 characters, Cyrillic kept', () {
       final out = wrapForGlasses('Встречаемся в 137 кабинете на третьем этаже');
       for (final line in out.split('\n')) {
         expect(line.length, lessThanOrEqualTo(26));
       }
       expect(
         out.replaceAll('\n', ' '),
-        'Vstrechaemsya v 137 kabinete na tretem etazhe',
+        'Встречаемся в 137 кабинете на третьем этаже',
       );
     });
 
@@ -172,8 +172,8 @@ void main() {
     test('the answer goes to Assistant when nothing else opens', () async {
       agent.reply = 'Сорок два.';
       await assistant.ask('Сколько?');
-      expect(last(appOpen), 'assistant\na:Sorok dva.');
-      expect(last(moduleCall), 'assistant\nh:Skolko?');
+      expect(last(appOpen), 'assistant\na:Сорок два.');
+      expect(last(moduleCall), 'assistant\nh:Сколько?');
     });
 
     test('heard in its own language, the recordings\' until picked', () {
@@ -239,7 +239,7 @@ void main() {
       await a.ask('Сколько?');
       expect(voice.said, isEmpty);
       // the glasses' screen has it all the same
-      expect(link.sent.last, (appOpen, 'assistant\na:Sorok dva.'));
+      expect(link.sent.last, (appOpen, 'assistant\na:Сорок два.'));
     });
 
     test('a new question or a drop stops the reading', () async {
@@ -335,7 +335,7 @@ void main() {
       expect(second[second.length - 2].content, '@photo');
       expect(second.last.content, 'result of @photo');
       expect(second.last.images.single, [1, 3, 7]);
-      expect(link.sent.last, (appOpen, 'assistant\na:Vizhu kota.'));
+      expect(link.sent.last, (appOpen, 'assistant\na:Вижу кота.'));
       expect(assistant.turns.single.queries, hasLength(1));
 
       // the conversation keeps no photos

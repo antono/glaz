@@ -142,6 +142,14 @@ never as a branch off upstream `main` alone. `glaz` is `okulo/stable` with
 merged in; the `okulo/*` branches stay as history. Builds carry the suffix
 `-glaz`, the first one `v26.291.1045-glaz`.
 
+`okulo/cyrillic-font`, merged into `glaz` on 20.10.2026, puts Cyrillic in
+the system font: U+0400..U+045F and the extra letters of Kazakh, Tatar,
+Bashkir, Yakut, Tajik and Uzbek. The glyphs are drawn by
+`graphical_assets/cyrillic.py` from Play (SIL OFL), sized to the Latin,
+then `system_font.h` is made from the PNGs as that folder's readme says.
+First build `v26.292.2200-glaz-cyr`. Since then the phone sends Cyrillic as
+it is, no longer transliterated (`flutter-glaz/lib/frame/glyphs.dart`).
+
 Also worth knowing: `frame.sleep()` with no argument is System OFF, and waking
 from it is a **reset**. Nothing after `frame.sleep()` in Lua runs; the glasses
 boot and `require('main')` again.

@@ -335,9 +335,14 @@ frame.display.write_register(addr, value)
 Palette (16 colors): `VOID, WHITE, GREY, RED, PINK, DARKBROWN, BROWN, ORANGE,
 YELLOW, DARKGREEN, GREEN, LIGHTGREEN, NIGHTBLUE, SEABLUE, SKYBLUE, CLOUDBLUE`.
 
-**Cyrillic does not render.** The string reaches the glasses intact (`'Привет'`
-is 12 UTF-8 bytes), but the firmware font has no glyphs for it, so the screen
-stays blank. Use ASCII, or draw text as a bitmap.
+**Cyrillic renders on our firmware** (`v26.292.2200-glaz-cyr` and later
+builds from branch `glaz`, docs/FIRMWARE.md): `frame.display.text('Привет')`
+draws it. The font has ASCII, Latin-1, Cyrillic U+0400..U+045F with the
+extra letters of Kazakh, Tatar and others, and `«» ° № €`. Strings are
+UTF-8, so `#s` counts bytes: use `utf8.len(s)` for characters. On the stock
+firmware the font is ASCII only and Cyrillic stays blank. The source of a
+Lua file must still be ASCII (see "Known gotchas"); write `'\xD0\x9F'` in
+it, or send the text at run time.
 
 ### Camera
 
@@ -468,7 +473,8 @@ To stop a running app and get the live REPL back, send the break signal
   submodules such as `frame.display` and `frame.camera` can be iterated.)
 
 - **`frame.display.clear()` is gone.** Removed in `v25.080.0838`.
-- **No Cyrillic in the font.** ASCII only.
+- **No Cyrillic in the stock font.** ASCII only; our firmware adds it
+  (see "Display").
 - **`frame.display.show()` is mandatory.** Draw text, forget `show()`, and you
   will spend half an hour hunting a Bluetooth bug that does not exist.
 - **Lua errors come back as ordinary replies, not exceptions.** A string like

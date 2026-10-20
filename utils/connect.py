@@ -19,7 +19,7 @@ async def main():
     print("MTU     :", await ask("frame.bluetooth.max_length()"))
 
     # NB: frame.display.clear() was removed in v25.080.0838 -- the buffer
-    # resets itself after show(). The firmware font is ASCII only.
+    # resets itself after show(). Our firmware's font has Cyrillic too.
     result = await frame.send_lua(
         "frame.display.text('Claude Code on air', 50, 137);"
         "frame.display.show();"

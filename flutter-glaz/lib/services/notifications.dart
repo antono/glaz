@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:notification_listener_service/notification_event.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 
-import '../frame/ascii.dart';
+import '../frame/glyphs.dart';
 import '../frame/link.dart';
 import '../frame/protocol.dart';
 import '../settings.dart';
@@ -79,16 +79,15 @@ class NotificationService extends ChangeNotifier {
   Future<void> sendTest() =>
       send('Glaz', 'Test notification', 'Meeting in room 137 at 15:00');
 
-  /// 'app\ntitle\ntext' in ASCII, cut to [maxBytes].
+  /// 'app\ntitle\ntext' in UTF-8, cut to [maxBytes].
   static List<int> encode(String app, String title, String text) {
     String line(String s) =>
-        toAscii(s)
+        forGlasses(s)
             .replaceAll('\n', ' ')
             .replaceAll(RegExp(r' {2,}'), ' ')
             .trim();
     var out = '${line(app)}\n${line(title)}\n${line(text)}';
-    if (out.length > maxBytes) out = out.substring(0, maxBytes);
-    return ascii.encode(out);
+    return utf8.encode(cutToBytes(out, maxBytes));
   }
 
   static const _known = {
