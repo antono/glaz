@@ -554,6 +554,18 @@ counter lives on the glasses and restarts at 1 when they do, so the gap is
 what keeps an old folder from being reused. A photo with no `PHOTO_FROM`
 before it counts as a single shot.
 
+**What the camera sees.** Far more than the display. Measured
+2026-10-20 at 60 cm, a screen-filling grid of 16 x 10 cells: the
+display's corners fell on cells B1, O1, B9 and O9, while a 512 px photo
+held the whole grid in its middle. On the photo the display is x 143..415,
+y 134..282: about half its width and a third of its height. No frame round
+the photo fits on the display, so Camera draws a cross where the photo's
+centre is instead: (261, 327) of 640 x 400, left of the display's centre
+and below it -- the camera sits on the bridge, the display before the
+right eye. Glaz > Menu > Camera moves it (`aim_x`, `aim_y`); being apart
+from the eye, the camera puts far things a little elsewhere than near
+ones.
+
 ### Recorder
 
 Recorder (`modules/recorder.lua`) streams the microphone to the phone as it

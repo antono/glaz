@@ -18,6 +18,14 @@
 -- so the phone files it under the day rather than in a series folder
 -- (docs/PROTOCOL.md, "Photos").
 --
+-- A cross marks where the photo's centre is: the camera sees far wider
+-- than the display -- the display is about half the photo's width and a
+-- third of its height (measured: docs/PROTOCOL.md, "Photos") -- so no
+-- frame round the photo fits on it, but its middle does. The camera sits
+-- on the bridge, the display before the right eye: the centre falls left
+-- of the display's and below it, by how much depends a little on the
+-- distance. Where, the phone may set (aim_x, aim_y; Glaz > Menu > Camera).
+--
 -- The camera is powered only while this module is open. frame_app.lua powers
 -- it down again on every exit path (release_hardware), stop() included.
 local camera = require('camera.min')
@@ -50,6 +58,32 @@ local WARMUP     = 1.5       -- seconds
 local AE_STEP    = 0.1       -- seconds between exposure updates while warming
 
 local PHOTO_FROM = 0x1A
+
+-- The cross: the photo's centre on the display, measured at 60 cm.
+local AIM_X, AIM_Y = 261, 327
+local ARM, GAP     = 24, 8    -- px: each arm's length, and the hole
+local AIM_PALETTE  = 7        -- YELLOW
+local H_ARM = string.rep('\xFF', ARM // 8 * 2)   -- 2 px high
+local V_ARM = string.rep('\x18', ARM)            -- 2 px wide, in 8
+
+local function aim()
+  local x = _M.host.setting('aim_x', AIM_X)
+  local y = _M.host.setting('aim_y', AIM_Y)
+  local reach = ARM + GAP + 8
+  x = math.max(reach, math.min(640 - reach, math.floor(x)))
+  y = math.max(reach, math.min(400 - reach, math.floor(y)))
+  return x, y
+end
+
+-- Called by frame_app.lua under the top bar, before the status text.
+function _M.draw()
+  local bitmap = frame.display.bitmap
+  local x, y = aim()
+  bitmap(x - GAP - ARM, y - 1, ARM, 2, AIM_PALETTE, H_ARM)
+  bitmap(x + GAP, y - 1, ARM, 2, AIM_PALETTE, H_ARM)
+  bitmap(x - 4, y - GAP - ARM, 8, 2, AIM_PALETTE, V_ARM)
+  bitmap(x - 4, y + GAP, 8, 2, AIM_PALETTE, V_ARM)
+end
 
 local opened_at = 0
 local shots = 0

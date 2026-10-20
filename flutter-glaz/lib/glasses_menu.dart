@@ -222,7 +222,24 @@ const glassesMenu = <MenuSection>[
       ModuleKind.app,
       Icons.photo_camera,
       'Tap to take a photo; it is sent to the phone.',
-      settings: _photoSettings,
+      settings: [
+        ..._photoSettings,
+        ModuleSetting.text(
+          'aim_x',
+          'Aim, across',
+          initial: '261',
+          help:
+              'Where the cross for the photo\'s centre is, in display '
+              'pixels from the left, 0 to 640. The camera sees about twice '
+              'as wide as the display.',
+        ),
+        ModuleSetting.text(
+          'aim_y',
+          'Aim, down',
+          initial: '327',
+          help: 'From the top, 0 to 400.',
+        ),
+      ],
     ),
     GlassesModule(
       'timeseries',
