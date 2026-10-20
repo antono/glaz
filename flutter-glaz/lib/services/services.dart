@@ -82,7 +82,7 @@ class Services {
       photos,
       LocationService(link, s),
       GlassesFiles(link),
-      RecorderService(link, s, recordings),
+      RecorderService(link, s, recordings, transcripts: transcripts),
       transcripts,
       KeyRemote(link, s),
       AssistantService(

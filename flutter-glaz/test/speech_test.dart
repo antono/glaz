@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:glaz/frame/link.dart';
 import 'package:glaz/services/recordings.dart';
 import 'package:glaz/services/speech.dart';
 import 'package:glaz/services/transcripts.dart';
@@ -150,6 +151,103 @@ void main() {
       expect(await wavComment(r.file), '1 2 3');
       expect((await store.list()).single.transcript, '1 2 3');
       expect(service.live, isEmpty);
+    });
+
+    test('another language picked: transcribed again in it', () async {
+      settings.speechLanguage = 'ru-RU';
+      final t = FakeTranscriber();
+      final service = TranscriptService(store, settings, t);
+      await service.transcribe(await record(1000));
+      var r = (await store.list()).single;
+      expect(r.language, 'ru-RU');
+      expect(service.stale(r), isFalse);
+
+      settings.speechLanguage = 'en-US';
+      expect(service.stale(r), isTrue, reason: 'heard in Russian');
+      await service.transcribe(r);
+      expect(t.language, 'en-US');
+      r = (await store.list()).single;
+      expect(r.transcript, '1 2');
+      expect(r.language, 'en-US');
+      expect(service.stale(r), isFalse);
+    });
+
+    test('a language picked for one recording alone stays', () async {
+      settings.speechLanguage = 'ru-RU';
+      final t = FakeTranscriber();
+      final service = TranscriptService(store, settings, t);
+      await service.transcribe(await record(1000), language: 'en-US');
+      expect(t.language, 'en-US');
+      var r = (await store.list()).single;
+      expect(r.language, 'en-US');
+      expect(r.languagePicked, isTrue);
+      expect(await wavLanguagePicked(r.file), isTrue);
+      expect(service.stale(r), isFalse, reason: 'picked for it');
+
+      // again in the one for all: no longer picked, follows it
+      await service.transcribe(r);
+      r = (await store.list()).single;
+      expect(r.language, 'ru-RU');
+      expect(r.languagePicked, isFalse);
+      settings.speechLanguage = 'de-DE';
+      expect(service.stale(r), isTrue);
+    });
+
+    test('a transcript of no known language may go again', () async {
+      final service = TranscriptService(store, settings, FakeTranscriber());
+      final r = await record(10);
+      await setWavComment(r.file, 'old');
+      expect(service.stale((await store.list()).single), isTrue);
+      expect(service.stale(r), isFalse, reason: 'no transcript at all');
+    });
+
+    test('heard while it comes in: the text is there as it ends', () async {
+      settings.speechLanguage = 'ru-RU';
+      final t = FakeTranscriber();
+      final service = TranscriptService(store, settings, t);
+      final recorder = RecorderService(
+        FrameLink(),
+        settings,
+        store,
+        transcripts: service,
+        now: () => DateTime(2026, 10, 16, 13, 7, 1),
+      );
+      recorder.onMessage([0x1F, 8, 8]);
+      recorder.onMessage([0x05, 0, 1, 255]); // the glasses' signed 8-bit
+      recorder.onMessage([0x05, 2]);
+      recorder.onMessage([0x06, 3]);
+      await recorder.flush();
+      while (service.live.isNotEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      expect(t.got, hasLength(5), reason: 'the sound as it came');
+      expect(t.language, 'ru-RU');
+      final r = (await store.list()).single;
+      expect(r.transcript, isNotEmpty);
+      expect(r.language, 'ru-RU');
+      expect(r.length, const Duration(microseconds: 5 * 1000000 ~/ 8000));
+    });
+
+    test('a language not on the phone: heard later, by hand', () async {
+      final service = TranscriptService(
+        store,
+        settings,
+        FakeTranscriber(SpeechModel.downloadable),
+      );
+      final recorder = RecorderService(
+        FrameLink(),
+        settings,
+        store,
+        transcripts: service,
+        now: () => DateTime(2026, 10, 16, 13, 7, 1),
+      );
+      recorder.onMessage([0x1F, 8, 8]);
+      recorder.onMessage([0x06, 1, 2]);
+      await recorder.flush();
+      while (service.live.isNotEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      expect((await store.list()).single.transcript, isNull);
     });
 
     test('overflowed, it goes again as fast as spoken', () async {

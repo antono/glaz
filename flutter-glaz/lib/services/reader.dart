@@ -217,6 +217,19 @@ class ReaderService extends ChangeNotifier {
     return book;
   }
 
+  /// [text] made the one to read: the text in the library that is the
+  /// same, from its own place, else a new one added -- a transcript sent
+  /// twice is not two texts.
+  Future<Book> addOrSelect(String text, {String title = ''}) async {
+    for (final b in _books) {
+      if (await textOf(b) == text) {
+        await select(b);
+        return b;
+      }
+    }
+    return add(text, title: title);
+  }
+
   /// Takes a text out of the library. If it was the one to read, the
   /// newest left is read instead.
   Future<void> remove(Book book) async {

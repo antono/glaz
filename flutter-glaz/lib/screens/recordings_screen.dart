@@ -9,6 +9,7 @@ import '../services/services.dart';
 import '../widgets/media_access.dart';
 import '../widgets/recording.dart';
 import 'photos_screen.dart' show dayLabel;
+import 'transcript_screen.dart';
 
 String _clock(Duration d) {
   final s = d.inSeconds;
@@ -99,15 +100,10 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
     }
   }
 
-  Future<void> _transcribe(Recording r) async {
-    try {
-      await Services.instance.transcripts.transcribe(r);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Transcribing failed: $e')));
-    }
-  }
+  /// Its transcript on a page of its own: language, again, the Reader.
+  Future<void> _openTranscript(Recording r) =>
+      Navigator.of(context)
+          .push(MaterialPageRoute<void>(builder: (_) => TranscriptScreen(r)));
 
   Future<void> _delete(Recording r) async {
     final ok = await showDialog<bool>(
@@ -218,13 +214,22 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (transcripts.transcriber != null && r.transcript == null)
+                // marked when there is none yet, or one in a language no
+                // longer picked
+                if (transcripts.transcriber != null || r.transcript != null)
                   IconButton(
-                    tooltip: 'Transcribe',
-                    icon: Icon(Icons.subject, color: scheme.onSurfaceVariant),
-                    onPressed: transcripts.live.containsKey(r.file.path)
-                        ? null
-                        : () => _transcribe(r),
+                    tooltip: 'Transcript',
+                    icon: Badge(
+                      isLabelVisible:
+                          transcripts.transcriber != null &&
+                          (r.transcript == null || transcripts.stale(r)),
+                      smallSize: 8,
+                      child: Icon(
+                        Icons.subject,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    onPressed: () => _openTranscript(r),
                   ),
                 IconButton(
                   tooltip: 'Delete',
@@ -255,7 +260,8 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
   }
 }
 
-/// A recording's transcript, or what is being heard in it now.
+/// A recording's transcript, or what is being heard in it now. One in a
+/// language no longer picked is shown faded, with the language it was in.
 class _Transcript extends StatelessWidget {
   const _Transcript(this.recording);
   final Recording recording;
@@ -269,6 +275,7 @@ class _Transcript extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final style = Theme.of(context).textTheme.bodyMedium;
     final downloading = transcripts.downloading;
+    final stale = live == null && transcripts.stale(recording);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: Column(
@@ -292,9 +299,18 @@ class _Transcript extends StatelessWidget {
           else
             SelectableText(
               text,
-              style: live != null
+              style: live != null || stale
                   ? style?.copyWith(color: scheme.onSurfaceVariant)
                   : style,
+            ),
+          if (stale)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Transcribed in ${languageName(recording.language)}',
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: scheme.onSurfaceVariant),
+              ),
             ),
         ],
       ),

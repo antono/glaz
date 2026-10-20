@@ -76,6 +76,21 @@ void main() {
       expect(book.words, 137);
     });
 
+    test('a text sent again is the one there, not a second', () async {
+      final other = await reader.add('Купить молоко');
+      expect(reader.current, other);
+      final again = await reader.addOrSelect(
+        List.generate(137, (i) => 'w$i').join(' '),
+        title: 'Recording',
+      );
+      expect(again, book);
+      expect(reader.current, book);
+      expect(reader.books, hasLength(2));
+      final third = await reader.addOrSelect('new', title: 'Recording');
+      expect(third.title, 'Recording');
+      expect(reader.books, hasLength(3));
+    });
+
     test('answers from the place on resume, and keeps the place', () async {
       final v = book.version;
       book.place = 100;

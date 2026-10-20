@@ -123,6 +123,22 @@ void main() {
       );
     });
 
+    test('the language goes with it, and goes when not given', () async {
+      final f = await wav(137);
+      await setWavComment(f, 'Купить молоко', language: 'ru-RU');
+      expect(await wavComment(f), 'Купить молоко');
+      expect(await wavLanguage(f), 'ru-RU');
+      await setWavComment(f, 'milk', language: 'en-US');
+      expect(await wavLanguage(f), 'en-US');
+      final bytes = f.readAsBytesSync();
+      expect(
+        ByteData.sublistView(bytes).getUint32(4, Endian.little),
+        bytes.length - 8,
+      );
+      await setWavComment(f, 'x');
+      expect(await wavLanguage(f), isNull);
+    });
+
     test('a recording cut short takes one too', () async {
       final f = await wav(100, cut: true);
       await setWavComment(f, 'x');

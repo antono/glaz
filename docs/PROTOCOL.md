@@ -590,6 +590,25 @@ is moved into the WAV on start. A recording this install did not make
 cannot be changed: a new transcript for it goes to the app's own folder. The Recordings service (Services) turns saving
 off.
 
+Beside `ICMT`, `ILNG` is the language the transcript was heard in (a
+tag of `speechLanguages`, `ru-RU`), and `ILNP`, `picked`, glaz's own,
+says that language was picked for this recording alone. A transcript in
+another language than the one picked for all -- or in none known, from
+before -- is marked in Voice, to be transcribed again; one picked for its
+recording is not. In the app's own folder the language goes in a `.lang`
+beside the `.txt`, `picked` on its second line.
+
+A recording is heard **as it comes in** (`TranscriptService.hearLive`):
+the sound from the glasses goes to the recognizer as well as to the WAV,
+so its transcript is there the moment it ends. Only a language already
+on the phone is used, nothing is downloaded mid-recording; should
+recognition end early or fail, the recording is left to be transcribed
+by hand. By hand -- the transcript button, a page of its own -- the WAV
+is fed three times as fast as spoken, as fast as ML Kit takes it; that
+page also picks a language for the one recording and sends the text to
+the Reader (`ReaderService.addOrSelect`: the same text sent again is the
+one already in the library).
+
 **From the phone.** The Remote tab's record button sends `MODULE_CALL`
 (`0x2D`) with `recorder\non` or `recorder\noff`. `MODULE_CALL` is generic:
 `frame_app.lua` knows no module by name, it finds the one named and calls

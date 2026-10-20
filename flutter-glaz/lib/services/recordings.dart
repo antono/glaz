@@ -9,10 +9,18 @@ import 'package:flutter/foundation.dart';
 import '../frame/link.dart';
 import '../frame/protocol.dart';
 import '../settings.dart';
+import 'transcripts.dart';
 
 /// One recording on the phone.
 class Recording {
-  Recording(this.file, this.at, this.length, [this.transcript]);
+  Recording(
+    this.file,
+    this.at,
+    this.length, [
+    this.transcript,
+    this.language,
+    this.languagePicked = false,
+  ]);
   final File file;
   final DateTime at;
   final Duration length;
@@ -20,6 +28,14 @@ class Recording {
   /// What was said in it, once transcribed (services/transcripts.dart);
   /// kept in the WAV itself ([wavComment]).
   final String? transcript;
+
+  /// The language [transcript] was heard in, a [Settings.speechLanguage]
+  /// tag ([wavLanguage]); null for one from before languages were kept.
+  final String? language;
+
+  /// Whether [language] was picked for this recording alone, not the one
+  /// picked for all at the time ([wavLanguagePicked]).
+  final bool languagePicked;
 }
 
 /// Where a transcript was kept before it went into the WAV: next to the
@@ -87,13 +103,28 @@ Duration wavLength(Uint8List header, int fileBytes) {
 }
 
 // The transcript lives in the WAV, after the samples, in the standard
-// comment: a LIST chunk of type INFO holding ICMT, UTF-8 ending in a zero.
+// comment: a LIST chunk of type INFO holding ICMT, UTF-8 ending in a zero,
+// and the language it was heard in, ILNG, the same way. ILNP, 'picked',
+// says that language was picked for this recording alone; it is glaz's
+// own, which other readers pass over.
 // Android lets an app read, with READ_MEDIA_AUDIO, the recordings an earlier
 // install of it left in Recordings/Glaz, but no .txt beside them: that
 // folder takes sound only. Inside the sound the text goes where it goes.
 
 /// The transcript kept in [wav]; null when it has none.
-Future<String?> wavComment(File wav) async {
+Future<String?> wavComment(File wav) async => (await wavInfo(wav))['ICMT'];
+
+/// The language of the transcript kept in [wav]; null when not known.
+Future<String?> wavLanguage(File wav) async => (await wavInfo(wav))['ILNG'];
+
+/// Whether the language of the transcript in [wav] was picked for it
+/// alone.
+Future<bool> wavLanguagePicked(File wav) async =>
+    (await wavInfo(wav))['ILNP'] == 'picked';
+
+/// The texts of [wav]'s INFO list, by id ('ICMT', 'ILNG'); empty when it
+/// has none.
+Future<Map<String, String>> wavInfo(File wav) async {
   final f = await wav.open();
   try {
     final length = await f.length();
@@ -104,21 +135,22 @@ Future<String?> wavComment(File wav) async {
       final id = ascii.decode(head.sublist(0, 4), allowInvalid: true);
       final size = ByteData.sublistView(head).getUint32(4, Endian.little);
       if (id == 'LIST') {
-        return _icmt(await f.read(min(size, length - at - 8)));
+        return _info(await f.read(min(size, length - at - 8)));
       }
       // samples of a recording cut short: they run to the end
-      if (id == 'data' && size == 0) return null;
+      if (id == 'data' && size == 0) return {};
       at += 8 + size + (size & 1);
     }
-    return null;
+    return {};
   } finally {
     await f.close();
   }
 }
 
-String? _icmt(Uint8List list) {
+Map<String, String> _info(Uint8List list) {
+  final out = <String, String>{};
   if (list.length < 4 || ascii.decode(list.sublist(0, 4)) != 'INFO') {
-    return null;
+    return out;
   }
   final b = ByteData.sublistView(list);
   var at = 4;
@@ -126,20 +158,24 @@ String? _icmt(Uint8List list) {
     final id = ascii.decode(list.sublist(at, at + 4), allowInvalid: true);
     final size = b.getUint32(at + 4, Endian.little);
     final end = min(at + 8 + size, list.length);
-    if (id == 'ICMT') {
-      var text = list.sublist(at + 8, end);
-      final zero = text.indexOf(0);
-      if (zero >= 0) text = text.sublist(0, zero);
-      return utf8.decode(text, allowMalformed: true);
-    }
+    var text = list.sublist(min(at + 8, end), end);
+    final zero = text.indexOf(0);
+    if (zero >= 0) text = text.sublist(0, zero);
+    out[id] = utf8.decode(text, allowMalformed: true);
     at += 8 + size + (size & 1);
   }
-  return null;
+  return out;
 }
 
-/// Puts [text] in [wav] as its transcript, in place of any before. Only
+/// Puts [text] in [wav] as its transcript, heard in [language] -- picked
+/// for this recording alone when [picked] -- in place of any before. Only
 /// for a WAV of [RecordingWriter]'s shape, its samples at byte 44.
-Future<void> setWavComment(File wav, String text) async {
+Future<void> setWavComment(
+  File wav,
+  String text, {
+  String? language,
+  bool picked = false,
+}) async {
   // append: read and write, kept as it is; the position is set below
   final f = await wav.open(mode: FileMode.append);
   try {
@@ -154,20 +190,30 @@ Future<void> setWavComment(File wav, String text) async {
     if (data == 0 || data > length - 44) data = length - 44;
     final end = 44 + data + (data & 1);
 
-    final t = [...utf8.encode(text), 0];
-    if (t.length.isOdd) t.add(0);
+    final info = BytesBuilder()..add(ascii.encode('INFO'));
+    void sub(String id, String value) {
+      final t = [...utf8.encode(value), 0];
+      if (t.length.isOdd) t.add(0);
+      info
+        ..add(ascii.encode(id))
+        ..add(_u32(t.length))
+        ..add(t);
+    }
+
+    sub('ICMT', text);
+    if (language != null) sub('ILNG', language);
+    if (language != null && picked) sub('ILNP', 'picked');
+    final list = info.takeBytes();
     final chunk = BytesBuilder()
       ..add(ascii.encode('LIST'))
-      ..add(_u32(4 + 8 + t.length))
-      ..add(ascii.encode('INFOICMT'))
-      ..add(_u32(t.length))
-      ..add(t);
+      ..add(_u32(list.length))
+      ..add(list);
 
     await f.truncate(end);
     await f.setPosition(end);
     await f.writeFrom(chunk.takeBytes());
     await f.setPosition(4);
-    await f.writeFrom(_u32(end + 20 + t.length - 8));
+    await f.writeFrom(_u32(end + 8 + list.length - 8));
     await f.setPosition(40);
     await f.writeFrom(_u32(data));
   } finally {
@@ -258,6 +304,11 @@ class RecordingStore extends ChangeNotifier {
     );
   }
 
+  /// The language of the transcript in [note], beside it: '... .lang',
+  /// with a second line 'picked' when picked for this recording alone.
+  static File _language(File note) =>
+      File(note.path.replaceFirst(RegExp(r'\.txt$'), '.lang'));
+
   void refresh() => notifyListeners();
 
   Future<RecordingWriter> begin(DateTime at, int rate, int bits) =>
@@ -280,8 +331,9 @@ class RecordingStore extends ChangeNotifier {
         final f = await e.open();
         final header = await f.read(44);
         await f.close();
+        final (text, language, picked) = await _transcript(e);
         out.add(
-          Recording(e, at, wavLength(header, size), await _transcript(e)),
+          Recording(e, at, wavLength(header, size), text, language, picked),
         );
       } catch (_) {}
     }
@@ -289,19 +341,39 @@ class RecordingStore extends ChangeNotifier {
     return out;
   }
 
-  /// In the WAV, else beside it (from before), else in [notes].
-  Future<String?> _transcript(File wav) async {
-    final inside = await wavComment(wav).catchError((_) => null);
-    if (inside != null) return inside;
-    for (final f in [transcriptOf(wav), _note(wav)]) {
-      if (f != null && await f.exists()) return f.readAsString();
+  /// In the WAV, else beside it (from before), else in [notes]; with its
+  /// language, where that is known.
+  Future<(String?, String?, bool)> _transcript(File wav) async {
+    final inside = await wavInfo(wav).catchError((_) => <String, String>{});
+    if (inside['ICMT'] case final text?) {
+      return (text, inside['ILNG'], inside['ILNP'] == 'picked');
     }
-    return null;
+    for (final f in [transcriptOf(wav), _note(wav)]) {
+      if (f != null && await f.exists()) {
+        final lang = _language(f);
+        final lines = await lang.exists()
+            ? (await lang.readAsString()).split('\n')
+            : <String>[];
+        return (
+          await f.readAsString(),
+          lines.firstOrNull,
+          lines.length > 1 && lines[1] == 'picked',
+        );
+      }
+    }
+    return (null, null, false);
   }
 
-  Future<void> saveTranscript(Recording r, String text) async {
+  /// Keeps [text] as [r]'s transcript, heard in [language], picked for it
+  /// alone when [picked].
+  Future<void> saveTranscript(
+    Recording r,
+    String text, {
+    String? language,
+    bool picked = false,
+  }) async {
     try {
-      await setWavComment(r.file, text);
+      await setWavComment(r.file, text, language: language, picked: picked);
       final beside = transcriptOf(r.file);
       if (await beside.exists()) await beside.delete();
     } on FileSystemException {
@@ -309,6 +381,12 @@ class RecordingStore extends ChangeNotifier {
       if (note == null) rethrow;
       await note.parent.create(recursive: true);
       await note.writeAsString(text);
+      final lang = _language(note);
+      if (language != null) {
+        await lang.writeAsString(picked ? '$language\npicked' : language);
+      } else if (await lang.exists()) {
+        await lang.delete();
+      }
     }
     notifyListeners();
   }
@@ -316,7 +394,10 @@ class RecordingStore extends ChangeNotifier {
   Future<void> delete(Recording r) async {
     await r.file.delete();
     for (final f in [transcriptOf(r.file), _note(r.file)]) {
-      if (f != null && await f.exists()) await f.delete();
+      if (f == null) continue;
+      for (final g in [f, _language(f)]) {
+        if (await g.exists()) await g.delete();
+      }
     }
     final dir = r.file.parent;
     if (await dir.list().isEmpty) await dir.delete();
@@ -331,6 +412,7 @@ class RecorderService extends ChangeNotifier {
     this.link,
     this.settings,
     this.store, {
+    this.transcripts,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now {
     link.events.listen(onMessage);
@@ -343,9 +425,15 @@ class RecorderService extends ChangeNotifier {
   final FrameLink link;
   final Settings settings;
   final RecordingStore store;
+
+  /// Hears each recording as it comes in, when given.
+  final TranscriptService? transcripts;
   final DateTime Function() _now;
 
   Future<RecordingWriter?> _writer = Future.value();
+
+  /// The recording coming in now, being heard.
+  LiveHearing? _live;
   bool _open = false;
 
   /// A recording is coming in now.
@@ -368,19 +456,29 @@ class RecorderService extends ChangeNotifier {
         final at = started = _now();
         _open = true;
         _writer = _writer
-            .then<RecordingWriter?>((_) => store.begin(at, rate, bits))
+            .then<RecordingWriter?>((_) async {
+              final w = await store.begin(at, rate, bits);
+              _live = transcripts?.hearLive(w.file, rate, bits);
+              return w;
+            })
             .catchError((_) => null);
         notifyListeners();
       case audioChunk:
         if (!_open) return;
-        final data = m.sublist(1);
-        _writer = _writer.then((w) => w?..add(data));
+        _add(m.sublist(1));
       case audioEnd:
         if (!_open) return;
-        final data = m.sublist(1);
-        _writer = _writer.then((w) => w?..add(data));
+        _add(m.sublist(1));
         _finish();
     }
+  }
+
+  void _add(List<int> data) {
+    _writer = _writer.then((w) {
+      w?.add(data);
+      _live?.add(data);
+      return w;
+    });
   }
 
   void _finish() {
@@ -390,6 +488,10 @@ class RecorderService extends ChangeNotifier {
     _writer = _writer
         .then((w) async {
           await w?.close();
+          final live = _live;
+          _live = null;
+          // not waited for: the next recording may begin meanwhile
+          live?.finish().ignore();
           return null;
         })
         .catchError((_) => null)
