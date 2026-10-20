@@ -797,6 +797,51 @@ The glasses answer `[0x1B, battery, version...]`: the battery as the same
 smoothed percentage the top bar shows (255 before the first sample), then
 `frame.FIRMWARE_VERSION` as text, for example `v25.080.0838`.
 
+### Keeping the link
+
+The phone keeps the link up itself (`flutter-glaz/lib/frame/link.dart`),
+from Connect until Disconnect, across restarts: it keeps the glasses'
+Bluetooth id and whether the link is wanted, and connects at start.
+
+- **A drop** -- 147 (connection timeout) and 8 (supervision timeout) are
+  the usual ones, out of range or the glasses busy -- is followed half a
+  second later by a direct connect to the glasses' id, no scan. Failed,
+  it goes again after 1, 2, 5, 10 and 20 s, each try at most 10 s.
+- **Still nothing**: one scan for the app's service, in case the glasses
+  answer to another id now; then the phone waits for them (Android's
+  autoConnect), which costs nothing while they are away and connects as
+  soon as they show up -- back in range, or woken by a tap. The wait is
+  set up again every 10 minutes.
+- **Bluetooth off**: no tries until it is back on, then at once.
+- **Up but silent**: the glasses answer `STATUS_GET` every minute. With
+  nothing from them for 150 s the log says so; after 5 minutes the link is
+  dropped and made again.
+- **Pairing trouble** (`pairing.dart`) stops the tries: the user has to
+  forget the pairing or reset the glasses.
+- **A task** that needs the radio (DFU) releases the link and takes it
+  back; meanwhile nothing is tried.
+
+Only the glasses' own link events count. `frame_ble`'s `connectionState`
+is not used: it takes every Bluetooth device's events -- the Flipper's
+included -- for the glasses', and reconnects whichever device dropped.
+With the Flipper connected the phone thought the glasses gone for four
+minutes while they were up.
+
+The glasses wait for a dropped link: they park in deep sleep after 30 s
+idle with no host, but only once the link has been down `LINK_GRACE`, 60
+s. Before, a two-second drop with a blank screen put them to sleep, and
+only a tap brought them back.
+
+**What to look at.** The phone: Glaz > Connection details (state, up or
+down for how long, links and drops, the last drop's reason, the attempt,
+when the glasses last spoke, signal, MTU, packets data.lua never
+answered) and the log (More > Log, kind `link`): every attempt, every drop
+with how long the link was up and why, the link coming up with its MTU and
+how long it was down. The glasses: Info > Bluetooth -- up or down and for
+how long, drops since boot, when the phone last spoke, messages taken,
+MTU, MAC -- and, when the link comes back, a line to the phone's log:
+`link back after 3s down, 2 drops, 137 in`.
+
 ### Location
 
 A module asks where the phone is:

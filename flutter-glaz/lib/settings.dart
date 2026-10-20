@@ -89,6 +89,17 @@ class Settings extends ChangeNotifier {
   void setConfig(String module, String key, String value) =>
       _set('cfg.$module.$key', value);
 
+  /// The glasses last connected to, by Bluetooth id: connecting goes
+  /// straight to them (frame/link.dart).
+  String? get linkDevice => _prefs.getString('link.device');
+  set linkDevice(String? id) =>
+      id == null ? _prefs.remove('link.device') : _set('link.device', id);
+
+  /// The link is wanted: the app connects at start and after every drop,
+  /// until Disconnect.
+  bool get linkWanted => _prefs.getBool('link.wanted') ?? true;
+  set linkWanted(bool on) => _set('link.wanted', on);
+
   void _set(String key, Object value) {
     if (value is bool) _prefs.setBool(key, value);
     if (value is String) _prefs.setString(key, value);

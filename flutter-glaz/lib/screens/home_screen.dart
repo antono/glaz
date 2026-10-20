@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -66,6 +68,14 @@ class _ConnectionCard extends StatelessWidget {
 
   static (Color, String) _state(FrameLink link) => switch (link.state) {
     LinkState.connected => (FrameColors.lightGreen, 'Connected'),
+    LinkState.connecting when link.waitingForGlasses => (
+      FrameColors.yellow,
+      'Waiting for the glasses...',
+    ),
+    LinkState.connecting when link.connects > 0 => (
+      FrameColors.yellow,
+      'Reconnecting...',
+    ),
     LinkState.connecting => (FrameColors.yellow, 'Connecting...'),
     LinkState.scanning => (FrameColors.yellow, 'Looking for the glasses...'),
     LinkState.disconnected => (FrameColors.grey, 'Not connected'),
@@ -106,11 +116,20 @@ class _ConnectionCard extends StatelessWidget {
                   Expanded(child: Text(title, style: text.titleMedium)),
               ],
             ),
-            if (!link.connected) ...[
+            if (link.waitingForGlasses) ...[
+              const SizedBox(height: 12),
+              Text(
+                'They connect by themselves once in range and awake. '
+                'Asleep, a tap on the arm wakes them.',
+                style: muted,
+              ),
+            ] else if (!link.connected) ...[
               const SizedBox(height: 12),
               Text(
                 link.error != null
-                    ? 'Failed: ${link.error}'
+                    ? link.wanted
+                          ? 'Trying again. Last: ${link.error}'
+                          : 'Failed: ${link.error}'
                     : 'The glasses work on their own; connected, they also '
                           'get the time, phone notifications, the Internet for '
                           'the apps you allow, and send their photos here.',
@@ -147,8 +166,100 @@ class _ConnectionCard extends StatelessWidget {
                 child: const Text('Pairing trouble? Forget it on this phone'),
               ),
             ],
+            _LinkDetails(link),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The link in numbers, folded away: what to look at -- and send along
+/// with the log -- when the glasses keep dropping.
+class _LinkDetails extends StatefulWidget {
+  const _LinkDetails(this.link);
+  final FrameLink link;
+
+  @override
+  State<_LinkDetails> createState() => _LinkDetailsState();
+}
+
+class _LinkDetailsState extends State<_LinkDetails> {
+  Timer? _tick;
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  void _open(bool open) {
+    _tick?.cancel();
+    _tick = open
+        ? Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}))
+        : null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final link = widget.link;
+    final now = DateTime.now();
+    String ago(DateTime? t) =>
+        t == null ? '--' : '${linkSpan(now.difference(t))} ago';
+    final up = link.upSince;
+    final down = link.downSince;
+    final next = link.nextAttempt;
+    final rows = [
+      (
+        'State',
+        link.waitingForGlasses ? 'waiting for the glasses' : link.state.name,
+      ),
+      if (up != null) ('Up for', linkSpan(now.difference(up))),
+      if (up == null && down != null)
+        ('Down for', linkSpan(now.difference(down))),
+      ('Links, drops', '${link.connects}, ${link.drops}'),
+      ('Last drop', link.lastDrop ?? '--'),
+      if (!link.connected) ('Attempt', '${link.attempt}'),
+      if (next != null && next.isAfter(now))
+        ('Next attempt', 'in ${linkSpan(next.difference(now))}'),
+      ('Heard from glasses', ago(link.lastHeard)),
+      ('Signal', link.rssi == null ? '--' : '${link.rssi} dBm'),
+      ('MTU', link.mtu == null ? '--' : '${link.mtu}'),
+      ('Unanswered packets', '${link.ackTimeouts}'),
+      ('Glasses id', link.knownId ?? '--'),
+    ];
+    final text = Theme.of(context).textTheme;
+    return Theme(
+      // no lines above and below: it is part of the card
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 4),
+        title: Text('Connection details', style: text.bodyMedium),
+        onExpansionChanged: _open,
+        children: [
+          for (final (label, value) in rows)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: text.bodySmall?.copyWith(color: FrameColors.grey),
+                    ),
+                  ),
+                  Flexible(
+                    child: Text(
+                      value,
+                      style: text.bodySmall,
+                      textAlign: TextAlign.end,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

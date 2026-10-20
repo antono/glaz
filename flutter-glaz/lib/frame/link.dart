@@ -85,14 +85,13 @@ class FrameLink extends ChangeNotifier {
   Timer? _statusTimer;
 
   /// Whether the pairing has gone stale, and whose side must forget it;
-  /// see pairing.dart. Set by [_watchDrops], cleared by an answer from the
+  /// see pairing.dart. Set by [_onDrop], cleared by an answer from the
   /// glasses or by [forgetPairing].
   PairingTrouble pairing = PairingTrouble.none;
 
   /// The glasses last found, kept while the link is down: what
   /// [forgetPairing] forgets.
   BluetoothDevice? _known;
-  StreamSubscription<OnConnectionStateChangedEvent>? _drops;
   DateTime? _upAt;
   int _quickDrops = 0;
   bool _pairAfterConnect = false;
@@ -116,7 +115,6 @@ class FrameLink extends ChangeNotifier {
   Completer<void>? _ack;
   bool _acks = true;
   StreamSubscription<String>? _prints;
-  StreamSubscription<BrilliantDevice>? _conn;
   final _events = StreamController<List<int>>.broadcast();
 
   /// Called each time the link comes up, including after a reconnect.
@@ -143,92 +141,333 @@ class FrameLink extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> connect() async {
-    if (state != LinkState.disconnected) return;
-    error = null;
-    try {
-      await _connect(const Duration(seconds: 15));
-    } catch (e) {
-      error = '$e';
-      glazLog(LogKind.link, 'could not connect: $e', problem: true);
-      _set(LinkState.disconnected);
+  // -- Keeping the link up ------------------------------------------------
+  //
+  // The app keeps the link itself (docs/PROTOCOL.md, "Keeping the link").
+  // frame_ble's reconnect is not used: its connectionState took every
+  // Bluetooth device's events for the glasses' -- the Flipper connecting
+  // made the link look gone while it was up (seen: four minutes "connecting"
+  // to glasses that were connected), and frame_ble then reconnected the
+  // Flipper, with a year's timeout.
+
+  /// The user wants the glasses connected: from [connect] until
+  /// [disconnect], across restarts ([onRemember]). Every drop is followed
+  /// by another go.
+  bool get wanted => _wanted;
+  bool _wanted = false;
+
+  /// A task let go of the link ([release]) and takes it back ([reconnect]).
+  bool _released = false;
+
+  /// The glasses' Bluetooth id, kept across restarts ([onRemember]): a
+  /// connect goes straight to them, no scan.
+  String? knownId;
+
+  /// Called with what to keep across restarts: the glasses' id, and
+  /// whether the link is wanted.
+  void Function(String? id, bool wanted)? onRemember;
+
+  StreamSubscription<OnConnectionStateChangedEvent>? _states;
+  StreamSubscription<BluetoothAdapterState>? _adapter;
+  BluetoothAdapterState _adapterState = BluetoothAdapterState.unknown;
+  Timer? _retry;
+  Future<void>? _trying;
+  Future<void>? _bringing;
+
+  /// The gaps between direct attempts, each at most [attemptTimeout]. Past
+  /// the last the phone waits for the glasses instead (Android's
+  /// autoConnect): it connects once they show up -- in range again, woken
+  /// by a tap -- and costs nothing meanwhile.
+  static const retryGaps = [
+    Duration(seconds: 1),
+    Duration(seconds: 2),
+    Duration(seconds: 5),
+    Duration(seconds: 10),
+    Duration(seconds: 20),
+  ];
+  static const attemptTimeout = Duration(seconds: 10);
+
+  /// Waiting for the glasses, the wait is set up again this often: one
+  /// Android dropped is not waited on forever.
+  static const waitAgain = Duration(minutes: 10);
+
+  /// With the link up and nothing from the glasses this long -- they
+  /// answer STATUS every minute -- the log says so; past [silentReconnect]
+  /// the link is dropped and made again: Android sometimes keeps one that
+  /// carries nothing.
+  static const silentAfter = Duration(seconds: 150);
+  static const silentReconnect = Duration(minutes: 5);
+  bool _silentLogged = false;
+
+  // For the connection details (home_screen.dart) and the log.
+
+  /// The attempt going on or last made since the link was last up.
+  int attempt = 0;
+
+  /// When the next attempt goes; null when none is set.
+  DateTime? nextAttempt;
+
+  /// Android connects as soon as the glasses show up (autoConnect).
+  bool waitingForGlasses = false;
+
+  DateTime? upSince;
+  DateTime? downSince;
+
+  /// Since the app started: links made, and lost without being asked.
+  int connects = 0;
+  int drops = 0;
+
+  /// Why the link went down last: Android's code and its name.
+  String? lastDrop;
+
+  /// Anything from the glasses: a message, a print, a packet's answer.
+  DateTime? lastHeard;
+
+  int? rssi;
+  int? mtu;
+
+  /// Packets data.lua never answered ([ackWait]).
+  int ackTimeouts = 0;
+
+  /// At app start: the glasses kept from before, and whether the link was
+  /// wanted then; wanted, it connects at once.
+  void start({String? id, bool wanted = true}) {
+    knownId = id;
+    _adapter ??= FlutterBluePlus.adapterState.listen(_onAdapter);
+    if (wanted) connect();
+  }
+
+  void _remember(String id) {
+    if (id == knownId) return;
+    knownId = id;
+    onRemember?.call(id, _wanted);
+  }
+
+  void _onAdapter(BluetoothAdapterState s) {
+    if (s == _adapterState) return;
+    _adapterState = s;
+    glazLog(LogKind.link, 'Bluetooth ${s.name}');
+    if (s == BluetoothAdapterState.on) {
+      if (_wanted && error == 'Bluetooth is off') error = null;
+      if (_wanted) _kick();
+    } else if (s == BluetoothAdapterState.off) {
+      _retry?.cancel();
+      nextAttempt = null;
+      waitingForGlasses = false;
+      if (_wanted) error = 'Bluetooth is off';
+      _detach(LinkState.disconnected);
     }
   }
 
-  /// Connects again from inside a task, after [release]: the glasses come
-  /// back from a reboot (new firmware) and are looked for anew. Throws if
-  /// they do not show up within [timeout].
-  Future<void> reconnect(Duration timeout) async {
-    _set(LinkState.disconnected);
+  Future<void> connect() async {
+    _wanted = true;
+    _released = false;
+    error = null;
+    attempt = 0;
+    onRemember?.call(knownId, true);
+    if (waitingForGlasses) {
+      // Android's wait taken back, or a direct connect would meet it
+      waitingForGlasses = false;
+      try {
+        await _known?.disconnect();
+      } catch (_) {}
+    }
+    _kick();
+    await _trying;
+  }
+
+  /// The next attempt, [after] from now; one at a time.
+  void _kick([Duration after = Duration.zero]) {
+    _retry?.cancel();
+    if (!_wanted || _released || connected) return;
+    nextAttempt = DateTime.now().add(after);
+    notifyListeners();
+    _retry = Timer(after, () {
+      nextAttempt = null;
+      _trying ??= _try().whenComplete(() => _trying = null);
+    });
+  }
+
+  bool get _off => !_wanted || _released;
+
+  Future<void> _try() async {
+    if (_off || connected || _bringing != null) return;
+    if (_adapterState == BluetoothAdapterState.off) {
+      error = 'Bluetooth is off';
+      _set(LinkState.disconnected);
+      return;
+    }
+    attempt++;
     try {
-      await _connect(timeout);
+      await BrilliantBluetooth.requestPermission();
+      BluetoothDevice dev;
+      final id = knownId;
+      if (id == null) {
+        _set(LinkState.scanning);
+        glazLog(LogKind.link, 'attempt $attempt: looking for the glasses');
+        dev = (await _scanForApp(const Duration(seconds: 15))).device;
+        _remember(dev.remoteId.str);
+      } else {
+        dev = BluetoothDevice.fromId(id);
+      }
+      if (_off) return;
+      _watch(dev);
+      _set(LinkState.connecting);
+      if (attempt > retryGaps.length) {
+        if (waitingForGlasses) {
+          // the wait set up again: the old one cancelled first
+          try {
+            await dev.disconnect();
+          } catch (_) {}
+          if (_off) return;
+        }
+        // glasses that answer to another id -- others, or reset -- are
+        // found by looking, and connected to at once
+        if (id != null) {
+          _set(LinkState.scanning);
+          final found = await _scanForApp(const Duration(seconds: 10))
+              .then<BluetoothDevice?>((s) => s.device, onError: (_) => null);
+          if (_off) return;
+          _set(LinkState.connecting);
+          if (found != null) {
+            if (found.remoteId != dev.remoteId) {
+              glazLog(LogKind.link, 'the glasses are at ${found.remoteId} now');
+            }
+            dev = found;
+            _remember(dev.remoteId.str);
+            _watch(dev);
+            waitingForGlasses = false;
+            glazLog(LogKind.link, 'attempt $attempt: found, connecting');
+            await dev.connect(timeout: attemptTimeout, mtu: null);
+            if (_off) return;
+            await _bringUp(dev);
+            return;
+          }
+        }
+        glazLog(
+          LogKind.link,
+          'attempt $attempt: waiting for the glasses to show up',
+        );
+        waitingForGlasses = true;
+        notifyListeners();
+        await dev.connect(autoConnect: true, mtu: null);
+        if (dev.isConnected) await _bringUp(dev);
+        if (!connected) _kick(waitAgain);
+        return;
+      }
+      glazLog(LogKind.link, 'attempt $attempt: connecting to ${dev.remoteId}');
+      await dev.connect(timeout: attemptTimeout, mtu: null);
+      if (_off) return;
+      await _bringUp(dev);
+    } catch (e) {
+      if (_off || connected) return;
+      error = '$e';
+      glazLog(LogKind.link, 'attempt $attempt failed: $e', problem: true);
+      _kick(retryGaps[min(attempt, retryGaps.length) - 1]);
+    }
+  }
+
+  /// The link is up at Android's level: the glasses' services, then the
+  /// app's. One at a time: the connect and the event both get here.
+  Future<void> _bringUp(BluetoothDevice dev) =>
+      _bringing ??= _bring(dev).whenComplete(() => _bringing = null);
+
+  Future<void> _bring(BluetoothDevice dev) async {
+    if (_device != null) return;
+    final d = await BrilliantBluetooth.enableServices(dev);
+    if (d.state != BrilliantConnectionState.connected) {
+      await dev.disconnect();
+      throw Exception('the glasses are in update mode');
+    }
+    _remember(dev.remoteId.str);
+    _attach(d);
+  }
+
+  /// Connects again from inside a task, after [release]: the glasses come
+  /// back from a reboot (new firmware) and are looked for anew -- the app's
+  /// service only, never the bootloader. Throws if they do not show up
+  /// within [timeout]; the link is then tried again as after a drop.
+  Future<void> reconnect(Duration timeout) async {
+    _released = false;
+    _retry?.cancel();
+    _set(LinkState.scanning);
+    try {
+      final scanned = await _scanForApp(timeout);
+      _watch(scanned.device);
+      _set(LinkState.connecting);
+      await scanned.device.connect(timeout: attemptTimeout, mtu: null);
+      await _bringUp(scanned.device);
     } catch (_) {
       _set(LinkState.disconnected);
+      if (_wanted) _kick(retryGaps.first);
       rethrow;
     }
   }
 
-  /// Gives up the link entirely, auto-reconnect included, so the radio is
-  /// free for another connection -- the DFU bootloader. flutter_blue_plus
-  /// runs one connect at a time, and frame_ble's reconnect to glasses that
-  /// are gone ties it up for 30 s per attempt, over and over (seen: the
-  /// bootloader timed out waiting behind it).
+  /// Gives up the link for a while, reconnecting included, so the radio
+  /// is free for another connection -- the DFU bootloader: flutter_blue_plus
+  /// runs one connect at a time (seen: the bootloader timed out waiting
+  /// behind a reconnect). [reconnect] takes it back.
   Future<void> release() async {
-    await _conn?.cancel();
-    _conn = null;
+    _released = true;
+    _retry?.cancel();
+    nextAttempt = null;
+    waitingForGlasses = false;
     final device = _device;
     _detach(LinkState.disconnected);
     try {
-      await device?.disconnect();
+      await (device?.device ?? _known)?.disconnect();
     } catch (_) {}
   }
 
-  /// Scan for the glasses running their app -- service 7a230001 only, so
-  /// the DFU bootloader (fe59) is never taken for them -- and connect.
-  Future<void> _connect(Duration timeout) async {
-    _set(LinkState.scanning);
-    await BrilliantBluetooth.requestPermission();
-    final scanned = await _scanForApp(timeout);
-    if (state != LinkState.scanning) return; // cancelled meanwhile
-    _known = scanned.device;
-    _watchDrops();
-    _set(LinkState.connecting);
-    final device = await BrilliantBluetooth.connect(scanned);
-    if (device.state != BrilliantConnectionState.connected) {
-      await device.disconnect();
-      throw Exception('the glasses are in update mode');
-    }
-    // frame_ble reconnects by itself on Android and reports it here
-    _conn = device.connectionState.listen((d) {
-      if (d.state == BrilliantConnectionState.connected) {
-        _attach(d);
-      } else {
-        _detach(LinkState.connecting);
-      }
-    });
-    _attach(device);
+  /// The glasses' own link events, and no other device's.
+  void _watch(BluetoothDevice dev) {
+    if (_states != null && _known?.remoteId == dev.remoteId) return;
+    _states?.cancel();
+    _known = dev;
+    _states = FlutterBluePlus.events.onConnectionStateChanged
+        .where((e) => e.device.remoteId == dev.remoteId)
+        .listen(_onState);
   }
 
-  /// Every link up and down with the glasses, frame_ble's own reconnects
-  /// included: a link that keeps going down right after coming up is a
-  /// pairing that no longer holds (pairing.dart).
-  void _watchDrops() {
-    _drops ??= FlutterBluePlus.events.onConnectionStateChanged.listen((e) {
-      if (e.device.remoteId != _known?.remoteId) return;
-      if (e.connectionState == BluetoothConnectionState.connected) {
-        _upAt = DateTime.now();
-      } else if (e.connectionState == BluetoothConnectionState.disconnected) {
-        // a connect that never came up is no drop: frame_ble retrying
-        // glasses that are away, every 30 s
-        final upAt = _upAt;
-        _upAt = null;
-        if (upAt != null) {
-          final up = DateTime.now().difference(upAt);
-          _quickDrops = up < quickDrop ? _quickDrops + 1 : 0;
-        }
-        _onDrop(e.device, e.device.disconnectReason?.code);
+  void _onState(OnConnectionStateChangedEvent e) {
+    if (e.connectionState == BluetoothConnectionState.connected) {
+      _upAt = DateTime.now();
+      // Android's autoConnect, or a connect of its own: taken up here
+      if (_device == null && !_released) {
+        _bringUp(e.device).catchError((Object err) {
+          glazLog(
+            LogKind.link,
+            'could not take up the link: $err',
+            problem: true,
+          );
+          e.device.disconnect().catchError((_) {});
+          _kick(retryGaps.first);
+        });
       }
-    });
+    } else if (e.connectionState == BluetoothConnectionState.disconnected) {
+      final r = e.device.disconnectReason;
+      final upAt = _upAt;
+      _upAt = null;
+      final wasUp = _device != null;
+      if (wasUp) _detach(LinkState.connecting);
+      // a connect that never came up is no drop: an attempt that failed
+      if (upAt == null) return;
+      final up = DateTime.now().difference(upAt);
+      _quickDrops = up < quickDrop ? _quickDrops + 1 : 0;
+      if (_off) return; // asked for
+      drops++;
+      lastDrop = r == null
+          ? 'unknown'
+          : '${r.code}${r.description == null ? '' : ' ${r.description}'}';
+      glazLog(
+        LogKind.link,
+        'down after ${_span(up)} up, reason $lastDrop, drop $drops, '
+        'quick drops $_quickDrops',
+      );
+      _onDrop(e.device, r?.code);
+      _kick(const Duration(milliseconds: 500));
+    }
   }
 
   Future<void> _onDrop(BluetoothDevice device, int? code) async {
@@ -242,15 +481,14 @@ class FrameLink extends ChangeNotifier {
       code: code,
       quickDrops: _quickDrops,
     );
+    if (trouble == PairingTrouble.none || trouble == pairing) return;
     glazLog(
       LogKind.link,
-      'down, reason $code, bonded $bonded, quick drops $_quickDrops'
-      '${trouble == PairingTrouble.none ? '' : ': pairing trouble, ${trouble.name}'}',
-      problem: trouble != PairingTrouble.none,
+      'pairing trouble, ${trouble.name}: bonded $bonded, reason $code',
+      problem: true,
     );
-    if (trouble == PairingTrouble.none || trouble == pairing) return;
     pairing = trouble;
-    // frame_ble would keep reconnecting, and the glasses keep refusing
+    // reconnecting would go on, and the glasses keep refusing
     await disconnect();
     error = null;
     notifyListeners();
@@ -317,12 +555,33 @@ class FrameLink extends ChangeNotifier {
         ? device.device.platformName
         : device.device.advName;
     _acks = true;
+    final now = DateTime.now();
+    final down = downSince;
+    glazLog(
+      LogKind.link,
+      'up: mtu ${device.device.mtuNow}, attempt $attempt'
+      '${down == null ? '' : ', down ${_span(now.difference(down))}'}'
+      ', link $connects, drops $drops',
+    );
+    connects++;
+    upSince = now;
+    downSince = null;
+    lastHeard = now;
+    _silentLogged = false;
+    attempt = 0;
+    nextAttempt = null;
+    waitingForGlasses = false;
+    error = null;
+    mtu = device.device.mtuNow;
+    _retry?.cancel();
     _data = device.dataResponse.listen((m) {
+      _heard();
       if (m.length == 1 && (m[0] == 0x00 || m[0] == 0x01)) {
         // data.lua's answer for a packet, not a message
         if (m[0] == 0x01) {
           glazLog(LogKind.link, 'the glasses failed a packet', problem: true);
         }
+        _heard();
         _acks = true;
         _ack?.complete();
         _ack = null;
@@ -338,6 +597,7 @@ class FrameLink extends ChangeNotifier {
     // running'; a task's own REPL chatter is the task's business
     _prints?.cancel();
     _prints = device.stringResponse.listen((s) {
+      _heard();
       if (busy) return;
       for (final line in s.split('\n')) {
         final l = line.trim();
@@ -355,7 +615,9 @@ class FrameLink extends ChangeNotifier {
     _set(LinkState.connected);
     _statusTimer?.cancel();
     _statusTimer = Timer.periodic(statusEvery, (_) {
-      if (!busy) requestStatus();
+      if (busy) return;
+      requestStatus();
+      _health();
     });
     _handsOffTimer?.cancel();
     _handsOffTimer = Timer.periodic(handsOffEvery, (_) {
@@ -363,6 +625,45 @@ class FrameLink extends ChangeNotifier {
     });
     // during a task the app is stopped; runTask greets it when done
     if (!busy) _greet();
+  }
+
+  void _heard() {
+    lastHeard = DateTime.now();
+    if (_silentLogged) {
+      _silentLogged = false;
+      glazLog(LogKind.link, 'the glasses speak again');
+    }
+  }
+
+  /// Every [statusEvery]: the signal, and whether the glasses still speak.
+  void _health() {
+    final d = _device;
+    final heard = lastHeard;
+    if (d == null || heard == null) return;
+    d.device
+        .readRssi()
+        .then((v) {
+          rssi = v;
+          notifyListeners();
+        })
+        .catchError((_) {});
+    final quiet = DateTime.now().difference(heard);
+    if (quiet > silentReconnect) {
+      glazLog(
+        LogKind.link,
+        'nothing from the glasses for ${_span(quiet)}: connecting again',
+        problem: true,
+      );
+      // the drop is taken up as any other ([_onState])
+      d.device.disconnect().catchError((_) {});
+    } else if (quiet > silentAfter && !_silentLogged) {
+      _silentLogged = true;
+      glazLog(
+        LogKind.link,
+        'nothing from the glasses for ${_span(quiet)}, the link up',
+        problem: true,
+      );
+    }
   }
 
   void _greet() {
@@ -429,6 +730,9 @@ class FrameLink extends ChangeNotifier {
   }
 
   void _detach(LinkState next) {
+    if (_device != null) downSince = DateTime.now();
+    upSince = null;
+    rssi = null;
     _statusTimer?.cancel();
     _statusTimer = null;
     _handsOffTimer?.cancel();
@@ -441,18 +745,20 @@ class FrameLink extends ChangeNotifier {
     _set(next);
   }
 
+  /// Drops the link and stops trying, until [connect]; across restarts.
   Future<void> disconnect() async {
-    // stop listening first, or frame_ble would reconnect
-    await _conn?.cancel();
-    _conn = null;
+    _wanted = false;
+    onRemember?.call(knownId, false);
+    _retry?.cancel();
+    nextAttempt = null;
+    waitingForGlasses = false;
+    attempt = 0;
     final device = _device;
     _detach(LinkState.disconnected);
     try {
       await BrilliantBluetooth.stopScan();
-      await device?.disconnect();
-      // between frame_ble's reconnects there is no BrilliantDevice, but a
-      // connect may still be pending
-      if (device == null) await _known?.disconnect();
+      // also a connect still pending, or Android waiting for the glasses
+      await (device?.device ?? _known)?.disconnect();
     } catch (_) {}
   }
 
@@ -495,6 +801,7 @@ class FrameLink extends ChangeNotifier {
           onTimeout: () {
             _ack = null;
             _acks = false;
+            ackTimeouts++;
             glazLog(LogKind.link, 'no answer for a packet; not waiting');
           },
         );
@@ -564,3 +871,15 @@ class FrameLink extends ChangeNotifier {
     return send(clockSet, bytes.buffer.asUint8List());
   }
 }
+
+/// A length of time as the log and the details show it: 45 s, 3 min 12 s,
+/// 2 h 5 min.
+String _span(Duration d) {
+  final s = d.inSeconds;
+  if (s < 60) return '$s s';
+  if (s < 3600) return '${s ~/ 60} min ${s % 60} s';
+  return '${s ~/ 3600} h ${s % 3600 ~/ 60} min';
+}
+
+/// [_span] for the details screen.
+String linkSpan(Duration d) => _span(d);

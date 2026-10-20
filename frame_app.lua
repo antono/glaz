@@ -169,6 +169,10 @@ local INFO_TIMEOUT    = 5     -- seconds an 'info' module stays on screen
 -- as activity and restarts the clock. See docs/BATTERY.md.
 local APP_TIMEOUT     = 60    -- seconds of inactivity before closing an 'app'
 local SLEEP_AFTER     = 30    -- idle seconds before parking in frame.sleep()
+-- A link that drops comes back within seconds, the phone reconnecting
+-- (147, a connection timeout, is common). Deep sleep in that gap made the
+-- glasses unreachable until tapped: they wait this long for it first.
+local LINK_GRACE      = 60    -- seconds
                               -- (never while a module runs in the background)
 -- What the accelerometer wakes the glasses with: the firmware's defaults.
 -- A tap wakes the nRF; since firmware glaz it then takes a second
@@ -490,6 +494,13 @@ local hands_off = 0       -- HANDS_OFF: 0, or the wearer's gestures off --
 local hands_off_until = 0 -- utc() the phone's last HANDS_OFF runs out
 local heard_at = 0        -- utc() of the phone's last message
 
+-- The link as the loop sees it, for Info > Bluetooth (glaz_link) and the
+-- line printed to the phone when it comes back: up or not, since when,
+-- drops since boot, messages taken, and how long it was down last.
+local link = { up = false, since = 0, drops = 0, rx = 0, gap = 0,
+               news = false }
+glaz_link = link
+
 local function split_lines(s)
   local out = {}
   for line in string.gmatch(s, '[^\r\n]+') do
@@ -678,13 +689,13 @@ local function draw_top_bar(last, crumbs)
     pcall(frame.display.bitmap, ICON_X, ICON_Y, ICON_W, 2, ICON_PALETTE,
           ICON_PLAY)
   end
-  local link = link_state()
-  if link == 'keys' then
+  local ls = link_state()
+  if ls == 'keys' then
     pcall(frame.display.bitmap, BT_X, ICON_Y, ICON_W, 2, BT_ON_PALETTE,
           ICON_KEYS)
   else
     pcall(frame.display.bitmap, BT_X, ICON_Y, ICON_W, 2,
-          link == 'on' and BT_ON_PALETTE or link == 'quiet' and
+          ls == 'on' and BT_ON_PALETTE or ls == 'quiet' and
           BT_QUIET_PALETTE or BT_OFF_PALETTE, ICON_BT)
   end
   draw_crumbs(parts, ((bg or rec) and ICON_X or BT_X) - CHAR_W // 2)
@@ -1232,9 +1243,29 @@ function app_loop()
         render()
       end
 
+      -- 0. the link: up, down, back
+      local up = bt_connected()
+      if up ~= link.up then
+        if up then
+          link.gap, link.news = now - link.since, link.since > 0
+        else
+          link.drops = link.drops + 1
+        end
+        link.up, link.since = up, now
+      end
+
       -- 1. incoming messages from the host
-      if data.process_raw_items() > 0 then
+      local got = data.process_raw_items()
+      if got > 0 then
         heard_at = now
+        link.rx = link.rx + got
+        link.heard = now
+        -- back: the phone listens again, so it hears this (its log)
+        if link.news then
+          link.news = false
+          print(string.format('link back after %ds down, %d drops, %d in',
+                              math.floor(link.gap), link.drops, link.rx))
+        end
         if data.app_data[MENU_SET] ~= nil then
           -- Host overrides the module menu with one flat level. Such items
           -- have no module behind them, so launching one only notifies the
@@ -1631,13 +1662,14 @@ function app_loop()
 
       elseif sleep_requested
              or (now - last_act > SLEEP_AFTER and not bg
-                 and not frame.bluetooth.is_connected()) then
+                 and not link.up and now - link.since > LINK_GRACE) then
         -- Deep sleep: frame.sleep() with no argument parks the device until a
         -- tap, which is far beyond what loop pacing can save. Two conditions
         -- make it safe to use here.
         --
         -- Only with no host attached, because a sleeping app cannot be
-        -- reached over Bluetooth -- otherwise development would stall.
+        -- reached over Bluetooth -- otherwise development would stall --
+        -- and none for LINK_GRACE: a drop is given time to come back.
         --
         -- Never with a module in the background: it would be frozen, which
         -- is exactly what background means it must not be.

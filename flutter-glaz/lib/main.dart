@@ -24,6 +24,14 @@ Future<void> main() async {
     await GlazLog.instance.attach(File('${dir.path}/glaz.log'));
   } catch (_) {} // in memory only, then
   await Services.start();
+  // the link from the start, to the glasses of last time (frame/link.dart)
+  final s = Services.instance;
+  s.link.onRemember = (id, wanted) {
+    s.settings
+      ..linkDevice = id
+      ..linkWanted = wanted;
+  };
+  s.link.start(id: s.settings.linkDevice, wanted: s.settings.linkWanted);
   runApp(const GlazApp());
 }
 
