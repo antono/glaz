@@ -95,6 +95,11 @@ class Settings extends ChangeNotifier {
   set linkDevice(String? id) =>
       id == null ? _prefs.remove('link.device') : _set('link.device', id);
 
+  /// The glasses' name as last seen, for a connect that gets none.
+  String? get linkName => _prefs.getString('link.name');
+  set linkName(String? n) =>
+      n == null ? _prefs.remove('link.name') : _set('link.name', n);
+
   /// The link is wanted: the app connects at start and after every drop,
   /// until Disconnect.
   bool get linkWanted => _prefs.getBool('link.wanted') ?? true;

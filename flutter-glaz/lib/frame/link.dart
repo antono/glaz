@@ -163,9 +163,13 @@ class FrameLink extends ChangeNotifier {
   /// connect goes straight to them, no scan.
   String? knownId;
 
+  /// The glasses' name as last seen: a connect straight to [knownId] gets
+  /// none from Android, which only knows it from a scan or the pairing.
+  String? knownName;
+
   /// Called with what to keep across restarts: the glasses' id, and
   /// whether the link is wanted.
-  void Function(String? id, bool wanted)? onRemember;
+  void Function(String? id, String? name, bool wanted)? onRemember;
 
   StreamSubscription<OnConnectionStateChangedEvent>? _states;
   StreamSubscription<BluetoothAdapterState>? _adapter;
@@ -231,8 +235,9 @@ class FrameLink extends ChangeNotifier {
 
   /// At app start: the glasses kept from before, and whether the link was
   /// wanted then; wanted, it connects at once.
-  void start({String? id, bool wanted = true}) {
+  void start({String? id, String? name, bool wanted = true}) {
     knownId = id;
+    knownName = name;
     _adapter ??= FlutterBluePlus.adapterState.listen(_onAdapter);
     if (wanted) connect();
   }
@@ -240,7 +245,7 @@ class FrameLink extends ChangeNotifier {
   void _remember(String id) {
     if (id == knownId) return;
     knownId = id;
-    onRemember?.call(id, _wanted);
+    onRemember?.call(id, knownName, _wanted);
   }
 
   void _onAdapter(BluetoothAdapterState s) {
@@ -264,7 +269,7 @@ class FrameLink extends ChangeNotifier {
     _released = false;
     error = null;
     attempt = 0;
-    onRemember?.call(knownId, true);
+    onRemember?.call(knownId, knownName, true);
     if (waitingForGlasses) {
       // Android's wait taken back, or a direct connect would meet it
       waitingForGlasses = false;
@@ -551,9 +556,7 @@ class FrameLink extends ChangeNotifier {
     }
     _data?.cancel();
     _device = device;
-    name = device.device.advName.isEmpty
-        ? device.device.platformName
-        : device.device.advName;
+    _nameOf(device.device);
     _acks = true;
     final now = DateTime.now();
     final down = downSince;
@@ -625,6 +628,32 @@ class FrameLink extends ChangeNotifier {
     });
     // during a task the app is stopped; runTask greets it when done
     if (!busy) _greet();
+  }
+
+  /// The glasses' name: from the scan, else Android's for the device,
+  /// else the pairing's, else the one kept; a new one is kept.
+  void _nameOf(BluetoothDevice dev) {
+    void take(String n) {
+      name = n;
+      if (n == knownName) return;
+      knownName = n;
+      onRemember?.call(knownId, n, _wanted);
+    }
+
+    final seen = dev.advName.isNotEmpty ? dev.advName : dev.platformName;
+    if (seen.isNotEmpty) return take(seen);
+    name = knownName ?? 'Frame';
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    FlutterBluePlus.bondedDevices
+        .then((bonded) {
+          for (final b in bonded) {
+            if (b.remoteId == dev.remoteId && b.platformName.isNotEmpty) {
+              take(b.platformName);
+              notifyListeners();
+            }
+          }
+        })
+        .catchError((_) {});
   }
 
   void _heard() {
@@ -748,7 +777,7 @@ class FrameLink extends ChangeNotifier {
   /// Drops the link and stops trying, until [connect]; across restarts.
   Future<void> disconnect() async {
     _wanted = false;
-    onRemember?.call(knownId, false);
+    onRemember?.call(knownId, knownName, false);
     _retry?.cancel();
     nextAttempt = null;
     waitingForGlasses = false;

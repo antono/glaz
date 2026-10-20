@@ -26,12 +26,17 @@ Future<void> main() async {
   await Services.start();
   // the link from the start, to the glasses of last time (frame/link.dart)
   final s = Services.instance;
-  s.link.onRemember = (id, wanted) {
+  s.link.onRemember = (id, name, wanted) {
     s.settings
       ..linkDevice = id
+      ..linkName = name
       ..linkWanted = wanted;
   };
-  s.link.start(id: s.settings.linkDevice, wanted: s.settings.linkWanted);
+  s.link.start(
+    id: s.settings.linkDevice,
+    name: s.settings.linkName,
+    wanted: s.settings.linkWanted,
+  );
   runApp(const GlazApp());
 }
 
