@@ -50,6 +50,12 @@ end
 -- What the microphone has gathered, sent. After stop() the firmware hands
 -- out what is left, then nil. At most two seconds' worth a call: should the
 -- link be slower than the microphone, the loop still gets its turn.
+--
+-- Every packet is a step of the garbage collector. Left alone it waits for
+-- the heap to double, and the glasses have about 30 KB free: two or three
+-- seconds of reads ran them out of memory ("not enough memory"), the
+-- firmware's allocator giving Lua no emergency collection to fall back on.
+-- With the steps the heap stays about 10 KB above where it began.
 local function drain()
   local most = per_second * 2
   local done = 0
@@ -62,6 +68,8 @@ local function drain()
     else
       lost = lost + #s
     end
+    s = nil
+    collectgarbage('step')
   end
 end
 
