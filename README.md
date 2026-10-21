@@ -14,6 +14,15 @@ Labs.
 <!-- Photo: the Frame glasses -->
 <!-- ![Brilliant Labs Frame](docs/images/frame.jpg) -->
 
+<p align="center">
+  <a href="https://youtu.be/6KnGFyftrII">
+    <img src="https://img.youtube.com/vi/6KnGFyftrII/hqdefault.jpg" width="640"
+         alt="Video: what's new with glaz on Brilliant Labs Frame (1:35)">
+  </a>
+  <br>
+  <a href="https://youtu.be/6KnGFyftrII">Watch the video (1:35)</a>
+</p>
+
 **What glaz adds to Frame:** a menu of apps on the glasses that you control
 by tapping them and tilting your head, so there are no buttons to press.
 On the phone, glaz stores your photos and recordings, sends your
