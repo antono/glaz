@@ -118,7 +118,10 @@ in
       [ -n "$stale" ] || exit 0
       for who in $(git secret whoknows 2>/dev/null); do
         if gpg --list-secret-keys "$who" >/dev/null 2>&1; then
-          if git secret reveal -f >/dev/null 2>&1; then
+          # git-secret asks gpg for the passphrase itself (pinentry-mode
+          # loopback), on a terminal that enterShell may not have; "ask"
+          # leaves it to gpg-agent's own pinentry window instead.
+          if SECRETS_PINENTRY=ask git secret reveal -f >/dev/null; then
             chmod 600 $(cut -d: -f1 .gitsecret/paths/mapping.cfg)
             echo "signing key revealed"
           else
