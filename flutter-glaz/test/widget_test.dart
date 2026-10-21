@@ -9,6 +9,13 @@ import 'package:glaz/main.dart';
 import 'package:glaz/screens/menu_screen.dart';
 import 'package:glaz/services/services.dart';
 
+/// A phone's window: the tabs at the bottom, not in the wide rail.
+void phone(WidgetTester tester) {
+  tester.view.physicalSize = const Size(400, 800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+}
+
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -95,6 +102,7 @@ void main() {
   testWidgets('recording settings hide behind the icon by Record', (
     tester,
   ) async {
+    phone(tester);
     await tester.pumpWidget(const GlazApp());
     await tester.tap(find.text('Remote'));
     await tester.pumpAndSettle();
@@ -111,7 +119,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(Services.instance.settings.serviceOn('recordings'), isFalse);
     // the sheet away, the button says what it will do
-    await tester.tapAt(const Offset(400, 20));
+    await tester.tapAt(const Offset(200, 20));
     await tester.pumpAndSettle();
     expect(find.text('Record  ·  Better'), findsOneWidget);
   });
@@ -207,6 +215,7 @@ void main() {
   testWidgets('holding the bar opens its editing mode; Done closes it', (
     tester,
   ) async {
+    phone(tester);
     await tester.pumpWidget(const GlazApp());
     expect(find.text('Done'), findsNothing);
 
@@ -219,5 +228,31 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('Done'), findsNothing);
     expect(find.byType(NavigationBar), findsOneWidget);
+  });
+
+  testWidgets('a wide window has the tabs on the left; holding them edits', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const GlazApp());
+    expect(find.byType(NavigationRail), findsOneWidget);
+    expect(find.byType(NavigationBar), findsNothing);
+
+    await tester.tap(find.text('Menu'));
+    await tester.pumpAndSettle();
+    expect(find.text('MENU'), findsOneWidget);
+
+    // rearranging happens at the bottom, as on the phone
+    await tester.longPress(find.byType(NavigationRail));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Drag the icons to move them'), findsOneWidget);
+    expect(find.byType(NavigationRail), findsNothing);
+    await tester.tap(find.text('Done'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byType(NavigationRail), findsOneWidget);
+
+    phone(tester);
+    await tester.pump();
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byType(NavigationRail), findsNothing);
   });
 }

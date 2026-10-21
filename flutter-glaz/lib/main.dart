@@ -202,6 +202,19 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           backgroundColor: FrameColors.red,
           child: Icon(data),
         );
+        void select(int i) {
+          setState(() => _current = order[i]);
+          _handsOff();
+        }
+
+        // a wide window, a desktop or a tablet on its side: the tabs go to
+        // a rail on the left; rearranging them still happens at the bottom
+        final wide = MediaQuery.sizeOf(context).width >= wideLayout;
+        final rail = wide && !_editing;
+        final stack = IndexedStack(
+          index: tabs.indexWhere((t) => t.id == _current),
+          children: [for (final t in tabs) t.screen],
+        );
         return PopScope(
           // back leaves the editing mode first; with the keyboard remote on,
           // Glaz decides, or Keynote's Back would close it (keys.dart)
@@ -218,12 +231,35 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
             appBar: AppBar(title: Text(_tab(_current).label.toUpperCase())),
             body: SafeArea(
               top: false,
-              child: IndexedStack(
-                index: tabs.indexWhere((t) => t.id == _current),
-                children: [for (final t in tabs) t.screen],
-              ),
+              child: !rail
+                  ? stack
+                  : Row(
+                      children: [
+                        GestureDetector(
+                          // hold anywhere on the rail to rearrange it
+                          onLongPress: () => _edit(true),
+                          child: NavigationRail(
+                            selectedIndex: order.indexOf(_current),
+                            onDestinationSelected: select,
+                            labelType: NavigationRailLabelType.all,
+                            destinations: [
+                              for (final id in order)
+                                NavigationRailDestination(
+                                  icon: icon(id, _tab(id).icon),
+                                  selectedIcon: icon(id, _tab(id).selected),
+                                  label: Text(_tab(id).label),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const VerticalDivider(width: 1),
+                        Expanded(child: stack),
+                      ],
+                    ),
             ),
-            bottomNavigationBar: _editing
+            bottomNavigationBar: rail
+                ? null
+                : _editing
                 ? _EditBar(
                     order: [for (final id in order) _tab(id)],
                     onReorder: (from, to) {
@@ -240,10 +276,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                     onLongPress: () => _edit(true),
                     child: NavigationBar(
                       selectedIndex: order.indexOf(_current),
-                      onDestinationSelected: (i) {
-                        setState(() => _current = order[i]);
-                        _handsOff();
-                      },
+                      onDestinationSelected: select,
                       destinations: [
                         for (final id in order)
                           NavigationDestination(

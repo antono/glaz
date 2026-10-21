@@ -24,6 +24,10 @@ abstract final class FrameColors {
   static const outline = Color(0xFF2A2A30);
 }
 
+/// From this width on, the tabs sit in a rail on the left, not at the bottom
+/// (Material's "medium" window size).
+const wideLayout = 600.0;
+
 /// Monospace for headings and labels, echoing the glasses' fixed-width font.
 const monoFamily = 'monospace';
 
@@ -82,6 +86,17 @@ ThemeData glazTheme() {
       backgroundColor: FrameColors.surface,
       indicatorColor: FrameColors.green.withValues(alpha: 0.35),
       labelTextStyle: WidgetStatePropertyAll(text.labelSmall),
+    ),
+    // the same look as the bar, standing on the left
+    navigationRailTheme: NavigationRailThemeData(
+      backgroundColor: FrameColors.surface,
+      indicatorColor: FrameColors.green.withValues(alpha: 0.35),
+      selectedLabelTextStyle: text.labelSmall?.copyWith(
+        color: FrameColors.white,
+      ),
+      unselectedLabelTextStyle: text.labelSmall?.copyWith(
+        color: FrameColors.grey,
+      ),
     ),
     dividerTheme: const DividerThemeData(color: FrameColors.outline),
     snackBarTheme: SnackBarThemeData(
