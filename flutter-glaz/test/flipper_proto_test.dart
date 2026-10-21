@@ -5,8 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glaz/flipper/proto.dart';
 
-Uint8List fixture(String name) =>
-    File('test/fixtures/$name').readAsBytesSync();
+Uint8List fixture(String name) => File('test/fixtures/$name').readAsBytesSync();
 
 /// A frame message as the Flipper sends one: command id 0, the frame in
 /// field 22.

@@ -95,9 +95,7 @@ class FlipperBle implements FlipperPort {
       await device.createBond(timeout: 60);
     }
     final services = await device.discoverServices();
-    final serial = services
-        .where((s) => s.serviceUuid == service)
-        .firstOrNull;
+    final serial = services.where((s) => s.serviceUuid == service).firstOrNull;
     if (serial == null) {
       throw const FlipperTrouble('Flipper: Bluetooth Remote on?');
     }
@@ -137,9 +135,7 @@ class FlipperBle implements FlipperPort {
   Future<BluetoothDevice> _find() async {
     try {
       final bonded = await FlutterBluePlus.bondedDevices;
-      final known = bonded.where(
-        (d) => d.platformName.startsWith(namePrefix),
-      );
+      final known = bonded.where((d) => d.platformName.startsWith(namePrefix));
       if (known.isNotEmpty) return known.first;
     } catch (_) {
       // not on this platform (iOS): scan

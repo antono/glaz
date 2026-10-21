@@ -257,7 +257,9 @@ Uint8List? rowsUpdate(Uint8List rows, Uint8List? shown) {
       if (same) continue;
     }
     mask[y >> 3] |= 0x80 >> (y & 7);
-    body.add([for (final b in row) ...[b >> 4, b & 15]]);
+    body.add([
+      for (final b in row) ...[b >> 4, b & 15],
+    ]);
   }
   if (body.isEmpty) return null;
   return Uint8List.fromList([...mask, ...body.takeBytes()]);

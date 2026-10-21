@@ -49,12 +49,12 @@ class FakeFlipper implements FlipperPort {
 
   /// The PB_Main content fields written, in order.
   List<int> get contents => [
-    for (final w in written) decodeMain(Uint8List.fromList(w.sublist(1))).content,
+    for (final w in written)
+      decodeMain(Uint8List.fromList(w.sublist(1))).content,
   ];
 }
 
-Uint8List fixture(String name) =>
-    File('test/fixtures/$name').readAsBytesSync();
+Uint8List fixture(String name) => File('test/fixtures/$name').readAsBytesSync();
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -79,8 +79,7 @@ void main() {
     for (final s in sent)
       if (String.fromCharCodes(s.take(8)) == 'flipper\n') s.sublist(8),
   ];
-  List<List<int>> frames() =>
-      toModule().where((m) => m[0] == 0x66).toList();
+  List<List<int>> frames() => toModule().where((m) => m[0] == 0x66).toList();
   List<String> words() => [
     for (final m in toModule())
       if (m[0] == 0x73) String.fromCharCodes(m.sublist(1)),
@@ -122,7 +121,11 @@ void main() {
       expect(frames().length, 2);
       final f = frames().last;
       expect(f[1], 2);
-      expect(f.length, lessThan(2 + 8 + frameBytes * 2), reason: 'changes only');
+      expect(
+        f.length,
+        lessThan(2 + 8 + frameBytes * 2),
+        reason: 'changes only',
+      );
 
       mirror.onEvent([flipper, 2, 2]);
       flipperZero.frame(fixture('flipper_frame_b.bin'));
