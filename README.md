@@ -16,7 +16,7 @@ Labs.
 
 <p align="center">
   <a href="https://youtu.be/6KnGFyftrII">
-    <img src="https://img.youtube.com/vi/6KnGFyftrII/hqdefault.jpg" width="640"
+    <img src="docs/images/video.jpg" width="640"
          alt="Video: what's new with glaz on Brilliant Labs Frame (1:35)">
   </a>
   <br>
