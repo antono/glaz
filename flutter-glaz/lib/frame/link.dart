@@ -307,13 +307,19 @@ class FrameLink extends ChangeNotifier {
       await BrilliantBluetooth.requestPermission();
       BluetoothDevice dev;
       final id = knownId;
-      if (id == null) {
+      final bonded = id == null ? null : await _bonded(id);
+      if (_off) return;
+      if (scanFirst(hasId: id != null, bonded: bonded)) {
         _set(LinkState.scanning);
-        glazLog(LogKind.link, 'attempt $attempt: looking for the glasses');
+        glazLog(
+          LogKind.link,
+          'attempt $attempt: looking for the glasses'
+          '${id == null ? '' : ', not paired with $id'}',
+        );
         dev = (await _scanForApp(const Duration(seconds: 15))).device;
         _remember(dev.remoteId.str);
       } else {
-        dev = BluetoothDevice.fromId(id);
+        dev = BluetoothDevice.fromId(id!);
       }
       if (_off) return;
       _watch(dev);
@@ -409,15 +415,22 @@ class FrameLink extends ChangeNotifier {
     }
   }
 
+  /// Stops reconnecting, but keeps the link while it lasts: the glasses
+  /// are about to drop it themselves (frame.update() resets them), and
+  /// that drop is not to be answered with a reconnect. [release] after.
+  void hold() {
+    _released = true;
+    _retry?.cancel();
+    nextAttempt = null;
+    waitingForGlasses = false;
+  }
+
   /// Gives up the link for a while, reconnecting included, so the radio
   /// is free for another connection -- the DFU bootloader: flutter_blue_plus
   /// runs one connect at a time (seen: the bootloader timed out waiting
   /// behind a reconnect). [reconnect] takes it back.
   Future<void> release() async {
-    _released = true;
-    _retry?.cancel();
-    nextAttempt = null;
-    waitingForGlasses = false;
+    hold();
     final device = _device;
     _detach(LinkState.disconnected);
     try {
@@ -518,6 +531,18 @@ class FrameLink extends ChangeNotifier {
     _pairAfterConnect = true;
     notifyListeners();
     await connect();
+  }
+
+  /// Whether the phone holds a pairing with [id]; null where that cannot
+  /// be asked (not Android) or the asking failed.
+  static Future<bool?> _bonded(String id) async {
+    if (defaultTargetPlatform != TargetPlatform.android) return null;
+    try {
+      final s = await BluetoothDevice.fromId(id).bondState.first;
+      return s == BluetoothBondState.bonded;
+    } catch (_) {
+      return null;
+    }
   }
 
   static Future<BrilliantScannedDevice> _scanForApp(Duration timeout) async {

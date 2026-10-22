@@ -29,4 +29,11 @@ void main() {
     expect(t(true, 8, 2), PairingTrouble.none); // supervision timeout
     expect(t(false, 147, 3), PairingTrouble.none);
   });
+
+  test('a connect looks for the glasses first when not paired with them', () {
+    expect(scanFirst(hasId: false, bonded: null), isTrue); // first time
+    expect(scanFirst(hasId: true, bonded: false), isTrue); // pairing forgotten
+    expect(scanFirst(hasId: true, bonded: true), isFalse); // straight there
+    expect(scanFirst(hasId: true, bonded: null), isFalse); // not Android
+  });
 }

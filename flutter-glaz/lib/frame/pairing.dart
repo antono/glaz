@@ -62,3 +62,15 @@ PairingTrouble pairingTrouble({
   }
   return PairingTrouble.none;
 }
+
+/// Whether a connect looks for the glasses first instead of going straight
+/// to the id kept from before. [hasId]: there is one; [bonded]: the phone
+/// holds a pairing with it, null when that is not known (not Android).
+///
+/// Without a pairing -- forgotten in the app or in Android's settings --
+/// Android no longer knows what kind of address the id is. It guesses
+/// public, Frame's is random static, and a connect straight to it never
+/// comes up (seen: every attempt timed out while the glasses advertised).
+/// A scan tells Android what they are.
+bool scanFirst({required bool hasId, required bool? bonded}) =>
+    !hasId || bonded == false;
