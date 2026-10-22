@@ -113,7 +113,7 @@ jobs:
           if-no-files-found: error
 
   # The phone and desktop apps. Both need what git does not carry
-  # (devenv.nix, appAssets): the Lua compiled by the firmware's own Lua,
+  # (flutter-glaz/devenv.nix, appAssets): the Lua compiled by the firmware's own Lua,
   # and the firmware for Update -- the three newest official releases and
   # the -glaz build from the job above.
   app:

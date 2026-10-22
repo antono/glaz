@@ -30,14 +30,13 @@ protocol it has to speak is the same one the Python host uses, described in
 
 ## Running
 
-Everything comes from the repository's devenv (`../devenv.nix`): Flutter, an
-Android SDK and JDK 17.
+Everything comes from this folder's own devenv (`devenv.nix`), separate
+from the repository's: Flutter, an Android SDK and JDK 17.
 
 ```sh
-cd ..                 # repository root
-devenv shell
+devenv shell          # in flutter-glaz/; first run downloads the Android SDK
 emulator-start &      # Android 16 emulator; first run creates the AVD
-cd flutter-glaz
+tool/compile_lua.sh   # the Lua bytecode the app uploads
 flutter run           # on the emulator, or a phone connected over USB
 flutter test
 ```
@@ -49,7 +48,7 @@ uses the laptop's own Bluetooth (BlueZ):
 
 ```sh
 linux-app             # from the devenv shell: bytecode, firmware, then the build
-flutter-glaz/build/linux/x64/debug/bundle/glaz
+build/linux/x64/debug/bundle/glaz
 ```
 
 Or, without devenv, as a Nix package (`../flake.nix`) -- bytecode and the

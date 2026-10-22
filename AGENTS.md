@@ -37,32 +37,60 @@ The glasses run Lua; a laptop talks to them over Bluetooth using Python.
 - `sprites/` — the eye as glasses pixel art, for `utils/show_sprite.py`;
   not uploaded: the phone draws the eye itself during Upload
 - `flutter-glaz/` — the Flutter companion app (phone side)
-- `devenv.nix` — the development environment
+- `devenv.nix` — the development environment (Lua, Python, firmware)
+- `flutter-glaz/devenv.nix` — the companion app's own: Flutter, Android SDK
 - `flake.nix` — the companion app as a Linux desktop package (`nix run`)
 
 ## Setup
 
-Everything -- Lua 5.4, the Python host tools, the firmware toolchain and
-Flutter with an Android SDK -- comes from [devenv](https://devenv.sh)
-(`devenv.nix`, `devenv.yaml`). Linux first, macOS works too.
+Everything comes from [devenv](https://devenv.sh), in two separate shells.
+The root one (`devenv.nix`, `devenv.yaml`) has Lua 5.4, the Python host
+tools and the firmware toolchain; `flutter-glaz/` has its own with Flutter
+and an Android SDK. Linux first, macOS works too.
 
 ```sh
-devenv shell             # first run downloads the Android SDK
+devenv shell             # in the repository root
 check                    # ./check.sh
 upload                   # python host_test.py
-emulator-start &         # Android emulator for flutter-glaz/
 python utils/connect.py
 python utils/phone_lua.py 'frame.battery_level()'   # through the phone
+
+cd flutter-glaz && devenv shell   # first run downloads the Android SDK
+emulator-start &         # Android emulator
+apk                      # the phone app, Lua bytecode and firmware first
 ```
 
 To try Lua on the glasses while the phone holds them, use
 `utils/phone_lua.py` (the phone app's Lua console, open to a computer);
 see docs/FRAME.md, "Quick connect".
 
+### Building the phone app
+
+Build Flutter only in the app's own shell, `flutter-glaz/devenv.nix`; the
+root shell has no Flutter. From a script or an agent, without entering
+the shell:
+
+```sh
+cd flutter-glaz
+devenv shell -- apk          # debug APK
+devenv shell -- linux-app    # the Linux desktop app
+```
+
+`apk` does, in order: `reveal-key` (the signing key), `tool/compile_lua.sh`
+(the Lua bytecode, from the firmware's Lua in `../../lab-frame-codebase`
+or `$FRAME_CODEBASE`), `tool/fetch_firmware.sh` (the three newest
+official releases via `gh`, plus a custom build if one is there), then
+`flutter build apk --debug`. The result is
+`flutter-glaz/build/app/outputs/flutter-apk/app-debug.apk` (about 170 MB).
+Gradle alone takes about 4 minutes, so give the command a 10-minute
+timeout. Check that the build used the project key and not the debug key:
+`apksigner verify --print-certs` (from `$ANDROID_HOME/build-tools/*/`,
+inside the shell) shows `CN=glaz, O=glaz`.
+
 The phone app is signed with one key everywhere, so any build installs
 over any other: `flutter-glaz/android/glaz.jks` and `key.properties`,
 kept encrypted by [git-secret](https://sobolevn.me/git-secret/) as
-`*.secret`. devenv decrypts them (`reveal-key`) on entering the shell
+`*.secret`. The app's devenv decrypts them (`reveal-key`) on entering the shell
 and before `apk`, when they are missing or older than their `.secret`,
 for those whose GPG key was added (`git secret tell`); without them a
 build is signed with the

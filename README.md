@@ -147,22 +147,25 @@ for recovery, see [docs/FIRMWARE.md](docs/FIRMWARE.md) and
 
 ## Quick start
 
-You need [devenv](https://devenv.sh), which installs everything else: Lua
-5.4, the Python tools, Flutter and the Android SDK. Linux is the main
-platform, and macOS works too.
+You need [devenv](https://devenv.sh), which installs everything else. There
+are two shells: the repository root has Lua 5.4 and the Python tools, and
+`flutter-glaz/` has its own with Flutter and the Android SDK. Linux is the
+main platform, and macOS works too.
 
 ```sh
 git clone https://github.com/antono/glaz.git
 cd glaz
-devenv shell        # the first run downloads the Android SDK; this takes a while
-```
-
-Then, inside the shell:
-
-```sh
+devenv shell        # Lua and Python
 check               # static checks; no glasses needed
 upload              # upload glaz to the glasses from your laptop, over Bluetooth
-apk                 # build the phone app (flutter-glaz/build/app/outputs/flutter-apk/)
+```
+
+The phone app, from its own shell:
+
+```sh
+cd flutter-glaz
+devenv shell        # the first run downloads the Android SDK; this takes a while
+apk                 # build the phone app (build/app/outputs/flutter-apk/)
 linux-app           # or build it as a Linux desktop app
 emulator-start &    # an Android emulator, for working on the UI (it has no Bluetooth)
 ```

@@ -3,5 +3,5 @@ inputs:
     url: github:cachix/devenv-nixpkgs/rolling
 
 nixpkgs:
-  # The Android SDK (Flutter) and nrfutil (firmware packaging) are unfree.
+  # nrfutil (firmware packaging) is unfree.
   allow_unfree: true

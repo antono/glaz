@@ -5,12 +5,12 @@
 #   nix profile install .  # with a launcher entry in the desktop's app menu
 #
 # It talks to the glasses through the laptop's own Bluetooth (BlueZ). The
-# development environment is devenv's (devenv.nix), not this flake's.
+# development environment is devenv's (flutter-glaz/devenv.nix), not this flake's.
 {
   description = "glaz: companion app for the Brilliant Labs Frame glasses";
 
   inputs = {
-    # Locked to the same nixpkgs as devenv.lock, so the Flutter here is the
+    # Locked to the same nixpkgs as flutter-glaz/devenv.lock, so the Flutter here is the
     # one the app is developed with.
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     # The firmware's own Lua, which Upload's bytecode is compiled with
