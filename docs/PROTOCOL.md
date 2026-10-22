@@ -216,6 +216,11 @@ Each tap count means one thing everywhere:
 | **2** | back — one level up: module → its submenu → parent → … → root → blank; on the blank screen, the menu; asleep, wake into the last module (or the menu) |
 | **3** | sleep — deep sleep, from any state |
 
+However they get there -- three taps, Sleep, the idle timeout -- the glasses
+show the eye closing for a second before deep sleep (`app/glaz_blink.lua`,
+made by `flutter-glaz/tool/logo.py blink`), or `sleeping...` if that file
+cannot be loaded: a dark screen alone looks the same as a hang.
+
 ```
               double tap / MENU_SHOW
         IDLE ─────────────────────────> MENU
@@ -463,8 +468,11 @@ between characters. The glasses count line lengths in characters
 
 On the glasses it covers whatever is on screen for `NOTICE_SECONDS` (5 s):
 the app name in the top bar, the title in yellow, the text wrapped over the
-four rows below. A tap dismisses it early, and that tap does nothing else.
-What it covered keeps running and comes back. The last `NOTICE_KEEP` (10)
+four rows below. A tap dismisses it early, at once, not after the tap window,
+and that tap does nothing else -- nor do the taps that follow it in the same
+multi-tap, except three, which still sleep. What it covered keeps running
+and comes back as it was; while covered, a module gets no taps, raw hits or
+tilts, which would act unseen. The last `NOTICE_KEEP` (10)
 are kept for the Notifications module (Info > Notifications).
 
 The glasses park in deep sleep only with no host connected, so a connected

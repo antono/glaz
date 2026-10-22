@@ -479,6 +479,8 @@ local run_at   = 0      -- utc() when the running module started
 local last_act = 0      -- utc() of the last input, drives the menu timeout
 local notice   = nil    -- the notification on screen, over everything else
 local notice_until = 0  -- utc() when it goes away by itself
+local notice_at = 0     -- utc() when it came
+local notice_tap = false  -- the multi-tap under way dismissed a notification
 
 -- Tap state, filled by the callback and drained by the main loop
 local tap_n     = 0   -- taps in the current multi-tap window (set in callback)
@@ -843,6 +845,32 @@ local function take_photo(size, quality)
   if ok then
     pcall(shoot, size, quality, not running and not bg, release_hardware)
   end
+end
+
+-- Going to deep sleep, the glasses say so: a dark screen alone looks the
+-- same as a hang or a flat battery. Every way to sleep -- Sleep, three
+-- taps, the idle timeout -- passes through here: the eye closes for a
+-- second (glaz_blink.lua, loaded for it alone). Should it fail to load or
+-- draw -- short of memory, an old upload without it -- a line of text
+-- takes its place for that second, so sleep is never silent. The host's
+-- break signal still gets through.
+local function say_goodnight()
+  set_display(true)
+  blank()
+  local ok, blink = try_require('glaz_blink')
+  local err
+  if ok then ok, err = pcall(blink, show) end
+  if err and string.find(tostring(err), 'break signal', 1, true) then
+    error(err, 0)
+  end
+  if not ok then
+    blank()   -- whatever half a frame got drawn
+    frame.display.text('sleeping...', LEFT_X, TOP_Y + ROW_H)
+    show()
+    local t = frame.time.utc() + 1
+    while frame.time.utc() < t do frame.sleep(0.05) end
+  end
+  blank()
 end
 
 -- Does this module want to keep running once it leaves the screen?
@@ -1308,6 +1336,7 @@ function app_loop()
             notices[NOTICE_KEEP + 1] = nil
             notice = notices[1]
             notice_until = now + NOTICE_SECONDS
+            notice_at = now
             splash_until = 0
             last_act = now
             render()
@@ -1471,8 +1500,17 @@ function app_loop()
         armed, roll_dir, roll_hold = 0, 0, 0
       end
 
+      -- A tap on a notification dismisses it at once, and what it covered
+      -- comes back as it was; the rest of that multi-tap means nothing
+      -- (three taps still sleep). A tap begun before it came is not on it.
+      if notice and tap_n > 0 and (tap_remote or tap_at >= notice_at) then
+        notice, notice_tap = nil, true
+        render()
+      end
+
       if tap_n >= TAP_TOGGLE then
         tap_n = 0
+        notice_tap = false
         if now < tap_mute then
           -- trailing taps of a previous toggle; keep swallowing them until
           -- tapping actually stops
@@ -1515,11 +1553,10 @@ function app_loop()
           n = 0
         end
 
-        -- a tap on a notification only dismisses it
-        if notice and n > 0 then
-          notice = nil
+        -- a tap on a notification only dismisses it (above)
+        if notice_tap then
+          notice_tap = false
           n = 0
-          render()
         end
 
         if n == 1 then
@@ -1561,14 +1598,17 @@ function app_loop()
       --    (on_roll), and only moves its cursor -- it never leaves the
       --    module. A module without on_roll does not poll the IMU at all.
       --    Raw hits, bounces included, go to on_hit(n): Tap tune counts them.
+      --    Under a notification the module gets neither: it would act
+      --    unseen, and the taps that dismiss it are not the module's.
       local hits = tap_hits - hits_seen
       hits_seen = tap_hits
+      if notice or notice_tap then hits = 0 end
       if running then
         local mod = mods[running]
-        local dir = (mod and mod.on_roll and hands_off == 0) and roll_step(now)
-                    or 0
+        local dir = (mod and mod.on_roll and hands_off == 0 and not notice)
+                    and roll_step(now) or 0
         if remote_dir ~= 0 then
-          dir = (mod and mod.on_roll) and remote_dir or 0
+          dir = (mod and mod.on_roll and not notice) and remote_dir or 0
           remote_dir = 0
         end
 
@@ -1691,6 +1731,7 @@ function app_loop()
         if visible then close_menu() end
         if bg then quit(bg) end
         sleep_requested = false
+        say_goodnight()
         set_display(false)
         -- A tap is all that wakes the glasses, and the accelerometer goes to
         -- sleep with whatever it was last set to: Tap tune's harder
