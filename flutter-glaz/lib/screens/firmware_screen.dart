@@ -21,7 +21,7 @@ class _FirmwareScreenState extends State<FirmwareScreen> {
   late final Future<List<FirmwarePackage>> _packages = firmwarePackages(
     rootBundle,
   );
-  FirmwarePackage? _picked;
+  FirmwarePackage? _armed; // the version whose Install is open
 
   @override
   Widget build(BuildContext context) {
@@ -97,74 +97,99 @@ class _FirmwareScreenState extends State<FirmwareScreen> {
           const Text('None. Run tool/fetch_firmware.sh and rebuild the app.'),
         Card(
           clipBehavior: Clip.antiAlias,
-          child: RadioGroup<FirmwarePackage>(
-            groupValue: _picked,
-            onChanged: link.busy ? (_) {} : (p) => setState(() => _picked = p),
-            child: Column(
-              children: [
-                for (final p in packages)
-                  RadioListTile<FirmwarePackage>(
-                    value: p,
-                    enabled: !link.busy,
-                    title: Text(p.version),
-                    subtitle: Text(
-                      [
-                        p.official ? 'Official release' : 'Custom build',
-                        if (p.version == installed) 'installed',
-                      ].join(' - '),
-                    ),
-                    secondary: p.official
-                        ? null
-                        : Icon(Icons.construction, color: scheme.tertiary),
-                  ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        FilledButton.icon(
-          onPressed: _picked == null || !link.connected || link.busy
-              ? null
-              : () => _install(context, link, _picked!),
-          icon: const Icon(Icons.system_update_alt),
-          label: Text(
-            _picked == null ? 'Pick a version' : 'Install ${_picked!.version}',
+          child: Column(
+            children: [
+              for (final p in packages)
+                _version(context, link, p, installed: p.version == installed),
+            ],
           ),
         ),
       ],
     );
   }
 
-  Future<void> _install(
+  /// One version: a small install button on it; a tap opens the big
+  /// "Install firmware" under it, with what that does, and a tap on that
+  /// installs. Two taps, so one by mistake does nothing.
+  Widget _version(
     BuildContext context,
     FrameLink link,
-    FirmwarePackage package,
-  ) async {
+    FirmwarePackage p, {
+    required bool installed,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final ready = link.connected && !link.busy;
+    final open = _armed == p && ready;
     final low = (link.battery ?? 100) < 30;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Install ${package.version}?'),
-        content: Text(
-          'The glasses restart into update mode, take the new firmware '
-          '(a minute or two), and restart again. The update wipes the apps '
-          'on them, so they are uploaded again right after.'
-          '${package.official ? '' : '\n\nThis is a custom build.'}'
-          '${low ? '\n\nThe battery is at ${link.battery}%: charge first.' : ''}',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+    void toggle() => setState(() => _armed = open ? null : p);
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 200),
+      alignment: Alignment.topCenter,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ListTile(
+            enabled: ready,
+            onTap: toggle,
+            leading: p.official
+                ? const Icon(Icons.verified_outlined)
+                : Icon(Icons.construction, color: scheme.tertiary),
+            title: Text(p.version),
+            subtitle: Text(
+              [
+                p.official ? 'Official release' : 'Custom build',
+                if (installed) 'installed',
+              ].join(' - '),
+            ),
+            trailing: open
+                ? IconButton(
+                    tooltip: 'Cancel',
+                    onPressed: toggle,
+                    icon: const Icon(Icons.close),
+                  )
+                : IconButton.filledTonal(
+                    tooltip: 'Install ${p.version}',
+                    onPressed: ready ? toggle : null,
+                    icon: const Icon(Icons.system_update_alt),
+                  ),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Install'),
-          ),
+          if (open)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'The glasses restart into update mode, take the new '
+                    'firmware (a minute or two), and restart again. The '
+                    'update wipes the apps on them, so they are uploaded '
+                    'again right after.'
+                    '${p.official ? '' : ' This is a custom build.'}'
+                    '${low ? ' The battery is at ${link.battery}%: charge first.' : ''}',
+                    style: text.bodySmall?.copyWith(
+                      color: low ? scheme.error : scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(56),
+                    ),
+                    onPressed: () => _install(link, p),
+                    icon: const Icon(Icons.system_update_alt),
+                    label: const Text('Install firmware'),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
-    if (ok != true) return;
+  }
+
+  Future<void> _install(FrameLink link, FirmwarePackage package) async {
+    setState(() => _armed = null);
     // the update wipes the glasses' files; the app goes back on after it
     final app = await luaFiles(
       rootBundle,

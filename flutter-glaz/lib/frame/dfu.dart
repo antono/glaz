@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:frame_ble/brilliant_dfu_device.dart';
 import 'package:frame_ble/frame_ble.dart';
 
+import '../services/glaz_log.dart';
 import '../services/notifications.dart';
 import 'firmware.dart';
 import 'link.dart';
@@ -53,18 +55,50 @@ Future<void> installFirmware(
     await picture.freeze();
   } catch (_) {}
 
+  // frame.update() goes as a write with response, and then the glasses are
+  // left to drop the link themselves, as they reset into the bootloader.
+  // Sent without response and disconnected from at once, it could be lost
+  // on the way: the glasses never left the app, and the phone looked for a
+  // bootloader that was not there. No drop is now an error of its own.
   report('Rebooting into the bootloader');
+  link.hold();
+  final id = device.device.remoteId;
+  final dropped = FlutterBluePlus.events.onConnectionStateChanged
+      .where(
+        (e) =>
+            e.device.remoteId == id &&
+            e.connectionState == BluetoothConnectionState.disconnected,
+      )
+      .first;
   try {
-    // no answer: the glasses reset before sending one
-    await device.sendString('frame.update()', awaitResponse: false);
-  } catch (_) {}
+    await device.txChannel!.write(
+      utf8.encode('frame.update()'),
+      withoutResponse: false,
+    );
+  } catch (_) {
+    // the glasses may reset before their answer comes: no telling here
+  }
+  var reset = true;
+  try {
+    await dropped.timeout(const Duration(seconds: 10));
+  } on TimeoutException {
+    reset = false;
+  }
 
   // Let go of the glasses as they were, auto-reconnect and all: it would
   // hold the radio with 30 s connect attempts while the bootloader waits.
   await link.release();
+  if (!reset) {
+    throw Exception(
+      'the glasses did not restart into update mode; they keep the app '
+      'stopped until restarted (Restart, or a tap after reconnecting)',
+    );
+  }
 
-  report('Looking for Frame Update');
-  final bootloader = await _findBootloader(const Duration(seconds: 60));
+  final bootloader = await _findBootloader(
+    const Duration(seconds: 90),
+    (left) => report('Looking for Frame Update ($left s)'),
+  );
 
   report('Connecting to the bootloader');
   final connected = await BrilliantBluetooth.connect(bootloader);
@@ -126,23 +160,39 @@ Future<void> installFirmware(
   } catch (_) {}
 }
 
-/// The first device advertising the DFU service. Not BrilliantBluetooth.scan:
-/// that also matches the glasses in normal mode and takes the strongest
-/// signal, which may be another Frame nearby.
-Future<BrilliantScannedDevice> _findBootloader(Duration timeout) async {
+/// The first device in update mode: advertising the DFU service, or named
+/// "Frame Update". Not BrilliantBluetooth.scan: that also matches the
+/// glasses in normal mode and takes the strongest signal, which may be
+/// another Frame nearby. No scan filter either: a filter by service finds
+/// only what carries the UUID where Android looks for it, and the name is
+/// the other half. [tick]: the seconds left, every second.
+Future<BrilliantScannedDevice> _findBootloader(
+  Duration timeout,
+  void Function(int left) tick,
+) async {
+  final dfuService = Guid('fe59');
   final found = Completer<BrilliantScannedDevice>();
   final sub = FlutterBluePlus.onScanResults.listen((results) {
     for (final r in results) {
-      if (!found.isCompleted) {
+      final ad = r.advertisementData;
+      final dfu =
+          ad.serviceUuids.contains(dfuService) ||
+          ad.advName == 'Frame Update' ||
+          r.device.platformName == 'Frame Update';
+      if (dfu && !found.isCompleted) {
+        glazLog(LogKind.task, 'Firmware: found ${r.device.remoteId}');
         found.complete(BrilliantScannedDevice(device: r.device, rssi: r.rssi));
       }
     }
   });
+  final until = DateTime.now().add(timeout);
+  tick(timeout.inSeconds);
+  final clock = Timer.periodic(
+    const Duration(seconds: 1),
+    (_) => tick(until.difference(DateTime.now()).inSeconds.clamp(0, 9999)),
+  );
   try {
-    await FlutterBluePlus.startScan(
-      withServices: [Guid('fe59')],
-      timeout: timeout,
-    );
+    await FlutterBluePlus.startScan(timeout: timeout);
     return await found.future.timeout(
       timeout,
       onTimeout: () => throw TimeoutException(
@@ -151,6 +201,7 @@ Future<BrilliantScannedDevice> _findBootloader(Duration timeout) async {
       ),
     );
   } finally {
+    clock.cancel();
     await sub.cancel();
     await FlutterBluePlus.stopScan();
   }
