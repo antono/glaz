@@ -263,6 +263,14 @@ Everything below follows from that.
     main.lua included (moved aside as `glaz_prev.lua` while the upload
     runs). Files sent as source to be compiled on the glasses always go:
     only the glasses know what they compile to.
+12. **Hundreds of sprites without `show()` reboot the glasses.** Each
+    `frame.display.text`, `bitmap` or `mono` call is a sprite queued in the
+    FPGA until `show()`. 200 rows of `mono` (about 440 KB) with no `show()`
+    between them: the next answer came from glasses 16 s after boot,
+    nothing printed. A full screen of 28 sprites (about 60 KB) then `show()`,
+    ten times over, is fine. Most likely the SPI write waits on a full FPGA
+    and the watchdog, fed only from Lua, resets after 6 s (8. above). Call
+    `show()` after every screen.
 
 The working recipe used both workarounds: find Frame by address with a long
 scan, and pair on connect. Both are monkey-patches around frame_ble 1.1.1, which
@@ -323,6 +331,7 @@ Rules:
 
 ```lua
 frame.display.text(str, x, y, {color='WHITE', spacing=4})
+frame.display.mono(str, x, y, {size=24, bold=false, color='WHITE', bg=nil})  -- ours, glaz/main
 frame.display.bitmap(x, y, width, color_format, palette_offset, data)  -- format: 2|4|16
 frame.display.show()            -- nothing appears without this
 frame.display.assign_color(color, r, g, b)
