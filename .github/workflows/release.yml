@@ -9,7 +9,7 @@
 #   glaz-<version>.apk                     the phone app (firmware inside)
 #   glaz-<version>-linux-x64.tar.gz        the same app for the Linux desktop
 #   frame-firmware-<official>.zip          the newest official firmware
-#   frame-firmware-v<yy.ddd.HHMM>-glaz.zip ours, built from branch glaz of
+#   frame-firmware-v<yy.ddd.HHMM>-glaz.zip ours, built from branch glaz/main of
 #                                          antono/frame-codebase
 #
 # The -glaz version is the time of the branch's last commit (UTC), not of
@@ -34,7 +34,7 @@ permissions:
 
 env:
   FIRMWARE_REPO: antono/frame-codebase
-  FIRMWARE_REF: glaz
+  FIRMWARE_REF: glaz/main
   OFFICIAL_REPO: brilliantlabsAR/frame-codebase
   FLUTTER_VERSION: 3.47.4
 

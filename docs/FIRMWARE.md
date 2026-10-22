@@ -55,7 +55,7 @@ and the chip faithfully reports each ring as another tap.
 
 ## What the branch changes
 
-Branch `okulo/tap-tuning` in `../frame-codebase`, based on the current release
+Branch `glaz/tap-tuning` in `../frame-codebase`, based on the current release
 tag `v25.278.1113` (so it includes the `lua_write_to_repl()` buffer overflow
 fix).
 
@@ -102,7 +102,7 @@ whether it advances by one or by five. Raise `quiet` until one knock reads as
 one tap.
 
 The module checks for `frame.imu.tap_config` and shows
-`needs the okulo/tap-tuning firmware` on stock firmware rather than failing.
+`needs the glaz firmware` on stock firmware rather than failing.
 
 Suggested order:
 
@@ -121,28 +121,29 @@ back the stock settings (`WAKE_TAPS` in `frame_app.lua`). That also clears a
 latched tap, which would hold the wake-up line where no new tap can move it.
 The boot after waking programs the `imu.c` defaults again.
 
-**The firmware does this itself since `okulo/stable`.** Waking depended on
+**The firmware does this itself since `glaz/stable`.** Waking depended on
 the Lua line above, and that line needs `frame.imu.tap_config`, which only
 this branch has. Branch `pairing-once` (`v26.288.1712-pairing-once`) was cut
 from upstream `main`, without the tap commits: the app skipped the reset, a
 latched tap stayed on the wake-up line, and **the glasses never woke, by one
 tap or two** (seen 16.10.2026, right after flashing it).
 
-Branch `okulo/stable` merges both, and `shutdown()` in `main.c` now calls
+Branch `glaz/stable` merges both, and `shutdown()` in `main.c` now calls
 `imu_prepare_wakeup()` (`imu.c`) on the way to System OFF: the boot tap
 defaults back, the latch cleared, and cleared again 300 ms later, after the
 frame has stopped ringing from the tap that sent it to sleep. So waking no
 longer depends on what the Lua app remembers to do. Build
 `v26.289.1613-stable`.
 
-Rule: **every firmware of ours is built from branch `glaz`** in
+Rule: **every firmware of ours is built from branch `glaz/main`** in
 `antono/frame-codebase`, and a fix goes in as a branch merged into it,
-never as a branch off upstream `main` alone. `glaz` is `okulo/stable` with
-`okulo/double-tap-wake` and `okulo/file-space` (`frame.file.space()`)
-merged in; the `okulo/*` branches stay as history. Builds carry the suffix
+never as a branch off upstream `main` alone. `glaz/main` is `glaz/stable` with
+`glaz/double-tap-wake` and `glaz/file-space` (`frame.file.space()`)
+merged in; the other `glaz/*` branches stay as history (until 22.10.2026
+they were `okulo/*`, and `glaz/main` was `glaz`). Builds carry the suffix
 `-glaz`, the first one `v26.291.1045-glaz`.
 
-`okulo/cyrillic-font`, merged into `glaz` on 20.10.2026, puts Cyrillic in
+`glaz/cyrillic-font`, merged into `glaz/main` on 20.10.2026, puts Cyrillic in
 the system font: U+0400..U+045F and the extra letters of Kazakh, Tatar,
 Bashkir, Yakut, Tajik and Uzbek. The glyphs are drawn by
 `graphical_assets/cyrillic.py` from Play (SIL OFL), sized to the Latin,
@@ -157,7 +158,7 @@ boot and `require('main')` again.
 ### Two taps to wake
 
 One tap woke the glasses too often by accident: a bag, a table, putting
-them on. Branch `okulo/double-tap-wake`, merged into `glaz`, asks
+them on. Branch `glaz/double-tap-wake`, merged into `glaz/main`, asks
 for two. The MC6470 cannot count taps, and an nRF in System OFF cannot run
 code, so it is done in two steps:
 

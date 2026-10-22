@@ -336,7 +336,7 @@ Palette (16 colors): `VOID, WHITE, GREY, RED, PINK, DARKBROWN, BROWN, ORANGE,
 YELLOW, DARKGREEN, GREEN, LIGHTGREEN, NIGHTBLUE, SEABLUE, SKYBLUE, CLOUDBLUE`.
 
 **Cyrillic renders on our firmware** (`v26.292.2200-glaz-cyr` and later
-builds from branch `glaz`, docs/FIRMWARE.md): `frame.display.text('Привет')`
+builds from branch `glaz/main`, docs/FIRMWARE.md): `frame.display.text('Привет')`
 draws it. The font has ASCII, Latin-1, Cyrillic U+0400..U+045F with the
 extra letters of Kazakh, Tatar and others, and `«» ° № €`. Strings are
 UTF-8, so `#s` counts bytes: use `utf8.len(s)` for characters. On the stock

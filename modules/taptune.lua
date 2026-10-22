@@ -1,6 +1,6 @@
 -- Menu module: tune hardware tap detection live. ASCII only.
 --
--- Needs the custom firmware branch okulo/tap-tuning, which adds
+-- Needs the custom firmware branch glaz/main, which adds
 -- frame.imu.tap_config{} -- see docs/FIRMWARE.md. Degrades to a message on
 -- stock firmware rather than failing.
 --
@@ -60,7 +60,7 @@ end
 -- cursor's in brackets, what a tap does here, the hit count.
 local function screen()
   if not supported then
-    return 'needs the okulo/tap-tuning\nfirmware'
+    return 'needs the glaz\nfirmware'
   end
 
   local parts = {}

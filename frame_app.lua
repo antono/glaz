@@ -1695,7 +1695,7 @@ function app_loop()
         -- A tap is all that wakes the glasses, and the accelerometer goes to
         -- sleep with whatever it was last set to: Tap tune's harder
         -- threshold or longer duration, and it took many taps or none woke
-        -- them (firmware okulo/tap-tuning). The stock settings go back first;
+        -- them (firmware glaz/main). The stock settings go back first;
         -- setting them also clears a tap still latched, which would hold the
         -- wake-up line where no tap can move it. Stock firmware has no
         -- tap_config, and needs neither.
