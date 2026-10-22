@@ -49,6 +49,22 @@ void main() {
       expect(utf8.decode(cyr), endsWith('жж'));
     });
 
+    test('a re-posted notification is forwarded once', () async {
+      SharedPreferences.setMockInitialValues({});
+      final n = NotificationService(FrameLink(), await Settings.load());
+      final t = DateTime(2026, 1, 1, 13, 7);
+      const tg = 'org.telegram.messenger';
+      expect(n.isNew(tg, 'Анна', 'one', t), isTrue);
+      expect(n.isNew(tg, 'Анна', 'two', t), isTrue);
+      // the next message re-posts the earlier ones
+      final later = t.add(const Duration(minutes: 1));
+      expect(n.isNew(tg, 'Анна', 'one', later), isFalse);
+      expect(n.isNew(tg, 'Анна', 'two', later), isFalse);
+      expect(n.isNew(tg, 'Анна', 'three', later), isTrue);
+      final much = later.add(NotificationService.remember * 2);
+      expect(n.isNew(tg, 'Анна', 'one', much), isTrue);
+    });
+
     test('appName', () {
       expect(NotificationService.appName('org.telegram.messenger'), 'Telegram');
       expect(NotificationService.appName('com.spotify.music'), 'Spotify');

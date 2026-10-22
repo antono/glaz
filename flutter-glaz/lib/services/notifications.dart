@@ -27,8 +27,11 @@ class NotificationService extends ChangeNotifier {
   int forwarded = 0;
 
   StreamSubscription<ServiceNotificationEvent>? _sub;
-  String _lastKey = '';
-  DateTime _lastAt = DateTime(0);
+
+  /// How long a forwarded notification is remembered, so that a re-post of
+  /// it is not forwarded again.
+  static const remember = Duration(minutes: 30);
+  final _seen = <String, DateTime>{};
 
   Future<void> init() async {
     if (!supported) return;
@@ -59,13 +62,19 @@ class NotificationService extends ChangeNotifier {
     final title = e.title;
     final text = e.content;
     if (title.isEmpty && text.isEmpty) return;
-    // apps re-post a notification to update it; once is enough
-    final key = '$pkg\n$title\n$text';
-    final now = DateTime.now();
-    if (key == _lastKey && now.difference(_lastAt).inSeconds < 10) return;
-    _lastKey = key;
-    _lastAt = now;
+    if (!isNew(pkg, title, text, DateTime.now())) return;
     send(appName(pkg), title, text);
+  }
+
+  /// Whether this notification was not forwarded within [remember]. Apps
+  /// re-post a notification to update it, and Telegram re-posts every one
+  /// of a chat's unread messages with each new message; once is enough.
+  bool isNew(String pkg, String title, String text, DateTime now) {
+    _seen.removeWhere((_, at) => now.difference(at) > remember);
+    final key = '$pkg\n$title\n$text';
+    if (_seen.containsKey(key)) return false;
+    _seen[key] = now;
+    return true;
   }
 
   Future<void> send(String app, String title, String text) async {
