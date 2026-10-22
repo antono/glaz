@@ -35,8 +35,20 @@ void main() {
     await picture.load();
     await picture.draw('Uploading: a_long_module_name_137.lua', progress: .37);
     await picture.tick();
-    await picture.draw('firmware update');
+    await picture.draw('Installing firmware', second: 'v26.295.1749-glaz');
     await picture.freeze();
+    // the app leaves the panel off when it has nothing to show
+    expect(writes.first, startsWith('frame.display.power_save(false)'));
+    // the version where the bar would be, and no bar
+    final install = writes.firstWhere((w) => w.contains('Installing'));
+    expect(
+      install,
+      contains(
+        "'v26.295.1749-glaz',${GlassesPicture.textX},"
+        '${GlassesPicture.barY})',
+      ),
+    );
+    expect(install, isNot(contains('B(')));
     // the sparks move on with every frame
     final phases = [
       for (final w in writes)
@@ -60,6 +72,7 @@ frame = { display = {
   end,
   text = function(s, x, y) assert(#s <= 25) end,
   show = function() shown = shown + 1 end,
+  power_save = function(on) assert(on == false) end,
 } }
 ''';
     final script = [

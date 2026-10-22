@@ -32,6 +32,7 @@ class GlassesPicture {
 
   int _phase = 0;
   String _line = '';
+  String? _second;
   double? _progress;
 
   static int get artX => (screenWidth - updateArt.first.length * scale) ~/ 2;
@@ -44,8 +45,12 @@ class GlassesPicture {
     final colors = updateArtColors.entries
         .map((e) => e.key == '.' ? "['.']=${e.value}" : '${e.key}=${e.value}')
         .join(',');
+    // the app turns the panel off while it has nothing to show, and stopped
+    // it stays off: the picture would go into a dark screen (seen: nothing
+    // on the glasses through a whole firmware install)
     await run(
-      "C={$colors} A={} P={} S=$scale X=$artX Y=$top print('p0')",
+      'frame.display.power_save(false) '
+          "C={$colors} A={} P={} S=$scale X=$artX Y=$top print('p0')",
       'p0',
     );
     for (var i = 0; i < updateArt.length; i += 3) {
@@ -90,25 +95,28 @@ class GlassesPicture {
     );
   }
 
-  /// The art, [line] under it, and a bar at [progress] (0..1) if given;
-  /// the sparks one cell on.
-  Future<void> draw(String line, {double? progress}) {
+  /// The art, [line] under it, and a bar at [progress] (0..1) if given, or
+  /// else [second], a line where the bar would be; the sparks one cell on.
+  Future<void> draw(String line, {double? progress, String? second}) {
     _line = line;
+    _second = second;
     _progress = progress;
     _phase = (_phase + 1) % sparkGap;
-    final bar = progress == null
-        ? ''
-        : 'B(${progress.clamp(0.0, 1.0).toStringAsFixed(3)}) ';
+    final below = progress != null
+        ? 'B(${progress.clamp(0.0, 1.0).toStringAsFixed(3)}) '
+        : second != null
+        ? "frame.display.text('${_text(second)}',$textX,$barY) "
+        : '';
     return run(
       "D() E($_phase) frame.display.text('${_text(line)}',$textX,$textY) "
-          "${bar}frame.display.show() print('pw')",
+          "${below}frame.display.show() print('pw')",
       'pw',
     );
   }
 
   /// The same again, the sparks one cell on: for a long step, between its
   /// parts.
-  Future<void> tick() => draw(_line, progress: _progress);
+  Future<void> tick() => draw(_line, progress: _progress, second: _second);
 
   /// Leaves the picture up until the next reset: nothing else can draw.
   /// frame.update() puts its own 'Frame Update' on screen just before the

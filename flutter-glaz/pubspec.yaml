@@ -4,7 +4,7 @@ publish_to: 'none'
 
 # Shown in the About tab too: keep lib/screens/about_screen.dart in step
 # (test/version_test.dart checks it).
-version: 3.8.0+44
+version: 3.8.1+45
 
 environment:
   sdk: ^3.13.3

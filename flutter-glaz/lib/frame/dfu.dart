@@ -51,7 +51,7 @@ Future<void> installFirmware(
   try {
     final picture = GlassesPicture(repl.run);
     await picture.load();
-    await picture.draw('FW ${package.version}');
+    await picture.draw('Installing firmware', second: package.version);
     await picture.freeze();
   } catch (_) {}
 
