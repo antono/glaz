@@ -27,6 +27,10 @@ class MainActivity : FlutterActivity() {
                         (call.arguments as List<*>).map { (it as Number).toInt() }.toSet()
                     result.success(null)
                 }
+                "takeAll" -> {
+                    KeyRemoteService.takeAll = call.arguments as Boolean
+                    result.success(null)
+                }
                 "background" -> result.success(KeyRemoteService.running)
                 "keyboard" -> result.success(keyboards.attached)
                 "settings" -> {
@@ -50,6 +54,7 @@ class MainActivity : FlutterActivity() {
         keyboards = null
         KeyRemoteService.channel = null
         KeyRemoteService.taken = emptySet()
+        KeyRemoteService.takeAll = false
         super.cleanUpFlutterEngine(flutterEngine)
     }
 

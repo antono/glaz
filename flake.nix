@@ -85,8 +85,10 @@
           nativeBuildInputs = [ pkgs.copyDesktopItems ];
           # audioplayers plays through GStreamer; gstreamer-1.0.pc wants
           # libunwind. The plugins end up on the wrapper's GStreamer path.
+          # flutter_secure_storage keeps the terminal's SSH keys in libsecret.
           buildInputs = with pkgs.gst_all_1; [
             pkgs.libunwind
+            pkgs.libsecret
             gstreamer
             gst-plugins-base
             gst-plugins-good

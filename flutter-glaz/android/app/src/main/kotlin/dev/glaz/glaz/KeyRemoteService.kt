@@ -31,6 +31,20 @@ class KeyRemoteService : AccessibilityService() {
         var taken: Set<Int> = emptySet()
 
         /**
+         * Every key a keyboard has goes to Dart: the terminal on the glasses
+         * types them (lib/services/term.dart). The phone's own keys still
+         * go their way, so the phone can still be left, turned down or off.
+         */
+        var takeAll = false
+
+        private val phoneKeys = setOf(
+            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_HOME, KeyEvent.KEYCODE_APP_SWITCH,
+            KeyEvent.KEYCODE_POWER, KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN,
+            KeyEvent.KEYCODE_VOLUME_MUTE, KeyEvent.KEYCODE_CAMERA, KeyEvent.KEYCODE_SLEEP,
+            KeyEvent.KEYCODE_WAKEUP, KeyEvent.KEYCODE_ASSIST, KeyEvent.KEYCODE_VOICE_ASSIST,
+        )
+
+        /**
          * Flipper's Keynote sends its Back as Backspace and then Android's
          * own Back (hid_keynote.c); the second one, this soon, is dropped
          * rather than going to the app in front. keys.dart does the same.
@@ -69,11 +83,18 @@ class KeyRemoteService : AccessibilityService() {
             if (!down) echo = false
             return drop
         }
-        if (code !in taken) return false
+        if (code !in taken && !(takeAll && code !in phoneKeys)) return false
         if (code == KeyEvent.KEYCODE_DEL && down) backspaceAt = event.eventTime
-        // action: 0 down, 1 repeat, 2 up
+        // action: 0 down, 1 repeat, 2 up; then the character the key types
+        // with the modifiers held (0 for none), and the modifiers
         val action = if (!down) 2 else if (event.repeatCount > 0) 1 else 0
-        channel.invokeMethod("key", listOf(action, code, event.scanCode, event.eventTime))
+        channel.invokeMethod(
+            "key",
+            listOf(
+                action, code, event.scanCode, event.eventTime,
+                event.getUnicodeChar(event.metaState), event.metaState,
+            ),
+        )
         return true
     }
 }

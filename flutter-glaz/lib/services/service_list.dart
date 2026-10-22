@@ -60,4 +60,11 @@ const services = [
     "A Flipper Zero's screen on the glasses, in Apps > Flipper",
     true,
   ),
+  GlazService(
+    'term',
+    'Terminal',
+    'An SSH shell on the glasses, in Apps > Terminal; a keyboard on the '
+        'phone types into it',
+    true,
+  ),
 ];

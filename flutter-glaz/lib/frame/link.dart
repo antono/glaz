@@ -21,6 +21,7 @@ const _unlogged = {
   statusGet,
   status,
   flipper,
+  term,
 };
 
 /// A message for the log: its code's name and a look at its payload --

@@ -47,6 +47,10 @@ const textGet = 0x0A;
 /// modules/flipper.lua: [1] show the Flipper, [0] stop, [2, seq] frame taken
 const flipper = 0x0B;
 
+/// The terminal: [1, cols, rows] start, [0] stop, [2, seq] frame taken
+/// (modules/term.lua).
+const term = 0x0C;
+
 // The frame_msg camera library's own codes, used by Camera and Time series
 const photoChunk = 0x07;
 const photoEnd = 0x08;
@@ -95,6 +99,7 @@ const codeNames = {
   recDrop: 'REC_DROP',
   luaResult: 'LUA_RESULT',
   flipper: 'FLIPPER',
+  term: 'TERM',
   textGet: 'TEXT_GET',
   photoChunk: 'photo chunk',
   photoEnd: 'photo end',

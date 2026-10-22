@@ -4,16 +4,18 @@ publish_to: 'none'
 
 # Shown in the About tab too: keep lib/screens/about_screen.dart in step
 # (test/version_test.dart checks it).
-version: 3.8.1+45
+version: 3.9.0+46
 
 environment:
   sdk: ^3.13.3
 
 dependencies:
   audioplayers: ^6.8.1
+  dartssh2: ^4.1.0
   flutter:
     sdk: flutter
   flutter_blue_plus: ^1.36.8
+  flutter_secure_storage: ^11.2.0
   frame_ble: ^3.0.0
   geolocator: ^14.1.1
   http: ^1.6.0
@@ -23,7 +25,9 @@ dependencies:
   notification_listener_service: ^1.0.0
   path_provider: ^2.1.6
   permission_handler: ^12.0.1
+  pinenacl: ^0.6.0
   shared_preferences: ^2.5.6
+  xterm: ^4.0.0
 
 dev_dependencies:
   flutter_test:

@@ -331,6 +331,14 @@ const glassesMenu = <MenuSection>[
       "A Flipper Zero's screen, through the phone; its own buttons "
           'drive it.',
     ),
+    GlassesModule(
+      'term',
+      'Terminal',
+      ModuleKind.app,
+      Icons.terminal,
+      'A terminal on a host of yours, over SSH from the phone; a keyboard '
+          'on the phone types into it.',
+    ),
   ]),
   MenuSection('Sensors', Icons.sensors, [
     GlassesModule(

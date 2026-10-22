@@ -6,6 +6,7 @@ import 'app_settings_screen.dart';
 import 'log_screen.dart';
 import 'lua_screen.dart';
 import 'services_screen.dart';
+import 'terminal_screen.dart';
 
 /// What does not need a tab of its own: the phone's services for the
 /// glasses, the log, the Lua console, and About.
@@ -61,6 +62,16 @@ class MoreScreen extends StatelessWidget {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () =>
                     Navigator.of(context).push(page('LOG', const LogScreen())),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.dns, color: FrameColors.skyBlue),
+                title: const Text('Terminal'),
+                subtitle: const Text('SSH hosts and keys for Apps > Terminal'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () =>
+                    Navigator.of(context)
+                        .push(page('TERMINAL', const TerminalScreen())),
               ),
               const Divider(height: 1),
               ListTile(

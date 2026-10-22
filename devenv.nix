@@ -62,6 +62,7 @@ in
   # Flutter's wrapper already brings GTK, clang, cmake and ninja.
   ++ lib.optionals pkgs.stdenv.isLinux (with pkgs.gst_all_1; [
     pkgs.libunwind  # gstreamer-1.0.pc requires it
+    pkgs.libsecret  # flutter_secure_storage: the terminal's SSH keys
     gstreamer
     gst-plugins-base
     gst-plugins-good

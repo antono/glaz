@@ -2,6 +2,7 @@ import 'dart:io';
 
 import '../frame/link.dart';
 import '../settings.dart';
+import '../term/hosts.dart';
 import 'agent_files.dart';
 import 'assistant.dart';
 import 'flipper.dart';
@@ -17,6 +18,7 @@ import 'photos.dart';
 import 'reader.dart';
 import 'recordings.dart';
 import 'speech.dart';
+import 'term.dart';
 import 'transcripts.dart';
 import 'voice.dart';
 
@@ -37,6 +39,7 @@ class Services {
     this.lua,
     this.flipper,
     this.reader,
+    this.term,
   );
 
   final Settings settings;
@@ -53,6 +56,7 @@ class Services {
   final GlassesLua lua;
   final FlipperMirror flipper;
   final ReaderService reader;
+  final TermService term;
 
   static late Services instance;
 
@@ -74,6 +78,7 @@ class Services {
     );
     final photos = PhotoService(link, s, PhotoStore(dir));
     final transcripts = TranscriptService(recordings, s, Transcriber.platform);
+    final hosts = TermHosts(s, DeviceSecrets());
     final services = Services._(
       s,
       link,
@@ -95,12 +100,15 @@ class Services {
       GlassesLua(link),
       FlipperMirror(link, s),
       ReaderService(link, s, readerDir ?? await readerRoot()),
+      TermService(link, s, hosts),
     );
     await services.reader.load();
     LuaBridge(s, services.lua);
     SettingsSync(link, s);
     services.keys.attach();
     services.flipper.attach();
+    services.term.attach();
+    services.keys.terminal = services.term;
     link.onConnected.add(() async {
       if (s.serviceOn('clock')) await link.sendClock();
     });

@@ -409,6 +409,7 @@ Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 | `0x0A` | `TEXT_GET` | `[0x0A, place, from, count, wpm, text]` | Reader wants words, or says where it is -- see [Reader](#reader) |
 | `0x09` | `LUA_RESULT` | `[0x09, id, more, bytes...]` | what `LUA_EVAL`'s Lua printed and returned, or its error, in packets — see [Lua console](#lua-console) |
 | `0x0B` | `FLIPPER` | `[0x0B, 1]` / `[0x0B, 0]` / `[0x0B, 2, seq]` | Flipper: show the Flipper's screen, stop, frame `seq` taken — see [FLIPPER.md](FLIPPER.md) |
+| `0x0C` | `TERM` | `[0x0C, 1, cols, rows]` / `[0x0C, 0]` / `[0x0C, 2, seq]` | Terminal: start a shell this size, stop, frame `seq` taken — see [Terminal](#terminal) |
 | `0x07` | photo chunk | `[0x07, jpeg bytes...]` | part of a photo (Camera module) |
 | `0x08` | photo end | `[0x08]` | last chunk; the photo is complete |
 | `0x1F` | `REC_START` | `[0x1F, bits, rate / 1000, for]` | Recorder starts a recording — see [Recorder](#recorder); `for` = `1`: the Assistant listening, see [Assistant](#assistant) |
@@ -952,6 +953,41 @@ on its own loopback, `127.0.0.1:8137`: `POST /lua` with the Lua as the body
 reaches it; `adb forward` does. `utils/phone_lua.py` does both: a command,
 stdin, or an interactive prompt with Tab completion. The glasses stay
 connected to the phone the whole time.
+
+### Terminal
+
+Apps > Terminal (`modules/term.lua`) is a shell on a host of the user's,
+over SSH from the phone (`flutter-glaz/lib/services/term.dart`). The phone
+holds the session and the terminal's screen (xterm's model), 45x12 cells;
+the glasses draw it with `frame.display.mono`, 28 normal, in the visible
+640x340, and need the glaz firmware for it.
+
+- On screen, the module sends `TERM` `[1, cols, rows]`, again every 3 s
+  until the phone answers; `[0]` when it goes.
+- The phone answers with `MODULE_CALL` `term`: `'s'` and words while there
+  is no screen (connecting, no host, an error), or a frame: `'f'`, seq,
+  flags (bit 0: the wearer typed since the last), a 16-bit mask of the rows
+  that follow (row 1 the high bit), and for each: n, n characters, n
+  attribute bytes as `mono`'s `attrs` (text palette index low, background
+  high). Trailing blanks are left off.
+- One frame at a time, as Flipper's: the next only after `[2, seq]`, every
+  row again after 1.5 s without it. Output is gathered 40 ms into a frame.
+- The phone brings the screen down to what the font has: printable ASCII,
+  box drawing as `- | +`, a full block as a lit cell, the rest `?`; ANSI's
+  16 colors and xterm's 256 and RGB to Frame's 16; the cursor and inverse
+  video as dark text on the text's color.
+- A keyboard on the phone types into it, in the background too: while the
+  shell takes keys, `KeyRemoteService` takes every key but the phone's own
+  (Back, Home, volume, power) and sends the character with the modifiers.
+  Ctrl+Alt+Esc closes the terminal, as a double tap.
+- Closed, the module keeps nothing; the phone keeps the shell 15 minutes,
+  so opening it again goes on where it was. Without a tap or a key for 10
+  minutes the module closes: `top` redraws by itself.
+- Hosts and keys are in glaz > More > Terminal. Keys and passwords are kept
+  in Android's keystore (`flutter_secure_storage`), the rest in the
+  settings; a key can be made on the phone (ed25519) and only its public
+  half copied out. A host's key is kept the first time and checked after:
+  a different one is refused (`HOST KEY CHANGED`).
 
 ### Remote
 

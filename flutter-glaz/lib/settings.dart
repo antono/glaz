@@ -105,6 +105,15 @@ class Settings extends ChangeNotifier {
   bool get linkWanted => _prefs.getBool('link.wanted') ?? true;
   set linkWanted(bool on) => _set('link.wanted', on);
 
+  /// The terminal's hosts and keys, as JSON (term/hosts.dart), without
+  /// their secrets: those are in the secure storage.
+  String get termHosts => _prefs.getString('term.hosts') ?? '';
+  set termHosts(String json) => _set('term.hosts', json);
+
+  /// The host the terminal connects to, by id; '' for the first.
+  String get termHost => _prefs.getString('term.host') ?? '';
+  set termHost(String id) => _set('term.host', id);
+
   void _set(String key, Object value) {
     if (value is bool) _prefs.setBool(key, value);
     if (value is String) _prefs.setString(key, value);

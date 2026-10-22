@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../frame/link.dart';
 import '../frame/protocol.dart';
 import '../settings.dart';
+import 'term.dart';
 
 /// Any keyboard the phone has as the remote: Bluetooth or USB, a
 /// presentation clicker, a gamepad's D-pad, a Flipper Zero in Bluetooth
@@ -129,6 +130,21 @@ class KeyRemote extends ChangeNotifier with WidgetsBindingObserver {
       settings.serviceOn('keys') && link.connected && !link.busy;
 
   bool? _sentActive;
+  bool? _sentAll;
+
+  /// The terminal on the glasses: while it [TermService.takesKeys], every
+  /// key goes to its shell instead, in the background too.
+  TermService? get terminal => _terminal;
+  set terminal(TermService? t) {
+    _terminal?.removeListener(_sync);
+    _terminal = t;
+    t?.addListener(_sync);
+    _sync();
+  }
+
+  TermService? _terminal;
+
+  bool get _typingInShell => _terminal?.takesKeys ?? false;
 
   /// Back should not close Glaz by itself: it may be Keynote's echo.
   /// Listeners hear when it changes.
@@ -192,6 +208,11 @@ class KeyRemote extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Tells the service which keys to take: all of them, or none.
   void _sync() {
+    final all = _active && _typingInShell;
+    if (all != _sentAll) {
+      _sentAll = all;
+      _call<void>('takeAll', all);
+    }
     final active = _active;
     if (active == _sentActive) return;
     _sentActive = active;
@@ -209,11 +230,26 @@ class KeyRemote extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// One key from the background service: `[action, key code, scan code,
-  /// time in ms]`, action 0 down, 1 repeat, 2 up. No text field to mind:
-  /// Glaz is not on screen.
+  /// time in ms, character, meta state]`, action 0 down, 1 repeat, 2 up;
+  /// the character the key types, 0 for none. No text field to mind: Glaz
+  /// is not on screen.
   void fromBackground(List args) {
-    final [action as int, code as int, scan as int, ms as int] = args;
+    final [action as int, code as int, scan as int, ms as int, ...rest] = args;
     final logical = kAndroidToLogicalKey[code];
+    if (_typingInShell) {
+      if (action == 2 || logical == null) return;
+      final char = rest.isNotEmpty ? rest[0] as int : 0;
+      final meta = rest.length > 1 ? rest[1] as int : 0;
+      _terminal!.key(
+        logical,
+        character: char > 0 ? String.fromCharCode(char) : null,
+        // Android's META_CTRL_ON, META_ALT_ON, META_SHIFT_ON
+        ctrl: meta & 0x1000 != 0,
+        alt: meta & 0x02 != 0,
+        shift: meta & 0x01 != 0,
+      );
+      return;
+    }
     if (logical == null || !_active) return;
     final physical =
         kAndroidToPhysicalKey[scan] ?? const PhysicalKeyboardKey(0);
@@ -239,6 +275,21 @@ class KeyRemote extends ChangeNotifier with WidgetsBindingObserver {
 
   /// One key event; true if it was taken for the glasses.
   bool handle(KeyEvent event) {
+    if (_typingInShell && !_typing()) {
+      // all of it, key ups too, or the focus system acts on them
+      if (event is! KeyUpEvent) {
+        final k = HardwareKeyboard.instance;
+        _terminal!.key(
+          event.logicalKey,
+          character: event.character,
+          ctrl: k.isControlPressed,
+          alt: k.isAltPressed,
+          shift: k.isShiftPressed,
+        );
+      }
+      _claimed = event;
+      return true;
+    }
     final taken = _active && !_typing() && _take(event);
     _claimed = taken ? event : null;
     return taken;
