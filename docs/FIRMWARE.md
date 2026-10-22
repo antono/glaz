@@ -157,16 +157,19 @@ First build `v26.292.2200-glaz-cyr`. Since then the phone sends Cyrillic as
 it is, no longer transliterated (`flutter-glaz/lib/frame/glyphs.dart`).
 
 `glaz/mono-font`, merged into `glaz/main` on 22.10.2026, adds
-`frame.display.mono(text, x, y, {size, bold, color, bg})`, a monospace
-font for the terminal: every character a cell of size/2 by size pixels,
-sizes 20, 24, 28 and 32, normal and bold, printable ASCII only (any other
-character leaves its cell blank). The glyphs are Terminus Font (SIL OFL),
-written into `mono_font.h` by `graphical_assets/mono.py`. The whole string
-goes to the FPGA as one sprite, and `bg` as one more, so a row costs one
-call. It returns the x after the last cell. Measured on the glasses
-(`v26.295.1148-glaz-mono`): 28 normal is the smallest that reads well, 45x14
-cells; a full screen of it draws in 87 ms, 152 ms with `bg` on every row.
-`utils/mono_test.py` shows every size and weight.
+`frame.display.mono(text, x, y, {size, bold, color, bg, attrs})`, a
+monospace font for the terminal: every character a cell of size/2 by size
+pixels, sizes 20, 24, 28 and 32, normal and bold, printable ASCII only (any
+other character leaves its cell blank). The glyphs are Terminus Font (SIL
+OFL), written into `mono_font.h` by `graphical_assets/mono.py`. `attrs`
+gives each cell its colors, a byte a cell: the text's palette index in the
+low nibble (0: `color`), the background's in the high one (0: none). One
+sprite goes to the FPGA for each color in the string, from its first cell
+to its last, so a row of a terminal is a few sprites, not one a character.
+It returns the x after the last cell. Measured on the glasses: 28 normal
+is the smallest that reads well; in the visible 640x340 that is 45x12
+cells. A full screen of it draws in 87 ms, 152 ms with a background on
+every row. `utils/mono_test.py` shows every size and weight.
 
 Also worth knowing: `frame.sleep()` with no argument is System OFF, and waking
 from it is a **reset**. Nothing after `frame.sleep()` in Lua runs; the glasses
