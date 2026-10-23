@@ -61,6 +61,13 @@ const services = [
     true,
   ),
   GlazService(
+    'flipper_remote',
+    'Flipper remote',
+    "Shows the glasses' name, free space and app in the Glaz app on a "
+        'Flipper Zero, while it is your keyboard remote',
+    true,
+  ),
+  GlazService(
     'term',
     'Terminal',
     'An SSH shell on the glasses, in Apps > Terminal; a keyboard on the '

@@ -37,6 +37,8 @@ The glasses run Lua; a laptop talks to them over Bluetooth using Python.
 - `sprites/` — the eye as glasses pixel art, for `utils/show_sprite.py`;
   not uploaded: the phone draws the eye itself during Upload
 - `flutter-glaz/` — the Flutter companion app (phone side)
+- `flipper-glaz/` — a Flipper Zero remote for the glasses, in Rust, with
+  its own `devenv.nix` (a draft; see its README)
 - `devenv.nix` — the development environment (Lua, Python, firmware)
 - `flutter-glaz/devenv.nix` — the companion app's own: Flutter, Android SDK
 - `flake.nix` — the companion app as a Linux desktop package (`nix run`)
@@ -123,4 +125,7 @@ python3 -m venv .venv
   - Phone (`flutter-glaz/`): `version` in `flutter-glaz/pubspec.yaml` and
     `appVersion` in `lib/screens/about_screen.dart` (a test keeps them
     equal); the `+N` build number goes up by one with every bump.
+  - Flipper (`flipper-glaz/`): `version` in `flipper-glaz/Cargo.toml`;
+    `app_version` in its manifest (`src/main.rs`) goes up by one with
+    every bump.
   - A commit that changes both bumps both.

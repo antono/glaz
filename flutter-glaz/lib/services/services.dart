@@ -6,6 +6,7 @@ import '../term/hosts.dart';
 import 'agent_files.dart';
 import 'assistant.dart';
 import 'flipper.dart';
+import 'flipper_remote.dart';
 import 'gemini.dart';
 import 'glasses_files.dart';
 import 'glasses_lua.dart';
@@ -42,6 +43,7 @@ class Services {
     this.reader,
     this.term,
     this.gemini,
+    this.flipperRemote,
   );
 
   final Settings settings;
@@ -57,6 +59,7 @@ class Services {
   final AssistantService assistant;
   final GlassesLua lua;
   final FlipperMirror flipper;
+  final FlipperRemote flipperRemote;
   final ReaderService reader;
   final TermService term;
   final GeminiService gemini;
@@ -82,6 +85,8 @@ class Services {
     final photos = PhotoService(link, s, PhotoStore(dir));
     final transcripts = TranscriptService(recordings, s, Transcriber.platform);
     final hosts = TermHosts(s, DeviceSecrets());
+    final keys = KeyRemote(link, s);
+    final lua = GlassesLua(link);
     final services = Services._(
       s,
       link,
@@ -92,7 +97,7 @@ class Services {
       GlassesFiles(link),
       RecorderService(link, s, recordings, transcripts: transcripts),
       transcripts,
-      KeyRemote(link, s),
+      keys,
       AssistantService(
         link,
         s,
@@ -100,17 +105,19 @@ class Services {
         queries: GlazFiles(link, s, photos, recordings, transcripts),
         voice: Voice.platform,
       ),
-      GlassesLua(link),
+      lua,
       FlipperMirror(link, s),
       ReaderService(link, s, readerDir ?? await readerRoot()),
       TermService(link, s, hosts),
       GeminiService(link, s),
+      FlipperRemote(link, s, keys, lua),
     );
     await services.reader.load();
     LuaBridge(s, services.lua);
     SettingsSync(link, s);
     services.keys.attach();
     services.flipper.attach();
+    services.flipperRemote.attach();
     services.term.attach();
     services.keys.terminal = services.term;
     link.onConnected.add(() async {

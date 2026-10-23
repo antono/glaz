@@ -1,0 +1,30 @@
+cargo-features = ["different-binary-name"]
+
+[package]
+name = "flipper-glaz"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85.0"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+
+[[bin]]
+name = "flipper-glaz"
+filename = "flipper-glaz.fap"
+bench = false
+test = false
+
+[dependencies]
+flipperzero = "0.16.0"
+flipperzero-sys = "0.16.0"
+flipperzero-rt = "0.16.0"
+
+[profile.dev]
+opt-level = "z"
+panic = "abort"
+
+[profile.release]
+opt-level = "z"
+panic = "abort"

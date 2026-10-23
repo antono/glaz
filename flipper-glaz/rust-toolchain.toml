@@ -1,0 +1,6 @@
+# The one flipperzero-rs 0.16 is built and tested with. Nightly for
+# cargo's `different-binary-name` (Cargo.toml: the binary is a .fap).
+[toolchain]
+channel = "nightly-2025-08-31"
+targets = ["thumbv7em-none-eabihf"]
+components = ["rustfmt", "clippy", "rust-src"]

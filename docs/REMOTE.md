@@ -93,6 +93,15 @@ Hold Back on the Flipper to leave Keynote.
 The Flipper remembers the pairing: next time, open Remote > Keynote and it
 reconnects by itself.
 
+### The Glaz app on the Flipper
+
+`flipper-glaz/` is a Flipper app of its own (Apps > Bluetooth > Glaz): the
+same keyboard as Keynote, to the pairing, held upright, with the glasses
+on its screen instead of the keys -- their name, free disk and memory, and
+the app they show, or "(disconnected)". glaz tells it those over the same
+connection: More > Services > **Flipper remote**, on unless turned off
+(flipper-glaz/README.md, "The link to the phone").
+
 ### Over USB
 
 The Flipper's USB Remote (**Apps > USB > Remote**) sends the same keys
