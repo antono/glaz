@@ -4,6 +4,7 @@ import '../frame/link.dart';
 import '../settings.dart';
 import '../term/hosts.dart';
 import 'agent_files.dart';
+import 'app_check.dart';
 import 'assistant.dart';
 import 'flipper.dart';
 import 'flipper_remote.dart';
@@ -44,6 +45,7 @@ class Services {
     this.term,
     this.gemini,
     this.flipperRemote,
+    this.appCheck,
   );
 
   final Settings settings;
@@ -63,6 +65,7 @@ class Services {
   final ReaderService reader;
   final TermService term;
   final GeminiService gemini;
+  final AppCheck appCheck;
 
   static late Services instance;
 
@@ -111,6 +114,7 @@ class Services {
       TermService(link, s, hosts),
       GeminiService(link, s),
       FlipperRemote(link, s, keys, lua),
+      AppCheck(link, s),
     );
     await services.reader.load();
     LuaBridge(s, services.lua);

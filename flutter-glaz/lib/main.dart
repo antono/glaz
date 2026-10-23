@@ -11,6 +11,7 @@ import 'screens/photos_screen.dart';
 import 'screens/recordings_screen.dart';
 import 'screens/more_screen.dart';
 import 'screens/remote_screen.dart';
+import 'services/app_check.dart';
 import 'services/glaz_log.dart';
 import 'services/services.dart';
 import 'theme.dart';
@@ -146,10 +147,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     Services.instance.settings.addListener(_handsOff);
     Services.instance.keys.addListener(_handsOff);
+    Services.instance.appCheck.addListener(_offerUpload);
   }
 
   @override
   void dispose() {
+    Services.instance.appCheck.removeListener(_offerUpload);
     Services.instance.settings.removeListener(_handsOff);
     Services.instance.keys.removeListener(_handsOff);
     WidgetsBinding.instance.removeObserver(this);
@@ -176,6 +179,49 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         : _shown && _current == 'remote'
         ? handsOffRemote
         : handsOffNone;
+  }
+
+  /// The link ([FrameLink.connects]) last asked about: once a connect,
+  /// whatever the answer.
+  int? _offeredFor;
+
+  // glasses with no app, or one not running: the phone offers to upload
+  // it, rather than wait for Upload to be found on the Glasses tab
+  Future<void> _offerUpload() async {
+    final s = Services.instance;
+    final app = s.appCheck.app;
+    if (app != GlassesApp.missing && app != GlassesApp.stopped) return;
+    if (_offeredFor == s.link.connects || s.link.busy || !mounted) return;
+    _offeredFor = s.link.connects;
+    final missing = app == GlassesApp.missing;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          missing
+              ? 'No app on the glasses'
+              : 'The app on the glasses is not running',
+        ),
+        content: Text(
+          '${missing ? 'The glasses are connected, but have no app to run' : 'Its main.lua is there, but it does not answer'}'
+          ' -- after a firmware update or a reset, say. Upload it now? '
+          'Takes a minute or two; keep the glasses close.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Later'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Upload'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && s.link.connected && !s.link.busy) {
+      await s.appCheck.upload();
+    }
   }
 
   List<String> get _order => tabOrderFrom(Services.instance.settings.tabOrder);

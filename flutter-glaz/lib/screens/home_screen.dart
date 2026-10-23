@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../frame/link.dart';
 import '../frame/pairing.dart';
 import '../frame/upload.dart';
+import '../services/app_check.dart';
 import '../services/services.dart';
 import '../theme.dart';
 import '../widgets/pixel_logo.dart';
@@ -386,13 +386,14 @@ class _GlassesAppCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final link = Services.instance.link;
+    final check = Services.instance.appCheck;
     return ListenableBuilder(
-      listenable: link,
-      builder: (context, _) => _build(context, link),
+      listenable: Listenable.merge([link, check]),
+      builder: (context, _) => _build(context, link, check.app),
     );
   }
 
-  Widget _build(BuildContext context, FrameLink link) {
+  Widget _build(BuildContext context, FrameLink link, GlassesApp app) {
     final text = Theme.of(context).textTheme;
     final ready = link.connected && !link.busy;
     return Card(
@@ -421,6 +422,18 @@ class _GlassesAppCard extends StatelessWidget {
               leading: const Icon(Icons.error_outline, color: FrameColors.red),
               title: const Text('Last attempt failed'),
               subtitle: Text(link.taskError!),
+            ),
+          if (ready && app == GlassesApp.missing)
+            const ListTile(
+              leading: Icon(Icons.warning_amber, color: FrameColors.yellow),
+              title: Text('No app on the glasses'),
+              subtitle: Text('Upload puts it on them'),
+            )
+          else if (ready && app == GlassesApp.stopped)
+            const ListTile(
+              leading: Icon(Icons.warning_amber, color: FrameColors.yellow),
+              title: Text('The app on the glasses is not running'),
+              subtitle: Text('Restart it, or Upload it again'),
             ),
           ListTile(
             enabled: ready,
@@ -483,14 +496,7 @@ class _GlassesAppCard extends StatelessWidget {
       ),
     );
     if (ok != true) return;
-    final files = await luaFiles(
-      rootBundle,
-      Services.instance.settings.installed,
-    );
-    await link.runTask(
-      'Upload',
-      (device, report) => uploadApp(device, files, report),
-    );
+    await Services.instance.appCheck.upload();
   }
 }
 

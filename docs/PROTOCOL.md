@@ -889,6 +889,14 @@ The glasses answer `[0x1B, battery, version...]`: the battery as the same
 smoothed percentage the top bar shows (255 before the first sample), then
 `frame.FIRMWARE_VERSION` as text, for example `v25.080.0838`.
 
+No answer within 8 s of connecting, and the phone asks the REPL whether
+`main.lua` is there (`flutter-glaz/lib/services/app_check.dart`). The REPL
+answers only when no app runs, so nothing running is broken or stopped.
+No `main.lua` (new glasses, or after a firmware update, a reset or an
+upload that was cut short), or one that is there but does not run: the
+phone offers to upload the app, once per connect, and the Software card
+says so.
+
 ### Keeping the link
 
 The phone keeps the link up itself (`flutter-glaz/lib/frame/link.dart`),
