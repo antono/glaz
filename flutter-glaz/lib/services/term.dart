@@ -146,7 +146,7 @@ class TermService extends ChangeNotifier {
     }
     final host = hosts.selected;
     if (host == null) {
-      _status('Add a host:\nglaz > More > Terminal');
+      _status('Add a host:\nglaz > Menu > Terminal');
       return;
     }
     if (_session != null && _host?.id == host.id) {

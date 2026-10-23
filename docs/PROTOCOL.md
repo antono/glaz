@@ -1054,7 +1054,7 @@ the glasses draw it with `frame.display.mono`, 28 normal, in the visible
 - Closed, the module keeps nothing; the phone keeps the shell 15 minutes,
   so opening it again goes on where it was. Without a tap or a key for 10
   minutes the module closes: `top` redraws by itself.
-- Hosts and keys are in glaz > More > Terminal. Keys and passwords are kept
+- Hosts and keys are in glaz > Menu > Apps > Terminal. Keys and passwords are kept
   in Android's keystore (`flutter_secure_storage`), the rest in the
   settings; a key can be made on the phone (ed25519) and only its public
   half copied out. A host's key is kept the first time and checked after:

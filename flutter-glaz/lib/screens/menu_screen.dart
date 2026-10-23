@@ -4,6 +4,7 @@ import '../glasses_menu.dart';
 import '../services/services.dart';
 import '../theme.dart';
 import 'module_settings_screen.dart';
+import 'terminal_screen.dart';
 
 /// The second tab: what is in the menu on the glasses.
 class MenuScreen extends StatelessWidget {
@@ -81,17 +82,25 @@ class _ModuleTile extends StatelessWidget {
             onChanged: (v) => settings.setInstalled(module.id, v),
           ),
           onTap: module.configurable
-              ? () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => ModuleSettingsScreen(module),
-                  ),
-                )
+              ? () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => _settingsOf(module)))
               : null,
         );
       },
     );
   }
 }
+
+/// A module's settings page: its own ([GlassesModule.ownPage]), or the
+/// common one.
+Widget _settingsOf(GlassesModule module) => switch (module.id) {
+  'term' => Scaffold(
+    appBar: AppBar(title: const Text('TERMINAL')),
+    body: const SafeArea(top: false, child: TerminalScreen()),
+  ),
+  _ => ModuleSettingsScreen(module),
+};
 
 class _KindChip extends StatelessWidget {
   const _KindChip(this.kind);

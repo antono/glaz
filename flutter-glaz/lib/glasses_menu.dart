@@ -143,6 +143,7 @@ class GlassesModule {
     this.network = false,
     this.location = false,
     this.settings = const [],
+    this.ownPage = false,
   });
 
   /// Asks where the phone is (docs/PROTOCOL.md, "Location"), so it needs
@@ -152,8 +153,13 @@ class GlassesModule {
   /// What can be set for it on the phone.
   final List<ModuleSetting> settings;
 
+  /// Its settings are a page of their own, not [settings]: Terminal's
+  /// hosts and keys (screens/terminal_screen.dart).
+  final bool ownPage;
+
   /// Opens a settings page in the Menu tab.
-  bool get configurable => settings.isNotEmpty || network || location;
+  bool get configurable =>
+      settings.isNotEmpty || network || location || ownPage;
 
   /// File name in ../modules/, without .lua.
   final String id;
@@ -355,6 +361,7 @@ const glassesMenu = <MenuSection>[
       Icons.terminal,
       'A terminal on a host of yours, over SSH from the phone; a keyboard '
           'on the phone types into it.',
+      ownPage: true,
     ),
   ]),
   MenuSection('Sensors', Icons.sensors, [
