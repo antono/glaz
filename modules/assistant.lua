@@ -1,8 +1,12 @@
 -- Menu module: voice assistant. ASCII only, see docs/PROTOCOL.md,
 -- "Assistant".
 --
---   single tap  -- listen; tapped again, stop and ask
---   tilt        -- page through a long answer
+--   on entry, the chats kept on the phone, newest first, under 'New chat';
+--   the cursor on the one still going on, if any
+--   tilt        -- the chats: the next / previous one; an answer: its pages
+--   single tap  -- 'New chat': listen, in a new chat; a chat: show its last
+--                  question and answer, the next tap asks in it;
+--                  otherwise listen, tapped again, stop and ask
 --   double tap  -- back; a question being asked is dropped, sent nowhere
 --
 -- Only taps start and stop it: nothing guesses where a question ends.
@@ -18,6 +22,12 @@
 --   'a:<text>'  -- the answer, ASCII, already in lines of at most LINE
 --   'e:<text>'  -- went wrong, why
 --   'listen'    -- listen again
+--   'c:<live>' then '\n<id>|<title>' per chat -- the chats, newest first;
+--                  <live> the id of the one still going on, or 0
+--
+-- ASSIST asks, '>BBI2': op, id -- 1 the chats, 2 go on with chat <id>
+-- (the phone answers 'a:' with its last question and answer), 3 a new
+-- chat, sent just before listening.
 local _M = {}
 
 _M.label = 'Assistant'
@@ -28,20 +38,27 @@ local REC_START = 0x1F
 local AUDIO     = 0x05
 local AUDIO_END = 0x06
 local REC_DROP  = 0x10    -- [0x10]: the question is dropped, not asked
+local ASSIST    = 0x04    -- '>BBI2': 1 the chats, 2 open one, 3 a new one
 local FOR_ASSISTANT = 1   -- REC_START's fourth byte
 
 local RATE = 8000
 local BITS = 16           -- or 8; Glaz > Menu > Assistant
 local MAX_LISTEN = 120    -- s; only so a forgotten one does not run on
 local ROWS = _M.rows      -- rows it has on screen
+local RETRY = 5           -- s without the chats before asking again
 
 local started = nil       -- utc() when listening began; nil when not
 local size = 0            -- bytes per packet, even (16-bit samples)
 local per_second = 0      -- bytes of sound a second
 local lost = 0            -- bytes the link did not take
-local state = ''          -- '', 'listen', 'think', 'answer', 'error'
+local state = ''          -- '', 'chats', 'listen', 'think', 'answer',
+                          -- 'error'
 local lines = {}          -- the answer, or what was heard, line by line
 local page = 1
+local chats = nil         -- { {id, title}, ... } once the phone says
+local sel, top = 0, 0     -- the chat under the cursor, on the first row;
+                          -- 0 is 'New chat'
+local asked_at = nil      -- utc() the chats were asked for
 
 local function send(packet)
   for _ = 1, 20 do
@@ -49,6 +66,11 @@ local function send(packet)
     frame.sleep(0.005)
   end
   return false
+end
+
+local function assist(op, id)
+  return frame.bluetooth.is_connected()
+    and send(string.pack('>BBI2', ASSIST, op, id or 0))
 end
 
 -- As Recorder's: at most two seconds' worth a call.
@@ -104,8 +126,22 @@ local function split(text)
   return out
 end
 
+local function chats_screen()
+  if not chats then
+    return frame.bluetooth.is_connected() and 'loading..'
+      or 'no phone\ntap = ask'
+  end
+  local rows = {}
+  for i = top, math.min(top + ROWS - 1, #chats) do
+    rows[#rows + 1] = (i == sel and '> ' or '  ')
+      .. (i == 0 and 'New chat' or chats[i][2])
+  end
+  return table.concat(rows, '\n')
+end
+
 -- One page of ROWS rows; with more than one page the last row says which.
 local function screen()
+  if state == 'chats' then return chats_screen() end
   if state == 'listen' then
     local text = string.format('listening... %ds',
                                math.floor(frame.time.utc() - started))
@@ -145,15 +181,37 @@ local function take(arg)
   elseif kind == 'a' or kind == 'e' then
     finish()
     state, lines, page = kind == 'a' and 'answer' or 'error', split(text), 1
+  elseif kind == 'c' and state == 'chats' then
+    local live, body = string.match(text, '^(%d+)\n?(.*)$')
+    chats, sel, top = {}, 0, 0
+    for id, title in string.gmatch(body or '', '(%d+)|([^\n]*)') do
+      chats[#chats + 1] = { tonumber(id), title }
+      if id == live then sel = #chats end
+    end
+    if sel >= ROWS then top = sel - ROWS + 1 end
   end
+end
+
+local function ask_chats()
+  chats, sel, top = nil, 0, 0
+  asked_at = assist(1) and frame.time.utc() or nil
 end
 
 function _M.start(info)
   state, lines, page = '', {}, 1
-  if info and info.arg then take(info.arg) end
+  if info and info.arg then
+    take(info.arg)
+  else
+    state = 'chats'
+    ask_chats()
+  end
 end
 
 function _M.tick()
+  if state == 'chats' and not chats
+     and (not asked_at or frame.time.utc() - asked_at > RETRY) then
+    ask_chats()
+  end
   if started then
     if not frame.bluetooth.is_connected() then
       finish()
@@ -172,13 +230,24 @@ function _M.on_tap()
   if started then
     finish()
     state = 'think'
+  elseif state == 'chats' and chats and sel > 0 then
+    assist(2, chats[sel][1])
+    state, lines, page = 'answer', { 'loading..' }, 1
   else
+    if state == 'chats' and chats then assist(3) end
     listen()
   end
   return screen()
 end
 
 function _M.on_roll(dir)
+  if state == 'chats' then
+    if not chats then return nil end
+    sel = math.max(0, math.min(sel + dir, #chats))
+    if sel < top then top = sel end
+    if sel > top + ROWS - 1 then top = sel - ROWS + 1 end
+    return chats_screen()
+  end
   page = math.max(1, page + dir)
   return screen()
 end
@@ -197,7 +266,7 @@ function _M.stop()
     started = nil
     send(string.char(REC_DROP))
   end
-  state = ''
+  state, chats = '', nil
 end
 
 return _M

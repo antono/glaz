@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../services/assistant.dart';
+import '../services/photos.dart';
 import '../services/speech.dart';
 import '../services/voice.dart';
 import '../services/services.dart';
 import '../theme.dart';
+import 'assistant_chat_screen.dart';
 
-/// The agent the glasses' Assistant asks, the language it hears, and what
-/// it was asked lately: on Assistant's page in the Menu tab, under its
+/// The agent the glasses' Assistant asks, the language it hears, and the
+/// chats with it: on Assistant's page in the Menu tab, under its
 /// settings for the glasses. Phone only: none of it goes to the glasses.
 class AssistantSettings extends StatefulWidget {
   const AssistantSettings({super.key});
@@ -22,7 +24,6 @@ class _AssistantSettingsState extends State<AssistantSettings> {
   late final _url = TextEditingController(text: _settings.agentUrl);
   late final _key = TextEditingController(text: _settings.agentKey);
   late final _model = TextEditingController(text: _settings.agentModel);
-  final _question = TextEditingController();
   bool _showKey = false;
 
   @override
@@ -36,15 +37,7 @@ class _AssistantSettingsState extends State<AssistantSettings> {
     _url.dispose();
     _key.dispose();
     _model.dispose();
-    _question.dispose();
     super.dispose();
-  }
-
-  void _ask() {
-    final q = _question.text.trim();
-    if (q.isEmpty) return;
-    _question.clear();
-    _assistant.ask(q);
   }
 
   @override
@@ -143,49 +136,7 @@ class _AssistantSettingsState extends State<AssistantSettings> {
           const SizedBox(height: 16),
           _ReadAloud(_assistant),
           const SizedBox(height: 16),
-          TextField(
-            controller: _question,
-            textInputAction: TextInputAction.send,
-            onSubmitted: (_) => _ask(),
-            decoration: InputDecoration(
-              labelText: 'Ask in writing',
-              helperText: 'As if said aloud; the answer goes to the glasses',
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.send),
-                onPressed: _ask,
-              ),
-            ),
-          ),
-          if (_assistant.state != AssistantState.idle)
-            Padding(
-              padding: const EdgeInsets.only(top: 16),
-              child: Row(
-                children: [
-                  const SizedBox.square(
-                    dimension: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      _assistant.state == AssistantState.listening
-                          ? 'Listening: ${_assistant.heard}'
-                          : 'Thinking...',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          if (_assistant.turns.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 24, 4, 8),
-              child: Text(
-                'Lately',
-                style: text.titleSmall?.copyWith(color: scheme.primary),
-              ),
-            ),
-            for (final t in _assistant.turns) _Turn(t),
-          ],
+          _Chats(_assistant),
         ],
       ),
     );
@@ -328,51 +279,76 @@ class _Language extends StatelessWidget {
   }
 }
 
-class _Turn extends StatelessWidget {
-  const _Turn(this.turn);
-  final AssistantTurn turn;
+/// The chats kept on the phone, the one asked last first: a tap goes on
+/// with one, from the phone and from the glasses.
+class _Chats extends StatelessWidget {
+  const _Chats(this.assistant);
+  final AssistantService assistant;
+
+  void _open(BuildContext context, AssistantChat? chat) {
+    if (chat == null) {
+      assistant.newChat();
+    } else {
+      assistant.open(chat);
+    }
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => AssistantChatScreen(chat)));
+  }
 
   @override
   Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              turn.question,
-              style: const TextStyle(color: FrameColors.skyBlue),
-            ),
-            for (final q in turn.queries)
-              Text(
-                'asked $q',
-                style: TextStyle(
-                  fontFamily: 'monospace',
-                  color: scheme.onSurfaceVariant,
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
+          child: Text('Chats', style: text.titleMedium),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
+          child: Text(
+            'The glasses ask in the chat picked here, or in a new one after '
+            '${AssistantService.forget.inMinutes} minutes of silence.',
+            style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+        ),
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.add_comment_outlined),
+                title: const Text('New chat'),
+                subtitle: const Text('Ask in writing, as if said aloud'),
+                onTap: () => _open(context, null),
               ),
-            const SizedBox(height: 6),
-            if (turn.error != null)
-              // selectable: an error is what one copies to ask about it
-              SelectableText(turn.error!, style: TextStyle(color: scheme.error))
-            else if (turn.answer == null)
-              const Text('...')
-            else ...[
-              if (turn.answer!.isNotEmpty) SelectableText(turn.answer!),
-              for (final c in turn.commands)
-                Text(
-                  '$c',
-                  style: TextStyle(
-                    fontFamily: 'monospace',
-                    color: scheme.onSurfaceVariant,
+              for (final c in assistant.chats)
+                ListTile(
+                  leading: Icon(
+                    c == assistant.current
+                        ? Icons.chat_bubble
+                        : Icons.chat_bubble_outline,
+                    color: FrameColors.skyBlue,
                   ),
+                  title: Text(
+                    c.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    '${stampLabel(c.lastAt)} · ${c.turns.length} '
+                    '${c.turns.length == 1 ? 'question' : 'questions'}'
+                    '${c == assistant.current ? ' · current' : ''}',
+                  ),
+                  onTap: () => _open(context, c),
                 ),
             ],
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }

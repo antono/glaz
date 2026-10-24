@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../frame/glyphs.dart';
 import '../frame/link.dart';
@@ -134,17 +137,109 @@ ${settings.agentFiles ? _queries() : ''}The apps on the glasses:
 $apps''';
 }
 
+/// Where the assistant's chats are kept: the app's own folder, as the
+/// settings.
+Future<Directory> assistantRoot() async =>
+    Directory('${(await getApplicationSupportDirectory()).path}/assistant');
+
+/// Something the agent asked the phone for on the way to its answer -- a
+/// photo, the photo list, a recording's transcript (agent_files.dart) --
+/// and the start of what it brought; [result] is null while it runs.
+class ToolCall {
+  ToolCall(this.command, [this.result]);
+  final GlassesCommand command;
+  String? result;
+
+  /// What is kept of a result: enough to see what came back.
+  static const kept = 300;
+
+  Map<String, Object?> toJson() => {
+    'name': command.name,
+    'arg': command.arg,
+    'result': result,
+  };
+
+  factory ToolCall.fromJson(Map<String, dynamic> j) => ToolCall(
+    GlassesCommand(j['name'] as String, j['arg'] as String? ?? ''),
+    j['result'] as String?,
+  );
+}
+
 /// One question and its answer, for the phone's screen.
 class AssistantTurn {
-  AssistantTurn(this.question);
+  AssistantTurn(this.question, {DateTime? at}) : at = at ?? DateTime.now();
   final String question;
-  final DateTime at = DateTime.now();
+  final DateTime at;
   String? answer;
   List<GlassesCommand> commands = const [];
 
   /// What the agent asked the phone for on the way.
-  List<GlassesCommand> queries = const [];
+  List<ToolCall> queries = const [];
   String? error;
+
+  Map<String, Object?> toJson() => {
+    'q': question,
+    'at': at.millisecondsSinceEpoch,
+    'answer': answer,
+    'commands': [
+      for (final c in commands) {'name': c.name, 'arg': c.arg},
+    ],
+    'queries': [for (final q in queries) q.toJson()],
+    'error': error,
+  };
+
+  factory AssistantTurn.fromJson(Map<String, dynamic> j) =>
+      AssistantTurn(
+          j['q'] as String,
+          at: DateTime.fromMillisecondsSinceEpoch(j['at'] as int),
+        )
+        ..answer = j['answer'] as String?
+        ..commands = [
+          for (final c in j['commands'] as List? ?? const [])
+            GlassesCommand(c['name'] as String, c['arg'] as String? ?? ''),
+        ]
+        ..queries = [
+          for (final q in j['queries'] as List? ?? const [])
+            ToolCall.fromJson(q as Map<String, dynamic>),
+        ]
+        ..error = j['error'] as String?;
+}
+
+/// One conversation with the agent: its questions and answers for the
+/// screen, oldest first, and the text the agent is sent of it.
+class AssistantChat {
+  AssistantChat(this.id);
+  final int id;
+  final turns = <AssistantTurn>[];
+
+  /// The last [AssistantService.keep] questions and answers, text only.
+  final history = <AgentMessage>[];
+
+  /// When it was last asked something.
+  DateTime get lastAt => turns.isEmpty ? DateTime(0) : turns.last.at;
+
+  String get title => turns.isEmpty ? 'New chat' : turns.first.question;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'turns': [for (final t in turns) t.toJson()],
+    'history': [
+      for (final m in history) {'role': m.role, 'content': m.content},
+    ],
+  };
+
+  factory AssistantChat.fromJson(Map<String, dynamic> j) {
+    final chat = AssistantChat(j['id'] as int);
+    chat.turns.addAll([
+      for (final t in j['turns'] as List)
+        AssistantTurn.fromJson(t as Map<String, dynamic>),
+    ]);
+    chat.history.addAll([
+      for (final m in j['history'] as List? ?? const [])
+        AgentMessage(m['role'] as String, m['content'] as String),
+    ]);
+    return chat;
+  }
 }
 
 enum AssistantState { idle, listening, thinking }
@@ -161,6 +256,7 @@ class AssistantService extends ChangeNotifier {
     Agent? Function(Settings)? agent,
     this.queries,
     this.voice,
+    this.dir,
   }) : _agentFor = agent ?? defaultAgent {
     link.events.listen(onMessage);
     link.addListener(() {
@@ -187,6 +283,9 @@ class AssistantService extends ChangeNotifier {
   /// Reads answers aloud, in headphones only; null where there is none.
   final Voice? voice;
 
+  /// Where the chats are kept, chats.json; null: not kept (tests).
+  final Directory? dir;
+
   /// Rounds of queries in one answer, at most: an agent that keeps asking
   /// gets its last answer shown.
   static const maxRounds = 3;
@@ -199,10 +298,15 @@ class AssistantService extends ChangeNotifier {
           model: s.agentModel,
         );
 
-  /// A conversation goes on while questions come within [forget] of each
-  /// other, the last [keep] questions and answers of it.
+  /// A chat goes on while questions come within [forget] of each other,
+  /// or of picking it on the phone; the agent is sent the last [keep]
+  /// questions and answers of it. The newest [chatsKept] chats are kept.
   static const forget = Duration(minutes: 10);
   static const keep = 6;
+  static const chatsKept = 50;
+
+  /// The newest this many are listed on the glasses.
+  static const glassesChats = 12;
 
   AssistantState state = AssistantState.idle;
 
@@ -250,11 +354,101 @@ class AssistantService extends ChangeNotifier {
   /// What is heard of the question being asked, as it is heard.
   String heard = '';
 
-  /// Newest first.
-  final turns = <AssistantTurn>[];
+  /// Every chat kept, the one asked last first.
+  final chats = <AssistantChat>[];
 
-  final _history = <AgentMessage>[];
+  /// The chat the next question goes to; null: a new one.
+  AssistantChat? current;
+
+  /// The current chat's questions and answers, oldest first.
+  List<AssistantTurn> get turns => current?.turns ?? const [];
+
   DateTime _lastAt = DateTime(0);
+  int _nextChat = 1;
+
+  File? get _file => dir == null ? null : File('${dir!.path}/chats.json');
+
+  /// The chats kept on the phone, read once at start.
+  Future<void> load() async {
+    final f = _file;
+    try {
+      if (f == null || !await f.exists()) return;
+      final j = jsonDecode(await f.readAsString()) as Map<String, dynamic>;
+      chats
+        ..clear()
+        ..addAll([
+          for (final c in j['chats'] as List)
+            AssistantChat.fromJson(c as Map<String, dynamic>),
+        ]);
+      _nextChat = j['next'] as int? ?? chats.length + 1;
+    } catch (e) {
+      glazLog(LogKind.assistant, 'chats not read: $e', problem: true);
+    }
+    notifyListeners();
+  }
+
+  /// Saves one after another, never two writing the file at once.
+  Future<void> _saving = Future.value();
+
+  /// Done when what was asked so far is on disk.
+  @visibleForTesting
+  Future<void> get saved => _saving;
+
+  void _save() => _saving = _saving.then((_) => _write());
+
+  Future<void> _write() async {
+    final f = _file;
+    if (f == null) return;
+    try {
+      await f.parent.create(recursive: true);
+      await f.writeAsString(
+        jsonEncode({
+          'next': _nextChat,
+          'chats': [for (final c in chats) c.toJson()],
+        }),
+      );
+    } catch (e) {
+      glazLog(LogKind.assistant, 'chats not saved: $e', problem: true);
+    }
+  }
+
+  /// [chat] goes on: the next question, from the glasses too, goes to it.
+  void open(AssistantChat chat) {
+    current = chat;
+    _lastAt = DateTime.now();
+    notifyListeners();
+  }
+
+  /// The next question starts a chat of its own.
+  void newChat() {
+    current = null;
+    notifyListeners();
+  }
+
+  /// Forgets [chat] for good.
+  void remove(AssistantChat chat) {
+    chats.remove(chat);
+    if (current == chat) current = null;
+    notifyListeners();
+    _save();
+  }
+
+  /// The chat a question asked [now] goes to: the current one, unless
+  /// nothing was asked or picked for [forget].
+  AssistantChat _chatAt(DateTime now) {
+    var chat = current;
+    if (chat == null || now.difference(_lastAt) > forget) {
+      chat = current = AssistantChat(_nextChat++);
+    }
+    _lastAt = now;
+    chats
+      ..remove(chat)
+      ..insert(0, chat);
+    while (chats.length > chatsKept) {
+      chats.removeLast();
+    }
+    return chat;
+  }
 
   int _turn = 0;
   Transcription? _transcription;
@@ -288,6 +482,8 @@ class AssistantService extends ChangeNotifier {
         if (_transcription == null) return;
         _add(m.sublist(1));
         _heardAll();
+      case assist:
+        _onAssist(m);
       case recDrop:
         // the wearer went back: nothing is asked, an answer on its way is
         // thrown away, and one being read stops
@@ -300,6 +496,50 @@ class AssistantService extends ChangeNotifier {
         glazLog(LogKind.assistant, 'dropped on the glasses');
         notifyListeners();
     }
+  }
+
+  /// The glasses' Assistant lists the chats, goes on with one, or starts
+  /// a new one (`ASSIST`, docs/PROTOCOL.md, "Assistant").
+  void _onAssist(List<int> m) {
+    final op = m.length > 1 ? m[1] : 0;
+    final id = m.length > 3 ? m[2] << 8 | m[3] : 0;
+    switch (op) {
+      case 1:
+        link.callModule('assistant', 'c:${glassesList()}');
+      case 2:
+        final chat = chats.where((c) => c.id == id).firstOrNull;
+        if (chat == null) {
+          link.callModule('assistant', 'e:This chat is gone');
+          return;
+        }
+        open(chat);
+        link.callModule('assistant', 'a:${lastOnGlasses(chat)}');
+      case 3:
+        newChat();
+    }
+  }
+
+  /// The chats as the glasses list them: the id of the one still going
+  /// on (0: none), then a line `id|title` each, the title cut to a row.
+  @visibleForTesting
+  String glassesList() {
+    final live = current != null && DateTime.now().difference(_lastAt) <= forget
+        ? current!.id
+        : 0;
+    final out = StringBuffer('$live');
+    for (final c in chats.take(glassesChats)) {
+      var title = forGlasses(c.title).replaceAll(RegExp(r'[\s|]+'), ' ');
+      if (title.length > 24) title = '${title.substring(0, 22)}..';
+      out.write('\n${c.id}|$title');
+    }
+    return out.toString();
+  }
+
+  /// A chat's last question and answer, for the glasses' screen.
+  static String lastOnGlasses(AssistantChat chat) {
+    if (chat.turns.isEmpty) return 'tap = ask';
+    final t = chat.turns.last;
+    return wrapForGlasses('"${t.question}"\n${t.error ?? t.answer ?? '...'}');
   }
 
   void _listen(int bits, int rate) {
@@ -365,16 +605,18 @@ class AssistantService extends ChangeNotifier {
 
   /// Asks the agent [question] as if it had been said: from the phone's
   /// screen, to try the agent without the glasses.
-  Future<void> ask(String question) {
+  /// With [chat], it goes on.
+  Future<void> ask(String question, {AssistantChat? chat}) {
     _drop();
+    if (chat != null) open(chat);
     return _ask(question, ++_turn);
   }
 
   Future<void> _ask(String question, int turn) async {
     glazLog(LogKind.assistant, 'asked: $question');
+    final chat = _chatAt(DateTime.now());
     final t = AssistantTurn(question);
-    turns.insert(0, t);
-    if (turns.length > 20) turns.removeLast();
+    chat.turns.add(t);
     heard = '';
     state = AssistantState.thinking;
     notifyListeners();
@@ -385,9 +627,6 @@ class AssistantService extends ChangeNotifier {
       _fail(t, turn, 'Set up the agent: Glaz > Menu > Assistant');
       return;
     }
-    final now = DateTime.now();
-    if (now.difference(_lastAt) > forget) _history.clear();
-    _lastAt = now;
 
     // the agent's queries answered, until it answers the wearer
     final talk = [AgentMessage('user', question)];
@@ -396,7 +635,7 @@ class AssistantService extends ChangeNotifier {
       try {
         reply = await agent.ask([
           AgentMessage('system', systemPrompt(settings)),
-          ..._history,
+          ...chat.history,
           ...talk,
         ]);
       } catch (e) {
@@ -409,9 +648,16 @@ class AssistantService extends ChangeNotifier {
           if (queries?.handles(c.name) ?? false) c,
       ];
       if (asked.isEmpty || round == maxRounds) break;
-      t.queries = [...t.queries, ...asked];
+      final calls = [for (final c in asked) ToolCall(c)];
+      t.queries = [...t.queries, ...calls];
       notifyListeners();
-      final results = [for (final c in asked) await queries!.run(c)];
+      final results = <QueryResult>[];
+      for (final call in calls) {
+        final r = await queries!.run(call.command);
+        results.add(r);
+        call.result = _brief(r);
+        notifyListeners();
+      }
       if (turn != _turn) return;
       talk
         ..add(AgentMessage('assistant', reply))
@@ -423,12 +669,12 @@ class AssistantService extends ChangeNotifier {
           ),
         );
     }
-    _history
+    final history = chat.history
       ..addAll([for (final m in talk) m.textOnly])
       ..add(AgentMessage('assistant', reply));
-    while (_history.length > 2 * keep ||
-        (_history.isNotEmpty && _history.first.role != 'user')) {
-      _history.removeAt(0);
+    while (history.length > 2 * keep ||
+        (history.isNotEmpty && history.first.role != 'user')) {
+      history.removeAt(0);
     }
 
     glazLog(LogKind.assistant, 'answered: $reply');
@@ -442,6 +688,7 @@ class AssistantService extends ChangeNotifier {
       ..commands = commands;
     state = AssistantState.idle;
     notifyListeners();
+    _save();
     final opened = await run(commands);
     if (!opened) _show('a:', text.isEmpty ? 'OK' : text);
     await _say(text);
@@ -469,7 +716,18 @@ class AssistantService extends ChangeNotifier {
     t.error = why;
     state = AssistantState.idle;
     notifyListeners();
+    _save();
     _show('e:', why);
+  }
+
+  /// What the screen keeps of a query's result: its text, photos counted.
+  static String _brief(QueryResult r) {
+    var text = r.text.trim();
+    if (text.length > ToolCall.kept) {
+      text = '${text.substring(0, ToolCall.kept)}...';
+    }
+    final n = r.images.length;
+    return n == 0 ? text : '$text (${n == 1 ? 'a photo' : '$n photos'})';
   }
 
   /// [text] on the glasses, in the Assistant module, put on screen for it.

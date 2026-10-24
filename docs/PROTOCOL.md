@@ -417,6 +417,7 @@ Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 | `0x07` | photo chunk | `[0x07, jpeg bytes...]` | part of a photo (Camera module) |
 | `0x08` | photo end | `[0x08]` | last chunk; the photo is complete |
 | `0x1F` | `REC_START` | `[0x1F, bits, rate / 1000, for]` | Recorder starts a recording — see [Recorder](#recorder); `for` = `1`: the Assistant listening, see [Assistant](#assistant); `2`: Translate listening, see [Translate](#translate). Any `for` but `0` (or none) is not a recording |
+| `0x04` | `ASSIST` | `[0x04, op, id (2)]` | Assistant lists the chats (`1`), goes on with chat `id` (`2`) or starts a new one (`3`) -- see [Assistant](#assistant) |
 | `0x10` | `REC_DROP` | `[0x10]` | Assistant was left mid-question (a double tap): forget it, ask nothing, drop an answer on its way — see [Assistant](#assistant) |
 | `0x05` | audio chunk | `[0x05, samples...]` | part of a recording |
 | `0x06` | audio end | `[0x06, samples...]` | last part; the recording is complete |
@@ -694,8 +695,14 @@ comes, with ML Kit as for recordings but in a language of its own (Glaz >
 Menu > Assistant; the recordings' until one is picked), and asks the agent: any server with
 the OpenAI chat completions API -- Hermes Agent's API server on the user's
 tailnet, model `hermes-agent` -- set in Glaz > Menu > Assistant. The phone
-keeps the conversation, the last six questions and answers, and starts a new
-one after ten minutes of silence. Hermes runs its own tools on its own host
+keeps the chats, the newest 50, in its own folder (`assistant/chats.json`)
+and lists them under Glaz > Menu > Assistant, Chats; a tap opens one to
+read and to go on with in writing, and the glasses' next question goes to
+it too. The glasses list them as well (below). The agent is sent the last six questions and answers of a chat; a
+question after ten minutes of silence, without a chat picked, starts a new
+one. What the agent asked the phone for (the queries below) shows in the
+chat as tool calls of their own, in orange, with the start of what they
+brought. Hermes runs its own tools on its own host
 and does not hand tool calls back, so what the glasses can do comes as
 commands in the answer, each on a line of its own:
 
@@ -737,6 +744,17 @@ module takes in `start()` or `remote()`:
 | `a:text` | the answer |
 | `e:text` | went wrong: no agent set up, no answer, nothing heard |
 | `listen` | listen again |
+| `c:live` | the chats, then `\nid\|title` each, newest 12, titles cut to a row; `live` the id of the chat still going on (asked or picked within ten minutes), `0` for none (`MODULE_CALL`) |
+
+**Chats on the glasses.** Opened from the menu, Assistant first lists the
+chats: `New chat`, then the phone's chats, newest first, the cursor on the
+one still going on, else on `New chat`. It asks with `ASSIST` (`0x04`),
+`>BBI2`: op, id -- `1` the list (again every 5 s until it comes), `2` go
+on with chat `id`: the phone makes it the current chat and answers `a:`
+with its last question and answer, and the next tap asks in it; `3` a new
+chat, sent just before `REC_START` when the wearer taps `New chat`, so
+that tap listens at once. Opened by the phone with an argument, Assistant
+skips the list.
 
 Text is what the font has, as for notifications, in lines of at most 26 characters,
 24 lines at most. Five fit on screen (`_M.rows`); a longer answer shows four

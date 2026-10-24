@@ -79,6 +79,7 @@ class Services {
     Directory? photoDir,
     Directory? recordingDir,
     Directory? readerDir,
+    Directory? assistantDir,
   }) async {
     final s = settings ?? await Settings.load();
     final link = FrameLink();
@@ -110,6 +111,7 @@ class Services {
         Transcriber.platform,
         queries: GlazFiles(link, s, photos, recordings, transcripts),
         voice: Voice.platform,
+        dir: assistantDir ?? await assistantRoot(),
       ),
       TranslateService(
         link,
@@ -127,6 +129,7 @@ class Services {
       AppCheck(link, s),
     );
     await services.reader.load();
+    await services.assistant.load();
     LuaBridge(s, services.lua);
     SettingsSync(link, s);
     services.keys.attach();

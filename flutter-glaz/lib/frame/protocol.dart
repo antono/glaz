@@ -57,6 +57,10 @@ const noticesGet = 0x0E;
 /// 3, 4 reserved (phone microphone, photo)
 const translate = 0x0F;
 
+/// modules/assistant.lua: [op, id (2)] -- op 1 the chats, 2 go on with
+/// chat id, 3 a new chat
+const assist = 0x04;
+
 /// modules/flipper.lua: [1] show the Flipper, [0] stop, [2, seq] frame taken
 const flipper = 0x0B;
 
