@@ -469,6 +469,27 @@ extension; the file mapping lives in `studio/.brilliant/device-files.json`
 To stop a running app and get the live REPL back, send the break signal
 (`0x03`).
 
+### Restart
+
+An error the app does not catch ends it, and the link stays up: the phone
+shows the glasses connected, but nothing answers taps, the remote or the
+phone, and the firmware puts "Frame is paired" on screen (or the screen
+stays dark). An error in a tap or Bluetooth callback does the same: the
+firmware raises it again in whatever Lua was running, the app's main loop.
+
+So the loader, `app/glaz_boot.lua`, starts the app again. The main loop
+passes on every error but the break signal (`frame_app.lua`, the end of
+`app_loop`); the loader then drops the globals the app set and its tap
+and Bluetooth callbacks, so the old app is freed before the new one
+loads, prints the error (the phone's Log, Glasses, has it), keeps it in
+`crash.txt` on the glasses (`<utc> <error>`, the last one only), shows
+"restarted" for a second and starts the app. More than three restarts in
+a minute and it stops there, as before: an app that fails on start would
+only fail again. After a break signal there is no restart.
+
+Restarting hides a bug; it does not fix it. Look for the error in the Log
+or `crash.txt`.
+
 ---
 
 ## Known gotchas
@@ -513,7 +534,7 @@ To stop a running app and get the live REPL back, send the break signal
 frame_app.lua      the application that runs on the glasses (uploaded as main.lua)
 modules/           one Lua file per menu item
 host_test.py       reference host: uploads everything, then listens
-check.sh           syntax and ASCII checks, no device needed
+check.sh           syntax, ASCII and unknown-global checks, no device needed
 docs/              FRAME.md, PLATFORM.md, PROTOCOL.md
 utils/             diagnostics, run individually as needed
   connect.py         smoke test: connect, report hardware, draw text

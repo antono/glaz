@@ -1762,13 +1762,18 @@ function app_loop()
       end
     end)
 
-    -- the host's break signal also lands here -- exit cleanly
+    -- the host's break signal also lands here -- exit cleanly. Any other
+    -- error goes on up, after the same cleanup: glaz_boot.lua starts the
+    -- app again (docs/FRAME.md, "Restart").
     if rc == false then
       pcall(stop_app, true, true)
       if bg then pcall(quit, bg) end
-      print(err)
       frame.display.text(' ', LEFT_X, TOP_Y)
       show()
+      if not string.find(tostring(err), 'break signal', 1, true) then
+        error(err, 0)
+      end
+      print(err)
       break
     end
   end

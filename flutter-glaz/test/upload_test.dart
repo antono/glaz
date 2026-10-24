@@ -18,7 +18,7 @@ void main() {
     expect(names, isNot(contains('weather.lua'))); // switched off
     // the app, then main.lua, which loads it
     expect(names.sublist(names.length - 2), [appFile, 'main.lua']);
-    expect(files.last.$2, contains("require('glaz_app')"));
+    expect(files.last.$2, contains("pcall(require, 'glaz_app')"));
     expect(names, isNot(contains('glaz_boot.lua')));
     final app = files[files.length - 2].$2;
     expect(app, contains('function app_loop()'));
