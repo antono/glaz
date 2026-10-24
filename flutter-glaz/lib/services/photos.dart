@@ -192,6 +192,7 @@ class PhotoService extends ChangeNotifier {
         _from = 0;
         final at = _now();
         if (!settings.serviceOn('photos')) return;
+        if (from == photoForTranslate) return; // Translate reads it
         // one at a time, in the order they came
         _saving = _saving.then((_) => _save(jpeg, from, at)).catchError((_) {});
     }

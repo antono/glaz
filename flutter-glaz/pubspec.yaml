@@ -4,7 +4,7 @@ publish_to: 'none'
 
 # Shown in the About tab too: keep lib/screens/about_screen.dart in step
 # (test/version_test.dart checks it).
-version: 3.13.0+50
+version: 3.14.0+51
 
 environment:
   sdk: ^3.13.3
@@ -18,6 +18,9 @@ dependencies:
   flutter_secure_storage: ^11.2.0
   frame_ble: ^3.0.0
   geolocator: ^14.1.1
+  google_mlkit_language_id: ^0.15.1
+  google_mlkit_text_recognition: ^0.17.1
+  google_mlkit_translation: ^0.15.1
   http: ^1.6.0
   # photos for the assistant's agent are turned upright with it: models do
   # not read Exif (services/agent_files.dart)

@@ -58,6 +58,12 @@ The menu has these apps:
 - **Apps**
   - **Assistant**: ask a question out loud and read the answer on the
     glasses. The answer is also read aloud, but only through headphones.
+  - **Translate**: what the other person says, translated, as it is
+    said. The phone hears it and translates it on its own, with no
+    Internet once the languages are downloaded. New lines scroll in by
+    themselves; tilt to read back, tap to pause. Or pick Photo: a tap
+    takes a photo, and the text on it is translated into the same lines
+    (Latin, Chinese, Japanese, Korean and Devanagari; not Cyrillic).
   - **Notifications**: your phone's notifications, newest first. Tilt to
     pick one, tap to read all of it. The phone keeps the list.
   - **Gemini**: a browser for Gemini, the small text-only web. Its home
@@ -100,6 +106,8 @@ iOS and macOS builds are in the code but need Xcode.
   recordings.
 - **Assistant**: works with any server that speaks the OpenAI chat API.
   The assistant can open apps on the glasses for you.
+- **Translate**: the languages to translate from and into, and whether
+  the original text is shown too.
 - **Remote**: control the glasses from the phone screen.
 - **Services** the phone does for the glasses: setting the clock,
   sending notifications, internet access and location.

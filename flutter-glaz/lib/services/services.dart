@@ -23,6 +23,7 @@ import 'recordings.dart';
 import 'speech.dart';
 import 'term.dart';
 import 'transcripts.dart';
+import 'translate.dart';
 import 'voice.dart';
 
 /// The app's long-lived parts, made once at startup.
@@ -39,6 +40,7 @@ class Services {
     this.transcripts,
     this.keys,
     this.assistant,
+    this.translate,
     this.lua,
     this.flipper,
     this.reader,
@@ -59,6 +61,7 @@ class Services {
   final TranscriptService transcripts;
   final KeyRemote keys;
   final AssistantService assistant;
+  final TranslateService translate;
   final GlassesLua lua;
   final FlipperMirror flipper;
   final FlipperRemote flipperRemote;
@@ -107,6 +110,13 @@ class Services {
         Transcriber.platform,
         queries: GlazFiles(link, s, photos, recordings, transcripts),
         voice: Voice.platform,
+      ),
+      TranslateService(
+        link,
+        s,
+        Transcriber.platform,
+        Translator.platform,
+        reader: PhotoReader.platform,
       ),
       lua,
       FlipperMirror(link, s),

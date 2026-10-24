@@ -65,6 +65,13 @@ void main() {
     expect((upright.width, upright.height), (2, 4));
   });
 
+  test('a photo for Translate is not kept', () async {
+    receive(255);
+    await photos.flush();
+    expect(await photos.store.days(), isEmpty);
+    expect(photos.received, 0);
+  });
+
   testWidgets('Flutter shows the photo turned, as Exif says', (tester) async {
     // left half black, right half white: turned counterclockwise, the
     // white half is on top

@@ -132,8 +132,9 @@ Reader draws its word that way.
   over, which would leave the app without taps.
 - `remote(arg)` — the phone calls the module (`MODULE_CALL`, see
   [Recorder](#recorder)), `arg` a string whose meaning is the module's. A
-  module not running is started into the background for it. Recorder's is
-  the phone's record button: `'on'` / `'off'`.
+  background module not running is started into the background for it; a
+  sleeping one is called only while it runs. Recorder's is the phone's
+  record button: `'on'` / `'off'`.
 
 **Drawing and pace (optional, `app` modules).**
 
@@ -401,12 +402,13 @@ Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 | `0x17` | `MENU_LEVEL` | `[0x17, depth]` | entered a submenu or went up; root is 1 |
 | `0x18` | `APP_BACKGROUND` | `[0x18, index]` | module `index` left the screen but keeps running |
 | `0x19` | `NET_REQUEST` | `[0x19, id, more, bytes...]` | part of a module's HTTP request — see [Host services](#host-services) |
-| `0x1A` | `PHOTO_FROM` | `[0x1A, series]` | the next photo is a single shot (`0`) or part of series `series` — see [Photos](#photos) |
+| `0x1A` | `PHOTO_FROM` | `[0x1A, series]` | the next photo is a single shot (`0`), part of series `series`, or Translate's to read (`255`, not kept) — see [Photos](#photos), [Translate](#translate) |
 | `0x1B` | `STATUS` | `[0x1B, battery, version...]` | answer to `STATUS_GET` — see [Status](#status) |
 | `0x1C` | `LOCATION_GET` | `[0x1C, id, module...]` | a module asks where the phone is — see [Location](#location) |
 | `0x1D` | `FILES` | `[0x1D, id, more, bytes...]` | a folder listing, in packets — see [Files](#files) |
 | `0x1E` | `FILE_DATA` | `[0x1E, id, more, bytes...]` | a file's contents, in packets — see [Files](#files) |
 | `0x0D` | `GEM_GET` | `[0x0D, op, page, n (2), top (2)]` | Gemini opens a link or wants lines -- see [Gemini](#gemini) |
+| `0x0F` | `TRANSLATE` | `[0x0F, op, sess, from (2), count]` | Translate opens or closes its session, wants lines or the tail -- see [Translate](#translate) |
 | `0x0E` | `NOTICES_GET` | `[0x0E, op, n (4)]` | the notification list or one of them -- see [Notifications](#notifications) |
 | `0x0A` | `TEXT_GET` | `[0x0A, place, from, count, wpm, text]` | Reader wants words, or says where it is -- see [Reader](#reader) |
 | `0x09` | `LUA_RESULT` | `[0x09, id, more, bytes...]` | what `LUA_EVAL`'s Lua printed and returned, or its error, in packets — see [Lua console](#lua-console) |
@@ -414,7 +416,7 @@ Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 | `0x0C` | `TERM` | `[0x0C, 1, cols, rows]` / `[0x0C, 0]` / `[0x0C, 2, seq]` | Terminal: start a shell this size, stop, frame `seq` taken — see [Terminal](#terminal) |
 | `0x07` | photo chunk | `[0x07, jpeg bytes...]` | part of a photo (Camera module) |
 | `0x08` | photo end | `[0x08]` | last chunk; the photo is complete |
-| `0x1F` | `REC_START` | `[0x1F, bits, rate / 1000, for]` | Recorder starts a recording — see [Recorder](#recorder); `for` = `1`: the Assistant listening, see [Assistant](#assistant) |
+| `0x1F` | `REC_START` | `[0x1F, bits, rate / 1000, for]` | Recorder starts a recording — see [Recorder](#recorder); `for` = `1`: the Assistant listening, see [Assistant](#assistant); `2`: Translate listening, see [Translate](#translate). Any `for` but `0` (or none) is not a recording |
 | `0x10` | `REC_DROP` | `[0x10]` | Assistant was left mid-question (a double tap): forget it, ask nothing, drop an answer on its way — see [Assistant](#assistant) |
 | `0x05` | audio chunk | `[0x05, samples...]` | part of a recording |
 | `0x06` | audio end | `[0x06, samples...]` | last part; the recording is complete |
@@ -663,7 +665,10 @@ one already in the library).
 its `remote(arg)` where it is: on screen, in the background, or -- not
 running -- started straight into the background, so the screen stays as it
 was (another background module is stopped for it: there is only one). A
-module without `remote()` is not called. Recorder takes `on` and `off`. The sound comes back exactly as for a
+module without `remote()` is not called, nor a sleeping one (no
+`_M.background`) that is not running: it would be stopped right after,
+and the background module with it -- for a reply already on its way when
+the wearer left it. Recorder takes `on` and `off`. The sound comes back exactly as for a
 tap. The phone shows the state the glasses report, not the one it asked
 for: red from `REC_START` to `0x06` (or a disconnect), the button and a strip
 over every screen with the time, a tap on the strip stops it; the glasses
@@ -751,6 +756,181 @@ the glasses' screen only (`android/.../Voice.kt`).
 `APP_OPEN` brings Assistant back to the screen for the answer even if the
 wearer went elsewhere meanwhile. An answer to a question that was asked
 again in between is dropped.
+
+### Translate
+
+Translate (`modules/translate.lua`) shows, translated, what the other
+person says. The glasses stream their microphone as Assistant's do; the
+phone (`flutter-glaz/lib/services/translate.dart`) hears it with ML Kit
+in the speaker's language, translates each finished sentence with ML Kit
+on-device translation, and keeps the whole log. One direction only: the
+other speaker, into the wearer's language. The glasses hold a few lines
+of the log and ask for others as they scroll, as Gemini does.
+
+On entry it asks **Voice** or **Photo**. The pick is kept on the glasses,
+as a pref (`_M.host.pref('mode')`, app/glaz_host.lua): modules are
+unloaded when they stop, so a local would be lost. Nothing about the
+mode goes over the wire.
+
+| Gesture | Chooser | Voice | Photo |
+| --- | --- | --- | --- |
+| tilt right / left | the next / previous mode | a screen down / up, less one line; down at the end follows again | the same |
+| tap | pick | pause / go on listening | take a photo to translate |
+| double tap | leave | leave: end the sound, close the session | leave: the camera off, close the session |
+
+**Photo.** A tap takes a photo as the phone's remote does
+(`app/glaz_photo.lua`, loaded for it alone): 720 px, quality HIGH, 1.5 s
+of auto exposure, the loop waiting meanwhile. Its `PHOTO_FROM` is
+`[0x1A, 255]`: Photos does not keep it, Translate reads it. The phone
+finds the blocks of text on it (ML Kit text recognition), tells their
+language (ML Kit language identification; the speaker's, setting
+`from`, when it cannot), and puts them in the same log: an info line
+`photo de > ru 14:07`, then each block as one piece, translated as a
+sentence heard is. No text: `photo 14:07: no text`. The status row says
+`reading photo..` meanwhile. ML Kit reads Latin, Chinese, Devanagari,
+Japanese and Korean, not Cyrillic; the script is picked by the speaker's
+language (Latin unless it is one of the others, which read Latin too).
+The camera stays on while Photo is open and goes off when Translate
+closes.
+
+**Screen.** Four rows of the log and a status row under them, not five
+rows: the top bar is `frame_app.lua`'s, so the module has nowhere else
+for where it is and whether it listens. The status reads `12/137
+listening`: the last line on screen of all there are, then `listening`,
+`paused` or the phone's status text; `^` after it when not following,
+`lost N K` when the link dropped sound. While listening `_M.rec` is true
+(the red dot in the top bar) and the module is `busy()`, so `APP_TIMEOUT`
+does not close it; it pauses itself after 30 minutes.
+
+**Following.** On entry the glasses follow the tail: new lines scroll in
+by themselves. A tilt up leaves following and scrolls back; a tilt down
+on the last screen follows again.
+
+`TRANSLATE` (`0x0F`) is always 6 bytes, the code included, `>BBBI2B`:
+code, op, sess, from, count. `sess` is the log session the glasses hold, 1 to 255,
+`0` before the first answer.
+
+| op | Means | The phone |
+| --- | --- | --- |
+| `0` | close: the wearer left (`stop()`) | sends nothing more until op 1 or 2; what is still being heard goes into the log |
+| `1` | lines `from` .. `from + count - 1` (count 1 to 16); leaves following | answers `w:` with `f = 0`; a `sess` not its own gets the tail instead, `f = 1`, and follows |
+| `2` | the last `count` lines, and follow | answers `w:` with `f = 1`, then pushes as the log grows |
+| `3` | reserved: start or stop the phone's own microphone (`[3, on]`, a `mic` setting) | ignored for now |
+| `4` | reserved | ignored; a photo comes as `PHOTO_FROM 255`, above |
+
+The sound is Recorder's: `REC_START` `[0x1F, bits, 8, 2]` -- the fourth
+byte `2` is Translate -- then `0x05` chunks, `0x06` at a pause. `bits`
+is Glaz > Menu > Translate's Quality, 16 unless 8. The glasses never send
+`REC_DROP` from Translate: the Assistant takes it as its own and stops
+its voice. Entering Voice sends `TRANSLATE [2, sess, 0, 4]` and then
+`REC_START`; a pause sends `0x06`, and what was heard still arrives,
+translated; going on sends `REC_START` again. Leaving sends `0x06` if
+listening, then `TRANSLATE [0, ...]`. A `REC_START` with another `for`
+makes the phone stop hearing for Translate, and Translate's drops a
+question the Assistant is still hearing: its sound would go there too.
+
+The phone answers with `MODULE_CALL` `translate` and one of:
+
+| Argument | Means |
+| --- | --- |
+| `w:<sess>:<from>:<total>:<f>` then `\n<K>\|<text>` per line | lines from number `from`, at most `count` (16), as many as fit in 900 bytes; `total` counts the partial line too; `f` `1` a tail answer or push, `0` an answer to op 1. An empty log is `w:1:0:0:1` |
+| `n:<sess>:<total>` | how many lines there are, while open and not following |
+| `s:<text>` | the status row's text, 30 characters at most; empty clears it |
+| `x:<text>` | as `s:`, and the phone no longer hears: the glasses stop the microphone, as a pause does |
+
+Status texts: `downloading en>ru..`, `speech en 40%`; with `x:`
+`Translate is off on phone`, `no speech recognition`, `no speech for
+de`, a missing permission, `recognition failed`. A `sess` other than
+the one held makes the glasses drop their lines and follow the tail. A
+push (`f = 1`) that comes when they no longer follow only updates
+`total`; an `f = 0` answer to a request they no longer wait on is
+dropped. An `n:` while they follow means the phone missed op 2: they
+send it again. An `n:` while they read back drops the lines they hold
+from the first `P` on, and those past `total`: those change, so the
+screen asks for them again. They ask again after 5 s without an answer,
+and at once when the link is back after a drop: the phone forgets the
+session and the sound on a disconnect, so the glasses ask for the tail
+(or the lines on screen) and, if listening, send `REC_START` again.
+
+The phone starts recognition once the microphone permission and the
+speech model are there, keeping up to 2 s of the sound that comes
+meanwhile; a translation model still downloading only holds the
+sentences back. Recognition that ends by itself starts again, at most
+once every 2 s; three runs in a row that went wrong, or ended within a
+second, having heard nothing, give up with `x:recognition failed`. A
+sentence is translated in the pair it was heard in, even when the
+wearer changed the languages since.
+
+| K | Line | Colour |
+| --- | --- | --- |
+| `T` | translation | white |
+| `S` | the original, only with Original text shown | grey |
+| `P` | still being heard, or heard and not yet translated; always last | grey |
+| `I` | a separator, `en > ru 14:07`, on the first sentence, a new pair or after 10 minutes of silence | sky blue |
+| `E` | an error, `not translated: no en>ru model` | red |
+
+The glasses split a line on its first `|` only. The phone has already
+put the text through what the font has, as for notifications, and wrapped
+it to 530 px with the firmware's glyph widths, as Gemini's lines. A
+partial result is shown as its last wrapped line only and never
+translated; sentences are translated in the order they were heard, and
+only lines after the first untranslated one ever change. A log over 5000
+lines loses its oldest 1000 and starts a new session.
+
+**Pace.** A `w:` push at most every 350 ms while following, the latest
+log winning (under 3 a second); an `n:` at most once a second; `s:` only
+when it changes. Answers to requests go at once. A line is at most about
+123 bytes (58 narrow Cyrillic glyphs of two bytes, and `K|\n`), so the
+four-line tail always fits in 900. `link.dart` keeps its 200 ms between
+messages of one code and waits for each packet's ack.
+
+**Nothing unasked.** The phone sends Translate nothing unless the glasses
+have its session open: from op 1 or 2 until op 0 or a disconnect. A
+push already queued when op 0 comes still goes out; Translate is a
+sleeping module, so `frame_app.lua` drops a `MODULE_CALL` to it once it
+has stopped, and the background module runs on. `start()` sends nothing
+and ignores `info.arg`; the module asks only on the wearer's gestures and from
+`tick()`.
+
+**Settings** (Glaz > Menu > Translate):
+
+| Key | Default | Is |
+| --- | --- | --- |
+| `from` | `en` | Speaker language: the language the other person speaks |
+| `to` | `ru` | Translate into |
+| `bits` | `16` | Quality: `8` or `16` bit sound |
+| `source` | `off` | Original text: `on` shows it dimmed above each translation |
+
+`from` is every language both speech recognition (`speechLanguages`) and
+ML Kit Translation have; `to` only those the glasses' font draws --
+ASCII, Latin-1, Cyrillic. Vietnamese would lose its marks, the others
+would be `?`.
+
+| Value | Speech | ML Kit | Language | In `to` |
+| --- | --- | --- | --- | --- |
+| `en` | `en-US` | `en` | English | yes |
+| `ru` | `ru-RU` | `ru` | Russian | yes |
+| `de` | `de-DE` | `de` | German | yes |
+| `fr` | `fr-FR` | `fr` | French | yes |
+| `es` | `es-ES` | `es` | Spanish | yes |
+| `it` | `it-IT` | `it` | Italian | yes |
+| `pt` | `pt-BR` | `pt` | Portuguese | yes |
+| `pl` | `pl-PL` | `pl` | Polish | yes |
+| `tr` | `tr-TR` | `tr` | Turkish | yes |
+| `vi` | `vi-VN` | `vi` | Vietnamese | no: marks lost |
+| `hi` | `hi-IN` | `hi` | Hindi | no |
+| `ja` | `ja-JP` | `ja` | Japanese | no |
+| `ko` | `ko-KR` | `ko` | Korean | no |
+| `zh` | `cmn-Hans-CN` | `zh` | Chinese, simplified | no |
+| `zh-TW` | `cmn-Hant-TW` | `zh` | Chinese, traditional | no |
+
+ML Kit's models live on the phone: a speech model for `from` and a
+translation model for each language of the pair, downloaded when first
+needed, over any network, not only Wi-Fi. Meanwhile the status says so,
+and a sentence that cannot be translated shows as its original and an
+`E` line. Once they are there, nothing goes to the Internet. Translate
+is a service of its own (Services), on by default; off, the glasses say
+`Translate is off on phone`. On the Linux desktop there is no ML Kit.
 
 ### Reader
 

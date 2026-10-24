@@ -275,6 +275,12 @@ class AssistantService extends ChangeNotifier {
             m.length > 1 && m[1] == 16 ? 16 : 8,
             m.length > 2 && m[2] > 0 ? m[2] * 1000 : 8000,
           );
+        } else if (_transcription != null) {
+          // the sound that follows is another app's (Translate): not to
+          // be heard as a question
+          _drop();
+          state = AssistantState.idle;
+          notifyListeners();
         }
       case audioChunk:
         _add(m.sublist(1));

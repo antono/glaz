@@ -3,6 +3,8 @@
 -- docs/PROTOCOL.md, "Remote".
 --
 -- idle: nothing else uses the camera, so it goes off again after.
+-- from: PHOTO_FROM's byte, 0 when not given: a single shot. Translate
+-- passes 255, so the phone reads the photo rather than files it.
 -- A photo for the phone's remote, the way modules/photo.lua takes one: the
 -- camera library loaded just for it (modules load only while in use, and so
 -- does this), auto exposure given time to settle, and PHOTO_FROM 0 first so
@@ -11,7 +13,7 @@
 local QUALITIES = { 'VERY_LOW', 'LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH' }
 local PHOTO_WARMUP = 1.5
 
-return function(size, quality, idle, release_hardware)
+return function(size, quality, idle, release_hardware, from)
   if not frame.bluetooth.is_connected() then return end
   local ok, camera = pcall(require, 'camera.min')
   if not ok or type(camera) ~= 'table' then return end
@@ -23,7 +25,7 @@ return function(size, quality, idle, release_hardware)
     frame.sleep(0.1)
   end
   for _ = 1, 50 do
-    if pcall(frame.bluetooth.send, string.char(0x1A, 0)) then break end
+    if pcall(frame.bluetooth.send, string.char(0x1A, from or 0)) then break end
     frame.sleep(0.01)
   end
   pcall(camera.capture_and_send, { resolution = size, pan = 0, raw = false,

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'services/translate.dart';
+
 /// What happens when an item is picked on the glasses (docs/PROTOCOL.md).
 enum ModuleKind {
   /// Shows one value, then clears itself after a few seconds.
@@ -202,6 +204,51 @@ const glassesMenu = <MenuSection>[
           ['8', '16'],
           optionLabels: ['8 bit', '16 bit, heard better'],
           help: '16 bit sends twice as much; on a busy link some is lost.',
+        ),
+      ],
+    ),
+    GlassesModule(
+      'translate',
+      'Translate',
+      ModuleKind.app,
+      Icons.translate,
+      'Pick Voice: what the other speaker says is translated on the phone '
+          'and shown on the glasses; tap pauses. Pick Photo: tap takes a '
+          'photo, and its text is translated (no Cyrillic). Tilt scrolls '
+          'back.',
+      settings: [
+        ModuleSetting.choice(
+          'from',
+          'Speaker language',
+          'en',
+          trFromValues,
+          optionLabels: trFromLabels,
+          help:
+              'The language the other person speaks; on a photo, the '
+              'one guessed when its own cannot be told.',
+        ),
+        ModuleSetting.choice(
+          'to',
+          'Translate into',
+          'ru',
+          trToValues,
+          optionLabels: trToLabels,
+          help: 'Only languages the glasses can draw.',
+        ),
+        ModuleSetting.choice(
+          'bits',
+          'Quality',
+          '16',
+          ['8', '16'],
+          optionLabels: ['8 bit', '16 bit, heard better'],
+          help: '16 bit sends twice as much; on a busy link some is lost.',
+        ),
+        ModuleSetting.choice(
+          'source',
+          'Original text',
+          'off',
+          ['off', 'on'],
+          optionLabels: ['Hidden', 'Shown dimmed above'],
         ),
       ],
     ),

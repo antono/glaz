@@ -17,6 +17,9 @@ enum LogKind {
   /// The assistant: questions, answers, what went wrong.
   assistant('Assistant'),
 
+  /// Translate: what was heard, its translation, what went wrong.
+  translate('Translate'),
+
   /// A message to or from the glasses, by its code (protocol.dart).
   message('Messages');
 

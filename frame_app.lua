@@ -65,9 +65,9 @@ local data = require('data.min')
 -- submenus. Each module must return a table with a .label and either .run()
 -- (mode 'info') or .tick() (mode 'app'), and may set .background.
 local MENU = {
-  { label = 'Apps',     'assistant', 'notifications', 'gemini', 'reader',
-                        'photo', 'timeseries', 'recorder', 'stopwatch',
-                        'files', 'weather', 'flipper', 'term' },
+  { label = 'Apps',     'assistant', 'translate', 'notifications', 'gemini',
+                        'reader', 'photo', 'timeseries', 'recorder',
+                        'stopwatch', 'files', 'weather', 'flipper', 'term' },
   { label = 'Sensors',  'battery', 'tilt', 'taptune' },
   { label = 'Settings', 'brightness', 'notifyset', 'sleep' },
   { label = 'Info',     'bluetooth', 'uptime', 'firmware', 'about' },
@@ -1093,7 +1093,10 @@ end
 -- -- on screen, in the background, or not running, when it is started
 -- straight into the background so the screen stays as it is. Only a module
 -- with a remote() can be called. The app knows no module by name: what arg
--- means is the module's business (Recorder: 'on' / 'off').
+-- means is the module's business (Recorder: 'on' / 'off'). A sleeping
+-- module (no .background) is called only while it runs: started for a
+-- call, it would be stopped right after, and the one in the background
+-- with it -- a reply already on its way when the wearer left it.
 local function remote_call(name, arg)
   local id
   for i, n in ipairs(names) do
@@ -1107,7 +1110,10 @@ local function remote_call(name, arg)
   local mod = mods[id]
   if not mod then
     mod = load_module(id)
-    if not (mod and mod.remote) then mods[id] = nil return end
+    if not (mod and mod.remote and mod.background) then
+      mods[id] = nil
+      return
+    end
     if mod.start then pcall(mod.start, { background = bg and bg_name }) end
     if bg then quit(bg) end
     bg, bg_name = id, mod.label
