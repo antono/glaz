@@ -25,8 +25,9 @@ void main() {
       expect(forGlasses('«Да» +16°C, Größe №137'), '«Да» +16°C, Größe №137');
     });
 
-    test('maps the rest, drops emoji, marks the unknown', () {
-      expect(forGlasses('“Да” — ok… 👍🏻'), '"Да" - ok... ');
+    test('maps the rest, drops other emoji, marks the unknown', () {
+      expect(forGlasses('“Да” — ok… 👍🏻'), '"Да" - ok... 👍');
+      expect(forGlasses('❤️ 🤦‍♂️ 🦜 🇺🇸'), '❤ 🤦  ');
       expect(forGlasses('Łódź Ść'), 'Łódz Sc');
       expect(forGlasses('日本語'), '?');
     });

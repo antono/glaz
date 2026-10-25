@@ -3,6 +3,8 @@
 // system_font.h in the firmware): per glyph, the byte minus 48 is its
 // advance in px, 0 for none; the firmware puts [spacing] between glyphs.
 
+import 'glyphs.dart';
+
 const _ascii =
     '=5=CARD5:;EC8A60B@@?B?A?BA68CCC>OFB@CAABC<>C@GCDBFDADCEGEGA9?:DI;CB=B@?DB5;B8LBBBB;?>ACNDD@<5<A'; // ' ' to '~'
 const _latin1 =
@@ -15,6 +17,9 @@ const spacing = 4;
 
 /// The font's other Cyrillic (Kazakh, Tatar..): as wide as an 'o'.
 const _otherW = 18;
+
+/// The font's emoji: as wide as the widest of them, so a line never overflows.
+const _emojiW = 40;
 
 /// Advance of code point [c], gap included; 0 for none.
 int glyphWidth(int c) {
@@ -31,6 +36,8 @@ int glyphWidth(int c) {
     base = 0x400;
   } else if (c >= 0x490 && c <= 0x4FF) {
     return _otherW + spacing;
+  } else if (isFontEmoji(c)) {
+    return _emojiW + spacing;
   } else {
     return 0;
   }
