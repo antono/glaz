@@ -5,7 +5,7 @@
 --                        open: page down / up
 --   single tap        -- list: open the one under the cursor, all of it
 --                        open: back to the list
---   double tap        -- back to the menu (handled by frame_app.lua)
+--   double tap        -- open: back to the list; list: back to the menu
 --
 -- The list lives on the phone. The glasses hold a window of it, a few
 -- lines, and ask for another as the cursor leaves it; an open one comes
@@ -162,6 +162,13 @@ function _M.on_tap()
     return open_screen()
   end
   return nil
+end
+
+-- Back from an open one to the list; from the list, false: the app leaves.
+function _M.on_back()
+  if not open then return false end
+  open, asked = nil, nil
+  return list_screen()
 end
 
 return _M

@@ -26,12 +26,14 @@
 -- Roll (tilt toward a shoulder, then back): right scrolls down, left scrolls
 -- up. The return to neutral is part of the gesture -- see the latch below.
 -- Inside a running module tilt only moves that module's own cursor (if it
--- has one, see on_roll); it never leaves the module. Leaving is a double tap.
+-- has one, see on_roll); it never leaves the module. Leaving is a double tap
+-- -- or, in a module with levels of its own (on_back), going up one of them.
 --
 -- Taps (Frame has no buttons; count is the only way to tell intents apart):
 --   single -- select: run the item under the cursor, or enter a submenu;
 --             on the blank screen, return to the last module
---   double -- back, one level up: module -> its menu level -> parent menu
+--   double -- back, one level up: inside the module (a notification ->
+--             its list), then module -> its menu level -> parent menu
 --             -> ... -> root -> blank; on the blank screen, open the menu
 --             at the root. Two taps also wake the glasses (the firmware
 --             sends them back to sleep after one), into the last module,
@@ -1069,13 +1071,14 @@ end
 -- background one, and the menu comes back. 'sleep' instead of true asks for
 -- deep sleep right away: the module stops, and the loop parks the device on
 -- its next pass (see the deep-sleep branch). Any input counts as activity
--- for APP_TIMEOUT.
+-- for APP_TIMEOUT. Returns what the handler did: false (or nil) from
+-- on_back() means it was at its top, see the double tap.
 local function module_input(handler, ...)
   run_at = frame.time.utc()
   local ok, text, done = pcall(handler, ...)
   if not ok then
     run_text = err_text(text)
-  elseif text ~= nil then
+  elseif text ~= nil and text ~= false then
     run_text = tostring(text)
   end
   if ok and done == 'sleep' then
@@ -1087,6 +1090,7 @@ local function module_input(handler, ...)
   else
     render()
   end
+  return ok and text
 end
 
 -- The phone calls a module (MODULE_CALL): its remote(arg), wherever it is
@@ -1587,10 +1591,17 @@ function app_loop()
             run_at = now     -- a tap keeps an 'app' module alive
           end
         elseif n == 2 then
-          -- back, one level up: module -> its level -> parent -> blank;
-          -- from the blank screen, the menu at the root
+          -- back, one level up: inside the module, while it has a level
+          -- to go up (on_back), then module -> its level -> parent ->
+          -- blank; from the blank screen, the menu at the root
           if running then
-            open_menu()   -- the module leaves the screen first
+            local mod = mods[running]
+            -- the module leaves the screen first; a "done" from on_back
+            -- has already stopped it and opened the menu
+            if not (mod and mod.on_back and module_input(mod.on_back))
+               and running then
+              open_menu()
+            end
           elseif visible then
             menu_back()
           else

@@ -122,7 +122,7 @@ void main() {
     test('the glasses first get the home page', () async {
       await gemini.onRequest(request(2, 0, 0, 0));
       final (head, lines) = lastAnswer(link);
-      expect(head, ['p', '1', '0', '3', '0']);
+      expect(head, ['p', '1', '0', '3', '0', '0']);
       expect(lines, [
         'H|Bookmarks',
         'L1|Gemini project',
@@ -136,6 +136,7 @@ void main() {
       expect(fetched, ['gemini://geminiprotocol.net']);
       var (head, lines) = lastAnswer(link);
       expect(head[1], '2');
+      expect(head[5], '1', reason: 'a page to go back to');
       expect(lines.first, 'L0|< back');
 
       // the page's own link, then back
@@ -149,6 +150,8 @@ void main() {
 
       await gemini.onRequest(request(1, 4, homeLink, 0));
       expect(gemini.url, homeUrl);
+      (head, lines) = lastAnswer(link);
+      expect(head[5], '0', reason: 'home: the double tap leaves');
     });
 
     test('redirects are followed', () async {

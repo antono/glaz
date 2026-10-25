@@ -4,7 +4,7 @@
 --   tilt right / left -- next / previous file
 --   single tap        -- preview the file under the cursor; tap again to go
 --                        back to the list
---   double tap        -- back to the menu (handled by frame_app.lua)
+--   double tap        -- preview: back to the list; list: back to the menu
 --
 -- The list is read once, when the module opens. Three lines of output are
 -- all a module gets (frame_app.lua TEXT_ROWS), so the list shows a window of
@@ -113,6 +113,13 @@ function _M.on_tap()
               table.concat(lines, '\n')
   end
   return preview
+end
+
+-- Back from a preview to the list; from the list, false: the app leaves.
+function _M.on_back()
+  if not preview then return false end
+  preview = nil
+  return list_screen()
 end
 
 -- Nothing held after the module closes: the list goes with it.
