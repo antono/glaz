@@ -126,6 +126,14 @@ Reader draws its word that way.
   Without `on_roll` tilt is ignored and the IMU is not even polled.
 - `on_tap()` — a single tap. Without it a single tap only keeps the module
   alive.
+- `on_back()` — a double tap, for a module with levels of its own: one level
+  up inside it (a notification back to the list, a Gemini page back to the
+  one before, an Assistant chat back to the chats). It returns `false` (or
+  nothing) at the module's top level, and the app then leaves the module as
+  without it; anything else is taken as from the other hooks. Without
+  `on_back` a double tap always leaves. Only the double tap goes through it:
+  the remote's Menu, `MENU_SHOW` and the timeouts leave at once, from any
+  level.
 - `on_hit(n)` — `n` raw hits from the accelerometer since the last call,
   bounces and the taps of a double or triple included. For measuring taps
   (`modules/taptune.lua`); a module never takes `frame.imu.tap_callback`
@@ -149,8 +157,9 @@ Reader draws its word that way.
 
 Each input hook returns the text to show (`nil` keeps the current text) and, optionally,
 `true` as a second value meaning "done": the module is stopped — even a
-background one — and the menu comes back. Double and triple taps are never
-passed to a module, so back and sleep always work. `modules/brightness.lua` is the example: tilt previews a
+background one — and the menu comes back. Triple taps are never passed to a
+module, and a double tap only as `on_back()`, which at the top level cannot
+keep it, so back and sleep always work. `modules/brightness.lua` is the example: tilt previews a
 level, a single tap keeps it, a double tap cancels.
 
 ```lua
@@ -214,7 +223,7 @@ Each tap count means one thing everywhere:
 | Taps | Meaning |
 | --- | --- |
 | **1** | select — run the item under the cursor, or enter the submenu; on the blank screen, back to the last module |
-| **2** | back — one level up: module → its submenu → parent → … → root → blank; on the blank screen, the menu; asleep, wake into the last module (or the menu) |
+| **2** | back — one level up: inside the module while it has levels (`on_back()`), then module → its submenu → parent → … → root → blank; on the blank screen, the menu; asleep, wake into the last module (or the menu) |
 | **3** | sleep — deep sleep, from any state |
 
 However they get there -- three taps, Sleep, the idle timeout -- the glasses
@@ -240,7 +249,7 @@ cannot be loaded: a dark screen alone looks the same as a hang.
 | --- | --- | --- | --- | --- | --- |
 | **IDLE** | blank | last module, or the banner if none yet | menu, at the root | sleep | not polled |
 | **MENU** | one level of the tree | launch / enter | up a level, hide at root | sleep | scrolls |
-| **RUNNING** | the module | `on_tap()`, else keep `app` alive | back to menu (background modules keep running) | sleep | `on_roll()` only, never leaves |
+| **RUNNING** | the module | `on_tap()`, else keep `app` alive | `on_back()` up a level inside, else back to menu (background modules keep running) | sleep | `on_roll()` only, never leaves |
 
 Returning to the menu leaves the cursor on the module just closed, so it can
 be run again with a single tap. Each level keeps its own cursor, so going up
@@ -504,7 +513,9 @@ Every line is cut to fit the screen by the font's widths
 (`flutter-glaz/lib/frame/font.dart`, the table in `modules/reader.lua`),
 an answer to 900 bytes. Ids are the phone's and do not shift when a new
 one comes. Tilt moves the cursor (an open one: a screen down / up), a tap
-opens one and closes it again. Asked only from `tick()`, as Reader.
+opens one and closes it again, and so does a double tap: back to the list,
+and from the list out of Notifications. Asked only from `tick()`, as
+Reader.
 
 The glasses park in deep sleep only with no host connected, so a connected
 phone always reaches them.
@@ -681,8 +692,8 @@ link cut a recording short -- is stopped at its next background tick.
 
 Assistant (`modules/assistant.lua`) is the glasses' voice assistant. A tap
 starts listening, the next stops it and asks; nothing guesses where a
-question ends (a pause cut questions short). Leaving it -- a double tap --
-drops the question: the glasses send `REC_DROP` (`0x10`) instead of the
+question ends (a pause cut questions short). A double tap goes back to
+the chats, and from them out of Assistant; either drops the question: the glasses send `REC_DROP` (`0x10`) instead of the
 end of the sound, and the phone asks nothing, or throws away the answer
 if it already asked. The glasses stop on their own
 only after 120 s. The sound streams as Recorder's does, 16-bit unless
@@ -754,7 +765,9 @@ on with chat `id`: the phone makes it the current chat and answers `a:`
 with its last question and answer, and the next tap asks in it; `3` a new
 chat, sent just before `REC_START` when the wearer taps `New chat`, so
 that tap listens at once. Opened by the phone with an argument, Assistant
-skips the list.
+skips the list. A double tap anywhere but the list goes back to it, asked
+for again; an `h:`, `a:` or `e:` that comes while the list is up is for a
+question dropped on the way and is thrown away.
 
 Text is what the font has, as for notifications, in lines of at most 26 characters,
 24 lines at most. Five fit on screen (`_M.rows`); a longer answer shows four
@@ -794,7 +807,7 @@ mode goes over the wire.
 | --- | --- | --- | --- |
 | tilt right / left | the next / previous mode | a screen down / up, less one line; down at the end follows again | the same |
 | tap | pick | pause / go on listening | take a photo to translate |
-| double tap | leave | leave: end the sound, close the session | leave: the camera off, close the session |
+| double tap | leave | back to the chooser: end the sound, close the session | back to the chooser: the camera off, close the session |
 
 **Photo.** A tap takes a photo as the phone's remote does
 (`app/glaz_photo.lua`, loaded for it alone): 720 px, quality HIGH, 1.5 s
@@ -1057,8 +1070,11 @@ page the glasses hold, `top` the line on their first row: the phone keeps
 it, and going back shows a page where it was left.
 
 The phone answers with `MODULE_CALL` `gemini` and
-`p:<page>:<from>:<total>:<top>`, then `\n<kind><link>|<text>` per line,
-from line `from`, as many as fit in 900 bytes (at most 40). `page` is 1
+`p:<page>:<from>:<total>:<top>:<back>`, then `\n<kind><link>|<text>` per
+line, from line `from`, as many as fit in 900 bytes (at most 40). `back`
+is `1` when there is a page to go back to -- any but the home page -- and
+`0` on the home page; the glasses read a header without it, from an older
+phone, as `0`. `page` is 1
 to 255, new on every page opened; a `page` other than the one held makes
 the glasses drop what they hold and show the new one from `top`. A
 request about a page the phone no longer has open (the phone restarted,
@@ -1073,7 +1089,7 @@ on the phone. Redirects are followed, five at most; an input request
 | --- | --- |
 | tilt right / left | the next / previous link on screen; past the last / first, a screen down / up |
 | tap | open the link under the cursor; with none, a screen down |
-| double tap | leave; the page stays and is there on the next visit |
+| double tap | back to the page before, as `< back` (op `1`, link `0`); on the home page, or while a page is opening, leave: the page stays and is there on the next visit |
 
 ### Status
 

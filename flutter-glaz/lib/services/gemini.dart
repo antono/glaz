@@ -361,12 +361,15 @@ class GeminiService extends ChangeNotifier {
   Future<void> _send(int from) => link.callModule('gemini', answer(from));
 
   /// MODULE_CALL's argument for modules/gemini.lua:
-  /// 'p:page:from:total:top' and a line each, as many as fit.
+  /// 'p:page:from:total:top:back' and a line each, as many as fit; back is
+  /// 1 when there is a page to go back to, so the glasses' double tap goes
+  /// there rather than out of Gemini.
   @visibleForTesting
   String answer(int from) {
     final lines = _page?.lines ?? const <GemLine>[];
     final start = from.clamp(0, lines.length);
-    final out = StringBuffer('p:$_id:$start:${lines.length}:$_top');
+    final back = _page != null && _page!.url != homeUrl ? 1 : 0;
+    final out = StringBuffer('p:$_id:$start:${lines.length}:$_top:$back');
     var bytes = out.length;
     for (var i = start; i < lines.length && i < start + maxLines; i++) {
       final l = '\n${lines[i].wire}';

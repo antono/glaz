@@ -7,7 +7,8 @@
 --   single tap  -- 'New chat': listen, in a new chat; a chat: show its last
 --                  question and answer, the next tap asks in it;
 --                  otherwise listen, tapped again, stop and ask
---   double tap  -- back; a question being asked is dropped, sent nowhere
+--   double tap  -- back to the chats, from them to the menu; a question
+--                  being asked is dropped, sent nowhere
 --
 -- Only taps start and stop it: nothing guesses where a question ends.
 -- Listening is Recorder's streaming with a fourth byte in REC_START, 1, so
@@ -171,7 +172,9 @@ end
 
 local function take(arg)
   local kind, text = string.match(arg, '^(%a):(.*)$')
-  if arg == 'listen' then
+  if state == 'chats' and (kind == 'h' or kind == 'a' or kind == 'e') then
+    return                -- for a question dropped by going back
+  elseif arg == 'listen' then
     listen()
   elseif arg == 'stop' then
     if started then finish(); state = 'think' end
@@ -257,15 +260,30 @@ function _M.remote(arg)
   return screen()
 end
 
--- Leaving -- a double tap, or anything else that stops it -- drops the
--- question: the sound is not finished, the phone is told to forget it,
--- and an answer still on its way is thrown away.
-function _M.stop()
+-- Going back to the chats or leaving drops the question: the sound is not
+-- finished, the phone is told to forget it, and an answer still on its
+-- way is thrown away.
+local function drop()
   if started or state == 'think' then
     if started then pcall(frame.microphone.stop) end
     started = nil
     send(string.char(REC_DROP))
   end
+end
+
+-- Back to the chats, asked for again: the one just left may be new or
+-- renamed. From the chats, false: the app leaves.
+function _M.on_back()
+  if state == 'chats' then return false end
+  drop()
+  state, lines, page = 'chats', {}, 1
+  ask_chats()
+  return chats_screen()
+end
+
+-- Leaving: a double tap from the chats, or anything else that stops it.
+function _M.stop()
+  drop()
   state, chats = '', nil
 end
 

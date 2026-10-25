@@ -7,7 +7,7 @@
 --                        follows again: new lines scroll in by themselves
 --   single tap        -- pick the mode; in Voice, pause or listen again;
 --                        in Photo, take a photo to translate
---   double tap        -- back to the menu (handled by frame_app.lua)
+--   double tap        -- back to the modes; from them, to the menu
 --
 -- Voice: listening is Recorder's streaming with a fourth byte in
 -- REC_START, 2, so the phone hands the sound to its Translate service.
@@ -195,12 +195,27 @@ function _M.start()
   short, tailing, down = false, false, false
 end
 
--- Leaving stops the sound and tells the phone, which then sends nothing.
-function _M.stop()
+-- Leaving a mode stops the sound and tells the phone, which then sends
+-- nothing.
+local function close()
   if started then finish() end
   if state == 'photo' then pcall(frame.camera.power_save, true) end
   if opened then req(0, 0, 0) end
   opened, lines, state, _M.rec = false, {}, 'choose', false
+end
+
+function _M.stop()
+  close()
+end
+
+-- Back to the modes, the cursor on the one left; from them, false: the
+-- app leaves.
+function _M.on_back()
+  if state == 'choose' then return false end
+  close()
+  note, lo, hi, total, top, follow, asked = '', 0, 0, nil, 0, true, nil
+  short, tailing = false, false
+  return state_str()
 end
 
 function _M.busy()

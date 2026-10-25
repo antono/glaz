@@ -5,8 +5,9 @@
 --                        last / first one, a screen down / up
 --   single tap        -- open the link under the cursor; with none, a
 --                        screen down
---   double tap        -- back to the menu (handled by frame_app.lua);
---                        the page stays, and is there when it opens again
+--   double tap        -- back to the page before, as '< back' does; on
+--                        the home page, back to the menu: the page
+--                        stays, and is there when it opens again
 --
 -- The phone fetches the pages (gemini://, over TLS), keeps the one open
 -- and where it came from, and cuts it into lines that fit the screen
@@ -16,12 +17,13 @@
 -- lines and ask for others as they scroll. GEM_GET asks, the phone
 -- answers through remote(arg):
 --
---   'p:<page>:<from>:<total>:<top>' then '\n<kind><link>|<text>' per
---         line, from line number <from> (0-based) of page <page>
+--   'p:<page>:<from>:<total>:<top>:<back>' then '\n<kind><link>|<text>'
+--         per line, from line number <from> (0-based) of page <page>
 --         (1..255, new on every page opened), <total> lines long; <top>
---         is the line to show first, for a page just opened. kind: T
---         text, H heading, L link (<link> its number), Q quote, P
---         preformatted.
+--         is the line to show first, for a page just opened; <back> 1
+--         when there is a page to go back to (not the home page), and
+--         missing from an older phone. kind: T text, H heading, L link
+--         (<link> its number), Q quote, P preformatted.
 local _M = {}
 
 _M.label = 'Gemini'
@@ -30,6 +32,7 @@ _M.quiet = true           -- draw() is the screen; tick() text is not shown
 
 local GEM_GET = 0x0D      -- '>BBI2I2': op, page, n, top; op 1 opens link
                           -- n of the page, op 2 asks for lines from n
+local BACK = 0            -- the link number of '< back'
 local ROWS = 5
 local BEFORE = 8          -- lines asked for above the first on screen
 local RETRY = 5           -- s without lines before asking again
@@ -45,6 +48,7 @@ local lines = {}          -- number -> { kind, link or nil, text }
 local lo, hi = 0, 0
 local page = 0            -- the page held, 0 before the first answer
 local total = nil         -- its lines; nil until the phone says
+local back = false        -- the page held has a page before it
 local top = 0             -- the line on the first row
 local sel = nil           -- the line the link under the cursor starts on
 local asked = nil         -- 'l<from>' for lines, 'o' for a page to open
@@ -123,8 +127,8 @@ function _M.tick()
 end
 
 function _M.remote(arg)
-  local p, from, count, at, body =
-    string.match(arg, '^p:(%d+):(%d+):(%d+):(%d+)\n?(.*)$')
+  local p, from, count, at, b, body =
+    string.match(arg, '^p:(%d+):(%d+):(%d+):(%d+):?(%d*)\n?(.*)$')
   if not p then return nil end
   p, from, count = tonumber(p), tonumber(from), tonumber(count)
   local fresh = p ~= page
@@ -132,7 +136,7 @@ function _M.remote(arg)
     return nil            -- an answer to a request since replaced
   end
   asked, note = nil, ''
-  page, total = p, count
+  page, total, back = p, count, b == '1'
   lines, lo, hi = {}, from, from
   for kind, link, text in string.gmatch(body, '(%a)(%d*)|([^\n]*)') do
     lines[hi] = { kind, tonumber(link), text }
@@ -191,6 +195,17 @@ function _M.on_tap()
     return state()
   end
   return _M.on_roll(1)
+end
+
+-- Back to the page before, as its '< back' link does. False -- the app
+-- leaves -- on the home page, while a page is opening, or with no phone.
+function _M.on_back()
+  if not back or asked == 'o' or not frame.bluetooth.is_connected() then
+    return false
+  end
+  ask(1, BACK)
+  if asked == 'o' then sel = nil end
+  return state()
 end
 
 function _M.draw()
