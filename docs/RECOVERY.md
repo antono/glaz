@@ -126,17 +126,71 @@ To go back to stock:
    (currently `v25.278.1113`).
 2. `frame.update()` — reboots into the bootloader, advertises as
    `Frame Update`, times out after 3 minutes of inactivity.
-3. DFU the `.zip` with nRF Connect on a phone.
+3. DFU the `.zip`: `python utils/dfu.py <zip>` from a computer (section 6),
+   or nRF Connect on a phone.
 
 If Lua is too broken to call `frame.update()`, send a break signal first; the
-REPL comes back.
+REPL comes back. `python utils/dfu.py --enter <zip>` does both steps.
 
 **Keep a known-good `.zip` on disk** so recovery never depends on having
 network and a build toolchain at the same time.
 
 ---
 
-## 6. The device will not enter DFU at all
+## 6. Dark and deaf after an update: stuck in `Frame Update`
+
+**Hit in practice on 25.10.2026.** A phone update to a larger build broke
+off. Afterwards the glasses showed nothing, ignored taps, and the reset
+button on the charger did nothing either. They were not dead: the
+bootloader was running and waiting for an image, and it never draws.
+
+Check before anything else. A computer sees the bootloader as `Frame
+Update` with service `fe59`:
+
+```bash
+bluetoothctl --timeout 15 scan on | grep -i "frame update"
+```
+
+**Why it happens.** The bootloader updates in two banks when it can: the
+new image goes next to the running one, and the old one is kept until the
+new one is complete. When both do not fit in the application's 824 KB it
+falls back to one bank (`NRF_DFU_SINGLE_BANK_APP_UPDATES 0` only means
+"not forced"): it erases the running firmware first, then receives. If the
+transfer breaks off after that, there is no firmware to go back to. Then
+the 3 minute timeout does not apply, it starts only a valid application,
+and the glasses stay in `Frame Update` until an image arrives. Our builds
+are 600 to 660 KB, so any update between two of them is one-bank.
+
+**The phone app cannot help here.** It sends the glasses to the
+bootloader itself, from a connection to the running app, and has no way
+to pick up glasses already sitting in it. A reset of the pairing does not
+matter: the bootloader needs no bond.
+
+**From a computer**, with the last build that worked:
+
+```bash
+python utils/dfu.py flutter-glaz/assets/firmware/frame-firmware-<version>.zip
+```
+
+It finds `Frame Update`, sends the init packet and then the image in 4 KB
+objects, each checked by CRC32 and sent again if it arrived wrong, and
+prints its progress every 5 %. About 2.5 KB/s on Linux: 4 to 5 minutes
+for 600 KB. If it stops, run it again: it resumes from what the glasses
+hold. When it is done the glasses start the new firmware; the files on
+them are gone, so upload the app again (phone app, or `upload`).
+
+- **Keep them off the charger** while it runs: putting them on or taking
+  them off the dock resets the bootloader. Before it starts, a dock cycle
+  does no harm; it just comes back up as `Frame Update`.
+- **Not nrf5-ota-dfu-python**, which this doc used to suggest: it is Python
+  2 code with Python 3 syntax, drives the deprecated `gatttool`, and here
+  it failed four ways before stalling for good at 3 KB.
+- nRF Connect on a phone also works: copy the `.zip` to the phone,
+  connect to `Frame Update`, DFU.
+
+---
+
+## 7. The device will not enter DFU at all
 
 This is the only genuinely serious case. It means the bootloader is damaged,
 which our workflow never writes — it would take a deliberate `flash-jlink` of

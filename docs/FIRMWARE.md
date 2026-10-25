@@ -339,41 +339,30 @@ stopped, and the phone looked for a bootloader that was not there. No drop
 within 10 s is now an error, not a silent search.
 
 While in the bootloader the glasses look dead: dark, deaf to taps. That ends
-by itself after 3 minutes, or with the dock (on and off the charger).
+by itself after 3 minutes, or with the dock (on and off the charger), but
+only while a valid firmware is still there. An update whose old and new
+builds together exceed the 824 KB application area (any two of ours, 600 to
+660 KB each) erases the old one first (one bank), and if it then breaks off
+the glasses stay in `Frame Update` until an image arrives: docs/RECOVERY.md,
+section 6.
 
-
-**nRF Connect on a phone** is the path that always works. Transfer the `.zip`
-to the phone, connect to `Frame Update`, run DFU.
-
-**From Linux**, it can be done from the command line:
+**From a computer**, Linux or macOS: `utils/dfu.py`, Nordic Secure DFU
+over bleak, the same protocol the phone app speaks. It needs no pairing,
+checks every 4 KB object by CRC32, resumes an update that broke off and
+prints progress every 5 %:
 
 ```bash
-git clone https://github.com/bringert/nrf5-ota-dfu-python.git
-cd nrf5-ota-dfu-python
-pip install bleak pexpect intelhex
-
-which gatttool || echo 'missing -- see below'
-
-python dfu.py --secure -z <firmware>.zip -a <MAC>
+python utils/dfu.py --enter build/frame-firmware-<version>.zip  # glasses running
+python utils/dfu.py build/frame-firmware-<version>.zip          # already in Frame Update
 ```
 
-Two things that are easy to lose time on:
+About 2.5 KB/s from Linux, 4 to 5 minutes for a build. It replaces
+nrf5-ota-dfu-python, which this section used to suggest: Python 2 code
+driving the deprecated `gatttool`, which stalled for good on 25.10.2026
+(docs/RECOVERY.md, section 6).
 
-- Despite its README, this tool only uses **bleak for scanning**; the transfer
-  itself drives **`gatttool`** from BlueZ. That makes it Linux-only, and
-  `gatttool` has been deprecated since BlueZ 5.44 — distributions often ship
-  it only if built with `--enable-deprecated`. Check before relying on it.
-- Addresses differ by platform. Linux uses the real MAC (for example
-  `AA:BB:CC:DD:EE:FF`, the reverse of what AR Studio prints); macOS reports
-  opaque CoreBluetooth UUIDs instead, which is one reason the tool is not
-  portable.
-
-**From macOS there is currently no command-line path.** `nrfutil`'s BLE DFU
-needs an nRF dongle to act as the central, and no maintained PyPI package
-implements Nordic Secure DFU over bleak. Writing one is tractable — the
-protocol is just the control point `8EC90001-F315-4F60-9FB8-838830DAEA50` and
-the packet characteristic `…0002`, with select/create/execute per object — but
-it does not exist off the shelf.
+**nRF Connect on a phone** works too. Transfer the `.zip` to the phone,
+connect to `Frame Update`, run DFU.
 
 ### Entering the bootloader
 
