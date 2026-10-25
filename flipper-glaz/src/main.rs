@@ -48,7 +48,7 @@ static FAP_MANIFEST: ApplicationManifestV1 = ApplicationManifestV1 {
         api_version: API_VERSION,
         ..ApplicationManifestV1::default().base
     },
-    app_version: 2,
+    app_version: 3,
     name: _padded(b"Glaz"),
     has_icon: 1,
     icon: _padded(include_bytes!("glaz-10x10.icon")),
@@ -250,8 +250,6 @@ struct State {
     /// A phone is connected to the Flipper.
     phone: bool,
     status: Status,
-    /// The last press, shown at the bottom until the commands exist.
-    last: Option<(Key, Press)>,
 }
 
 /// Draws the screen, upright: 64 wide, 128 high. Called from the GUI
@@ -262,23 +260,13 @@ unsafe extern "C" fn draw_callback(canvas: *mut sys::Canvas, context: *mut c_voi
     unsafe {
         sys::canvas_clear(canvas);
 
-        sys::canvas_set_font(canvas, sys::FontPrimary);
-        sys::canvas_draw_str_aligned(
-            canvas,
-            W / 2,
-            1,
-            sys::AlignCenter,
-            sys::AlignTop,
-            c"Glaz".as_ptr(),
-        );
+        draw_dolphin(canvas, status.name.is_some());
         // The phone: a dot while connected, a ring while not.
         if state.phone {
             sys::canvas_draw_disc(canvas, W - 4, 5, 2);
         } else {
             sys::canvas_draw_circle(canvas, W - 4, 5, 2);
         }
-
-        draw_glasses(canvas, 29, status.name.is_some());
 
         sys::canvas_set_font(canvas, sys::FontSecondary);
         // "(disconnected)" while the phone tells of no glasses; without the
@@ -290,58 +278,94 @@ unsafe extern "C" fn draw_callback(canvas: *mut sys::Canvas, context: *mut c_voi
         sys::canvas_draw_str_aligned(
             canvas,
             W / 2,
-            48,
+            ART_BOTTOM + 2,
             sys::AlignCenter,
             sys::AlignTop,
             name.as_ptr(),
         );
-        sys::canvas_draw_line(canvas, 0, 59, W - 1, 59);
+        sys::canvas_draw_line(canvas, 0, ART_BOTTOM + 12, W - 1, ART_BOTTOM + 12);
 
-        draw_row(canvas, 63, c"Disk", size(status.disk_free));
-        draw_row(canvas, 75, c"Mem", size(status.mem_free));
+        draw_row(canvas, ART_BOTTOM + 16, c"Storage", size(status.disk_free));
+        draw_row(canvas, ART_BOTTOM + 28, c"Mem", size(status.mem_free));
 
-        sys::canvas_draw_str(canvas, 0, 95, c"App".as_ptr());
+        // The app on the glasses' screen, on the last line.
         let app = status.app.unwrap_or(Text::from("-"));
         sys::canvas_draw_str_aligned(
             canvas,
             W / 2,
-            98,
+            127,
             sys::AlignCenter,
-            sys::AlignTop,
+            sys::AlignBottom,
             app.as_ptr(),
         );
-
-        if let Some((key, press)) = state.last {
-            let mut t = Text::new();
-            let _ = write!(t, "{} {}", key.name(), press.name());
-            sys::canvas_draw_str_aligned(
-                canvas,
-                W / 2,
-                127,
-                sys::AlignCenter,
-                sys::AlignBottom,
-                t.as_ptr(),
-            );
-        }
     }
 }
 
-/// Frame from the front: two round lenses on a bridge, the temples going
-/// back. While connected, the display shows in the right lens, the one
-/// it sits behind -- on the left as you look at them.
-unsafe fn draw_glasses(canvas: *mut sys::Canvas, cy: i32, connected: bool) {
-    unsafe {
-        for cx in [16, 47] {
-            sys::canvas_draw_circle(canvas, cx, cy, 12);
-            sys::canvas_draw_circle(canvas, cx, cy, 11);
-        }
-        // The bridge, two pixels thick, and the temples.
-        sys::canvas_draw_line(canvas, 28, cy - 4, 35, cy - 4);
-        sys::canvas_draw_line(canvas, 28, cy - 3, 35, cy - 3);
-        sys::canvas_draw_line(canvas, 4, cy - 5, 0, cy - 7);
-        sys::canvas_draw_line(canvas, 59, cy - 5, 63, cy - 7);
-        if connected {
-            sys::canvas_draw_rbox(canvas, 11, cy - 3, 11, 7, 1);
+/// The text starts this far down; the dolphin sits above it, centred.
+const ART_BOTTOM: i32 = 78;
+
+/// The Flipper's dolphin in Frame glasses: '#' always drawn, '+' only
+/// while glasses are connected -- the display lit in the lens it sits
+/// behind.
+const DOLPHIN: &[&str] = &[
+    "................................###########.....................",
+    ".............................####.........####..................",
+    "..........................####...............###................",
+    "........................###....................###..............",
+    ".......................##........................##.............",
+    "......................##..........................##............",
+    ".....................##............................##...........",
+    ".....................#..............................#...........",
+    "....................##..............................##..........",
+    "....................#................................#..........",
+    "....................#................................##.........",
+    "...................##.................................#.........",
+    "...................#..................................##........",
+    "...................#...................................#........",
+    "...................#........###........................#........",
+    "................#.##......#######......................#........",
+    "...............####......####.####....................#.........",
+    "...............###......###.....###...................#.........",
+    "..............##.##.....####.....##.##########.......#..........",
+    "..............#...#.#######.#....#############......#...........",
+    "..............#...#.######..#.....##..........#.....#...........",
+    "..............#...##...######....###..........#....#............",
+    "..............##.###....####.....##...............#.............",
+    "...............###.########+++++###...............#.............",
+    "..........########.#.....####+####..............................",
+    ".........#......#.........#######............#..................",
+    "........#.....#.............###..............#..................",
+    "........#.####...............................#..................",
+    "........#...................................#...................",
+    ".........#.................................#....................",
+    "..........##########.....................##.....................",
+    "..............#.....####............#####.......................",
+    ".............#..........############............................",
+    ".............#..................................................",
+    "..............#.................................................",
+    "...............##...............................................",
+    "...............#####............................................",
+    "...............##..#######......................................",
+    "................#......#############............................",
+    "................#......############.............................",
+    "................#......###########..............................",
+    "................##....###########...............................",
+    ".................#...##.#.#####.................................",
+    ".................#..##..#.......................................",
+    ".................####...#.......................................",
+    "..................#......#......................................",
+    "..................#......#......................................",
+    ".........................#......................................",
+];
+
+unsafe fn draw_dolphin(canvas: *mut sys::Canvas, connected: bool) {
+    let top = (ART_BOTTOM - DOLPHIN.len() as i32) / 2;
+    for (y, row) in DOLPHIN.iter().enumerate() {
+        let left = (W - row.len() as i32) / 2;
+        for (x, c) in row.bytes().enumerate() {
+            if c == b'#' || (c == b'+' && connected) {
+                unsafe { sys::canvas_draw_dot(canvas, left + x as i32, top + y as i32) };
+            }
         }
     }
 }
@@ -411,7 +435,6 @@ fn main(_args: Option<&CStr>) -> i32 {
     let state = Mutex::new(State {
         phone: false,
         status: Status::unknown(),
-        last: None,
     });
     let queue: MessageQueue<Event> = MessageQueue::new(8);
 
@@ -488,8 +511,6 @@ fn main(_args: Option<&CStr>) -> i32 {
             }
             ble.send_key(key.code(), press.code());
             info!("press {} {}", key.name(), press.name());
-            state.lock().last = Some((key, press));
-            sys::view_port_update(view_port);
         }
 
         sys::notification_message(notifications.as_ptr(), &raw const sys::sequence_reset_blue);
