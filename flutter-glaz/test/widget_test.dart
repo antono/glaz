@@ -24,6 +24,7 @@ void main() {
       photoDir: Directory('${dir.path}/photos'),
       recordingDir: Directory('${dir.path}/recordings'),
       readerDir: Directory('${dir.path}/reader'),
+      assistantDir: Directory('${dir.path}/assistant'),
     );
   });
 

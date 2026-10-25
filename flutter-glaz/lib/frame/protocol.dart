@@ -52,6 +52,15 @@ const geminiGet = 0x0D;
 /// op 2 notification n, all of it
 const noticesGet = 0x0E;
 
+/// modules/translate.lua: [op, sess, from (2), count] -- op 0 close,
+/// 1 lines from `from` (stops following), 2 the last `count` (follows);
+/// 3, 4 reserved (phone microphone, photo)
+const translate = 0x0F;
+
+/// modules/assistant.lua: [op, id (2)] -- op 1 the chats, 2 go on with
+/// chat id, 3 a new chat
+const assist = 0x04;
+
 /// modules/flipper.lua: [1] show the Flipper, [0] stop, [2, seq] frame taken
 const flipper = 0x0B;
 
@@ -69,6 +78,12 @@ const audioEnd = 0x06;
 
 // REC_START's fourth byte: the sound is a question for the assistant
 const forAssistant = 1;
+
+// REC_START's fourth byte: the sound is for Translate
+const forTranslate = 2;
+
+// PHOTO_FROM's byte: the photo is Translate's to read, not to keep
+const photoForTranslate = 255;
 
 /// The codes by name, for the log (services/glaz_log.dart).
 const codeNames = {
@@ -111,6 +126,7 @@ const codeNames = {
   textGet: 'TEXT_GET',
   geminiGet: 'GEM_GET',
   noticesGet: 'NOTICES_GET',
+  translate: 'TRANSLATE',
   photoChunk: 'photo chunk',
   photoEnd: 'photo end',
   audioChunk: 'audio chunk',

@@ -29,8 +29,6 @@ local function parse_settings(text)
   return t
 end
 
-local function load_settings()
-
 -- Settings picked on the glasses themselves (Settings > Notifications):
 -- the phone never sends these, so SETTINGS_SET leaves them alone. Lines
 -- 'module.key=value' in PREFS_FILE, read at start, written on a change.
@@ -71,6 +69,8 @@ local function pref(owner, key, default)
 end
 
 load_prefs()
+
+local function load_settings()
   local ok, fh = pcall(frame.file.open, SETTINGS_FILE, 'read')
   if not ok or not fh then return end
   local lines = {}

@@ -42,6 +42,13 @@ const services = [
     true,
   ),
   GlazService(
+    'translate',
+    'Translate',
+    "Translates what the other speaker says, on the phone, for the "
+        "glasses' Translate",
+    true,
+  ),
+  GlazService(
     'location',
     'Location',
     "Tells the apps you allow where the phone is",

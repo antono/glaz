@@ -16,7 +16,16 @@ class LogScreen extends StatefulWidget {
 
 /// What the list shows: everything but the messages, only problems, or
 /// one kind.
-enum _Filter { all, problems, link, glasses, task, assistant, message }
+enum _Filter {
+  all,
+  problems,
+  link,
+  glasses,
+  task,
+  assistant,
+  translate,
+  message,
+}
 
 class _LogScreenState extends State<LogScreen> {
   final _log = GlazLog.instance;

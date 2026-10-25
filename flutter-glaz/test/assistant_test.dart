@@ -351,6 +351,17 @@ void main() {
       ]);
     });
 
+    test(
+      'each query is a tool call of the turn, with what it brought',
+      () async {
+        agent.replies = ['@photo', 'Вижу кота.'];
+        await assistant.ask('Что я вижу?');
+        final call = assistant.turns.single.queries.single;
+        expect(call.command, const GlassesCommand('photo', ''));
+        expect(call.result, 'result of @photo (a photo)');
+      },
+    );
+
     test('an agent that keeps asking is cut short', () async {
       agent.reply = '@photos today';
       await assistant.ask('?');
@@ -511,6 +522,110 @@ void main() {
           ),
         ),
       );
+    });
+  });
+
+  group('chats', () {
+    late Settings settings;
+    late Directory dir;
+    late FakeAgent agent;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      settings = await Settings.load();
+      dir = Directory.systemTemp.createTempSync('glaz_chats');
+      agent = FakeAgent('Сорок два.');
+    });
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    AssistantService service() => AssistantService(
+      SentLink(),
+      settings,
+      FakeTranscriber(),
+      agent: (_) => agent,
+      queries: FakeQueries(),
+      dir: dir,
+    );
+
+    test('kept on the phone and read back', () async {
+      agent.replies = ['@transcript 137', 'Встреча в 137.'];
+      final a = service();
+      await a.ask('Где встреча?');
+      await a.saved;
+
+      final b = service();
+      await b.load();
+      final chat = b.chats.single;
+      expect(chat.title, 'Где встреча?');
+      expect(chat.turns.single.answer, 'Встреча в 137.');
+      expect(
+        chat.turns.single.queries.single.command,
+        const GlassesCommand('transcript', '137'),
+      );
+      expect(chat.history.map((m) => m.role), [
+        'user',
+        'assistant',
+        'user',
+        'assistant',
+      ]);
+    });
+
+    test('a chat picked again goes on, its history sent', () async {
+      final a = service();
+      await a.ask('Первый?');
+      a.newChat();
+      await a.ask('Второй?');
+      expect(a.chats, hasLength(2));
+
+      final first = a.chats.last;
+      await a.ask('И ещё?', chat: first);
+      expect(agent.asked.last.map((m) => m.content).skip(1), [
+        'Первый?',
+        'Сорок два.',
+        'И ещё?',
+      ]);
+      expect(a.chats.first, first);
+      expect(first.turns, hasLength(2));
+      await a.saved;
+    });
+
+    test('removed for good', () async {
+      final a = service();
+      await a.ask('?');
+      a.remove(a.chats.single);
+      await a.saved;
+      expect(a.current, isNull);
+      final b = service();
+      await b.load();
+      expect(b.chats, isEmpty);
+    });
+
+    test('listed on the glasses, and picked there', () async {
+      final link = SentLink();
+      final a = AssistantService(
+        link,
+        settings,
+        FakeTranscriber(),
+        agent: (_) => agent,
+      );
+      await a.ask('Первый вопрос');
+      a.newChat();
+      await a.ask('Второй | вопрос');
+
+      a.onMessage([assist, 1, 0, 0]);
+      final second = a.chats.first, first = a.chats.last;
+      expect(link.sent.last, (
+        moduleCall,
+        'assistant\nc:${second.id}\n${second.id}|Второй вопрос'
+            '\n${first.id}|Первый вопрос',
+      ));
+
+      a.onMessage([assist, 2, 0, first.id]);
+      expect(a.current, first);
+      expect(link.sent.last.$2, startsWith('assistant\na:"Первый вопрос"'));
+
+      a.onMessage([assist, 3, 0, 0]);
+      expect(a.current, isNull);
     });
   });
 }

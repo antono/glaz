@@ -72,4 +72,10 @@ flutter {
 dependencies {
     // speech to text on the phone, Speech.kt
     implementation("com.google.mlkit:genai-speech-recognition:1.0.0-alpha1")
+    // text on a photo, Translate (lib/services/translate.dart): the plugin
+    // brings Latin only; these read the other scripts it knows
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+    implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")
+    implementation("com.google.mlkit:text-recognition-japanese:16.0.1")
+    implementation("com.google.mlkit:text-recognition-korean:16.0.1")
 }
