@@ -172,8 +172,8 @@ void main() {
     test('the answer goes to Assistant when nothing else opens', () async {
       agent.reply = 'Сорок два.';
       await assistant.ask('Сколько?');
-      expect(last(appOpen), 'assistant\na:Сорок два.');
-      expect(last(moduleCall), 'assistant\nh:Сколько?');
+      expect(last(appOpen), 'assistant\nt:0\nQ|Сколько?\nA|Сорок два.');
+      expect(last(moduleCall), 'assistant\nt:1\nQ|Сколько?');
     });
 
     test('heard in its own language, the recordings\' until picked', () {
@@ -239,7 +239,8 @@ void main() {
       await a.ask('Сколько?');
       expect(voice.said, isEmpty);
       // the glasses' screen has it all the same
-      expect(link.sent.last, (appOpen, 'assistant\na:Сорок два.'));
+      expect(link.sent.last.$1, appOpen);
+      expect(link.sent.last.$2, endsWith('A|Сорок два.'));
     });
 
     test('a new question or a drop stops the reading', () async {
@@ -279,7 +280,7 @@ void main() {
         agent: AssistantService.defaultAgent,
       );
       await assistant.ask('hi');
-      expect(last(appOpen), startsWith('assistant\ne:Set up the agent'));
+      expect(last(appOpen), contains('\nE|Set up the agent'));
     });
 
     test('set takes only known settings and options', () async {
@@ -335,7 +336,19 @@ void main() {
       expect(second[second.length - 2].content, '@photo');
       expect(second.last.content, 'result of @photo');
       expect(second.last.images.single, [1, 3, 7]);
-      expect(link.sent.last, (appOpen, 'assistant\na:Вижу кота.'));
+      // the tool call on the glasses too, while it runs and after
+      expect(
+        link.sent.where((s) => s.$1 == moduleCall).map((s) => s.$2),
+        contains(
+          'assistant\nt:1\nQ|Что я вижу?\n'
+          'T|* Took a photo with the\nT|glasses ..',
+        ),
+      );
+      expect(link.sent.last, (
+        appOpen,
+        'assistant\nt:0\nQ|Что я вижу?\n'
+            'T|* Took a photo with the\nT|glasses\nA|Вижу кота.',
+      ));
       expect(assistant.turns.single.queries, hasLength(1));
 
       // the conversation keeps no photos
@@ -622,10 +635,33 @@ void main() {
 
       a.onMessage([assist, 2, 0, first.id]);
       expect(a.current, first);
-      expect(link.sent.last.$2, startsWith('assistant\na:"Первый вопрос"'));
+      expect(
+        link.sent.last.$2,
+        'assistant\nt:0\nQ|Первый вопрос\nA|Сорок два.',
+      );
 
       a.onMessage([assist, 3, 0, 0]);
       expect(a.current, isNull);
+    });
+
+    test('a long chat goes to the glasses as its newest turns', () async {
+      final a = AssistantService(
+        SentLink(),
+        settings,
+        FakeTranscriber(),
+        agent: (_) => agent,
+      );
+      agent.reply = 'слово ' * 40;
+      for (var i = 0; i < 137; i++) {
+        await a.ask('Вопрос $i');
+      }
+      final out = a.onGlasses(a.current!);
+      expect(
+        utf8.encode(out).length,
+        lessThanOrEqualTo(AssistantService.maxBytes),
+      );
+      expect(out, contains('Q|Вопрос 136'));
+      expect(out, isNot(contains('Q|Вопрос 0\n')));
     });
   });
 }

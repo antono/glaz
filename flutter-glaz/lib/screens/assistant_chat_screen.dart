@@ -212,22 +212,19 @@ class _ToolCallCard extends StatelessWidget {
 
   static const _color = FrameColors.orange;
 
-  (IconData, String) get _what {
-    final arg = call.command.arg;
-    final on = arg.isEmpty ? '' : ': $arg';
-    return switch (call.command.name) {
-      'photo' => (Icons.photo_camera_outlined, 'Took a photo with the glasses'),
-      'photos' => (Icons.photo_library_outlined, 'Looked through photos$on'),
-      'getphoto' => (Icons.image_outlined, 'Looked at a photo$on'),
-      'recordings' => (Icons.mic_none, 'Looked through recordings$on'),
-      'transcript' => (Icons.notes, 'Read a note$on'),
-      _ => (Icons.build_outlined, '${call.command}'),
-    };
-  }
+  IconData get _icon => switch (call.command.name) {
+    'photo' => Icons.photo_camera_outlined,
+    'photos' => Icons.photo_library_outlined,
+    'getphoto' => Icons.image_outlined,
+    'recordings' => Icons.mic_none,
+    'transcript' => Icons.notes,
+    _ => Icons.build_outlined,
+  };
 
   @override
   Widget build(BuildContext context) {
-    final (icon, label) = _what;
+    final icon = _icon;
+    final label = call.label;
     final result = call.result;
     return Align(
       alignment: Alignment.centerLeft,

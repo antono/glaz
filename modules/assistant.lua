@@ -1,14 +1,17 @@
 -- Menu module: voice assistant. ASCII only, see docs/PROTOCOL.md,
--- "Assistant".
+-- "Assistant". The text it shows is UTF-8: the font has Cyrillic.
 --
 --   on entry, the chats kept on the phone, newest first, under 'New chat';
 --   the cursor on the one still going on, if any
---   tilt        -- the chats: the next / previous one; an answer: its pages
---   single tap  -- 'New chat': listen, in a new chat; a chat: show its last
---                  question and answer, the next tap asks in it;
---                  otherwise listen, tapped again, stop and ask
+--   tilt        -- the chats: the next / previous one; a chat: a screen
+--                  back / on; at the end it follows again
+--   single tap  -- 'New chat': listen, in a new chat; a chat: show it,
+--                  the next tap asks in it; listening: stop and ask
 --   double tap  -- back to the chats, from them to the menu; a question
 --                  being asked is dropped, sent nowhere
+--
+-- A chat is a log of lines, coloured by kind: the wearer's questions, the
+-- agent's tool calls (a photo taken, notes read), its answers.
 --
 -- Only taps start and stop it: nothing guesses where a question ends.
 -- Listening is Recorder's streaming with a fourth byte in REC_START, 1, so
@@ -19,21 +22,22 @@
 -- was not running:
 --
 --   'stop'      -- stop listening and ask
---   'h:<text>'  -- what was heard; the agent is thinking
---   'a:<text>'  -- the answer, ASCII, already in lines of at most LINE
---   'e:<text>'  -- went wrong, why
+--   't:<busy>' then '\n<kind>|<text>' per line -- the chat's newest lines,
+--                  already cut to the screen; <busy> 1 while the agent
+--                  thinks. kind: Q question, T tool call, A answer, C a
+--                  command run, E went wrong
+--   'e:<text>'  -- went wrong outside a chat (nothing heard, no agent)
 --   'listen'    -- listen again
 --   'c:<live>' then '\n<id>|<title>' per chat -- the chats, newest first;
 --                  <live> the id of the one still going on, or 0
 --
 -- ASSIST asks, '>BBI2': op, id -- 1 the chats, 2 go on with chat <id>
--- (the phone answers 'a:' with its last question and answer), 3 a new
--- chat, sent just before listening.
+-- (the phone answers 't:'), 3 a new chat, sent just before listening.
 local _M = {}
 
 _M.label = 'Assistant'
 _M.mode = 'app'
-_M.rows = 5               -- every row under the top bar (frame_app.lua)
+_M.quiet = true           -- draw() is the screen; tick() text is not shown
 
 local REC_START = 0x1F
 local AUDIO     = 0x05
@@ -45,21 +49,33 @@ local FOR_ASSISTANT = 1   -- REC_START's fourth byte
 local RATE = 8000
 local BITS = 16           -- or 8; Glaz > Menu > Assistant
 local MAX_LISTEN = 120    -- s; only so a forgotten one does not run on
-local ROWS = _M.rows      -- rows it has on screen
+local ROWS = 5            -- the chats' rows
+local LOG_ROWS = 4        -- the chat's rows; the fifth is the status
 local RETRY = 5           -- s without the chats before asking again
+
+-- Layout, as Translate's: rows under the top bar, the cursor left of the
+-- text
+local LEFT_X, TEXT_X = 60, 88
+local TOP_Y, ROW_H = 65, 55
+local STATUS_Y = TOP_Y + ROW_H * LOG_ROWS
+local COLORS = { Q = 'SKYBLUE', T = 'ORANGE', A = 'WHITE', C = 'GREY',
+                 E = 'RED' }
 
 local started = nil       -- utc() when listening began; nil when not
 local size = 0            -- bytes per packet, even (16-bit samples)
 local per_second = 0      -- bytes of sound a second
 local lost = 0            -- bytes the link did not take
-local state = ''          -- '', 'chats', 'listen', 'think', 'answer',
-                          -- 'error'
-local lines = {}          -- the answer, or what was heard, line by line
-local page = 1
+local view = ''           -- '', 'chats' or 'chat'
+local busy = false        -- asked; the agent is thinking
+local note = ''           -- the status row's own: 'no phone', ...
+local log = {}            -- the chat, { kind, text } a line, oldest first
+local top = 1             -- the log line on the first row
+local follow = true       -- the view keeps to the end of the log
 local chats = nil         -- { {id, title}, ... } once the phone says
-local sel, top = 0, 0     -- the chat under the cursor, on the first row;
+local sel, ctop = 0, 0    -- the chat under the cursor, on the first row;
                           -- 0 is 'New chat'
 local asked_at = nil      -- utc() the chats were asked for
+local ver = 0             -- goes up with every change the phone brings
 
 local function send(packet)
   for _ = 1, 20 do
@@ -93,12 +109,15 @@ local function finish()
   started = nil
 end
 
+local function tail_top()
+  return math.max(1, #log - LOG_ROWS + 1)
+end
+
 local function listen()
   finish()
-  lines, page = {}, 1
+  view, busy, note = 'chat', false, ''
   if not frame.bluetooth.is_connected() then
-    state = 'error'
-    lines = { 'no phone' }
+    note = 'no phone'
     return
   end
   local bits = _M.host.setting('bits', BITS)
@@ -113,160 +132,189 @@ local function listen()
      or not send(string.char(REC_START, bits, RATE // 1000, FOR_ASSISTANT))
   then
     pcall(frame.microphone.stop)
-    state = 'error'
-    lines = { 'no microphone' }
+    note = 'no microphone'
     return
   end
   started = frame.time.utc()
-  state = 'listen'
+  follow, top = true, tail_top()
 end
 
-local function split(text)
-  local out = {}
-  for line in string.gmatch(text, '[^\n]+') do out[#out + 1] = line end
-  return out
+-- Stops listening and asks.
+local function ask()
+  finish()
+  busy = true
 end
 
-local function chats_screen()
-  if not chats then
-    return frame.bluetooth.is_connected() and 'loading..'
-      or 'no phone\ntap = ask'
-  end
-  local rows = {}
-  for i = top, math.min(top + ROWS - 1, #chats) do
-    rows[#rows + 1] = (i == sel and '> ' or '  ')
-      .. (i == 0 and 'New chat' or chats[i][2])
-  end
-  return table.concat(rows, '\n')
-end
-
--- One page of ROWS rows; with more than one page the last row says which.
-local function screen()
-  if state == 'chats' then return chats_screen() end
-  if state == 'listen' then
-    local text = string.format('listening... %ds',
-                               math.floor(frame.time.utc() - started))
-    if lost > 0 then text = text .. string.format('  lost %d KB', lost // 1024) end
-    return text .. '\ntap = ask'
-  end
-  if state == 'think' then
-    local heard = ''
-    for i = 1, math.min(#lines, ROWS - 1) do
-      heard = heard .. (i == 1 and '"' or '') .. lines[i]
-        .. (i == math.min(#lines, ROWS - 1) and '"' or '') .. '\n'
-    end
-    return heard .. 'thinking...'
-  end
-  if #lines == 0 then return 'tap = ask' end
-  if #lines <= ROWS then return table.concat(lines, '\n') end
-  local per = ROWS - 1
-  local pages = (#lines + per - 1) // per
-  if page > pages then page = pages end
-  local out = {}
-  for i = (page - 1) * per + 1, math.min(page * per, #lines) do
-    out[#out + 1] = lines[i]
-  end
-  out[#out + 1] = string.format('- %d/%d -', page, pages)
-  return table.concat(out, '\n')
+-- What the screen shows, in short: tick() returns it, so a change redraws.
+local function state_str()
+  return table.concat({ view, ver, sel, ctop, top, tostring(follow),
+                        tostring(busy), note, lost // 1024,
+                        started and math.floor(frame.time.utc() - started)
+                        or '-' }, '|')
 end
 
 local function take(arg)
   local kind, text = string.match(arg, '^(%a):(.*)$')
-  if state == 'chats' and (kind == 'h' or kind == 'a' or kind == 'e') then
-    return                -- for a question dropped by going back
-  elseif arg == 'listen' then
+  if arg == 'listen' then
     listen()
   elseif arg == 'stop' then
-    if started then finish(); state = 'think' end
-  elseif kind == 'h' then
-    finish()
-    state, lines = 'think', split(text)
-  elseif kind == 'a' or kind == 'e' then
-    finish()
-    state, lines, page = kind == 'a' and 'answer' or 'error', split(text), 1
-  elseif kind == 'c' and state == 'chats' then
+    if started then ask() end
+  elseif kind == 'c' then
+    if view ~= 'chats' then return end
     local live, body = string.match(text, '^(%d+)\n?(.*)$')
-    chats, sel, top = {}, 0, 0
+    chats, sel, ctop = {}, 0, 0
     for id, title in string.gmatch(body or '', '(%d+)|([^\n]*)') do
       chats[#chats + 1] = { tonumber(id), title }
       if id == live then sel = #chats end
     end
-    if sel >= ROWS then top = sel - ROWS + 1 end
+    if sel >= ROWS then ctop = sel - ROWS + 1 end
+  elseif kind == 't' or kind == 'e' then
+    -- the list up: for a question dropped by going back
+    if view == 'chats' then return end
+    view = 'chat'
+    if kind == 't' then
+      local b, body = string.match(text, '^(%d)\n?(.*)$')
+      log, busy = {}, b == '1'
+      for k, t in string.gmatch(body or '', '(%a)|([^\n]*)') do
+        log[#log + 1] = { k, t }
+      end
+    else
+      finish()
+      busy = false
+      for line in string.gmatch(text, '[^\n]+') do
+        log[#log + 1] = { 'E', line }
+      end
+    end
+    if follow then top = tail_top() end
   end
+  ver = ver + 1
 end
 
 local function ask_chats()
-  chats, sel, top = nil, 0, 0
+  chats, sel, ctop = nil, 0, 0
   asked_at = assist(1) and frame.time.utc() or nil
 end
 
+local function reset()
+  log, top, follow, busy, note = {}, 1, true, false, ''
+end
+
 function _M.start(info)
-  state, lines, page = '', {}, 1
+  reset()
   if info and info.arg then
+    view = 'chat'
     take(info.arg)
   else
-    state = 'chats'
+    view = 'chats'
     ask_chats()
   end
 end
 
 function _M.tick()
-  if state == 'chats' and not chats
+  if view == 'chats' and not chats
      and (not asked_at or frame.time.utc() - asked_at > RETRY) then
     ask_chats()
   end
   if started then
     if not frame.bluetooth.is_connected() then
       finish()
-      state, lines = 'error', { 'no phone' }
+      note = 'no phone'
     elseif frame.time.utc() - started > MAX_LISTEN then
-      finish()
-      state = 'think'
+      ask()
     else
       drain()
     end
   end
-  return screen()
+  return state_str()
 end
 
 function _M.on_tap()
   if started then
-    finish()
-    state = 'think'
-  elseif state == 'chats' and chats and sel > 0 then
+    ask()
+  elseif view == 'chats' and chats and sel > 0 then
+    reset()
+    view = 'chat'
     assist(2, chats[sel][1])
-    state, lines, page = 'answer', { 'loading..' }, 1
+    note = 'loading..'
   else
-    if state == 'chats' and chats then assist(3) end
+    if view == 'chats' then
+      reset()
+      if chats then assist(3) end
+    end
     listen()
   end
-  return screen()
+  return state_str()
 end
 
 function _M.on_roll(dir)
-  if state == 'chats' then
+  if view == 'chats' then
     if not chats then return nil end
     sel = math.max(0, math.min(sel + dir, #chats))
-    if sel < top then top = sel end
-    if sel > top + ROWS - 1 then top = sel - ROWS + 1 end
-    return chats_screen()
+    if sel < ctop then ctop = sel end
+    if sel > ctop + ROWS - 1 then ctop = sel - ROWS + 1 end
+  else
+    top = math.max(1, math.min(top + dir * (LOG_ROWS - 1), tail_top()))
+    follow = top == tail_top()
   end
-  page = math.max(1, page + dir)
-  return screen()
+  return state_str()
 end
 
 function _M.remote(arg)
+  if note == 'loading..' then note = '' end
   take(arg)
-  return screen()
+  return state_str()
+end
+
+local function status()
+  if started then
+    return string.format('listening %ds  tap = ask',
+                         math.floor(frame.time.utc() - started))
+      .. (lost > 0 and string.format('  lost %dK', lost // 1024) or '')
+  end
+  if busy then return 'thinking..' end
+  if note ~= '' then return note end
+  return 'tap = ask'
+end
+
+function _M.draw()
+  if view == 'chats' then
+    if not chats then
+      frame.display.text(frame.bluetooth.is_connected() and 'loading..'
+                         or 'no phone, tap = ask', TEXT_X, TOP_Y,
+                         { color = 'GREY' })
+      return
+    end
+    for i = ctop, math.min(ctop + ROWS - 1, #chats) do
+      local y = TOP_Y + ROW_H * (i - ctop)
+      if i == sel then
+        frame.display.text('>', LEFT_X, y, { color = 'YELLOW' })
+      end
+      frame.display.text(i == 0 and 'New chat' or chats[i][2], TEXT_X, y,
+                         { color = i == sel and 'YELLOW' or
+                                   (i == 0 and 'GREY' or 'WHITE') })
+    end
+    return
+  end
+  for r = 0, LOG_ROWS - 1 do
+    local l = log[top + r]
+    if l and l[2] ~= '' then
+      frame.display.text(l[2], LEFT_X, TOP_Y + ROW_H * r,
+                         { color = COLORS[l[1]] or 'WHITE' })
+    end
+  end
+  frame.display.text(status() .. (follow and '' or '  ^'), LEFT_X, STATUS_Y,
+                     { color = (note ~= '' and note ~= 'loading..'
+                                and not started and not busy)
+                               and 'RED' or 'GREY' })
 end
 
 -- Going back to the chats or leaving drops the question: the sound is not
 -- finished, the phone is told to forget it, and an answer still on its
 -- way is thrown away.
 local function drop()
-  if started or state == 'think' then
+  if started or busy then
     if started then pcall(frame.microphone.stop) end
-    started = nil
+    started, busy = nil, false
     send(string.char(REC_DROP))
   end
 end
@@ -274,17 +322,18 @@ end
 -- Back to the chats, asked for again: the one just left may be new or
 -- renamed. From the chats, false: the app leaves.
 function _M.on_back()
-  if state == 'chats' then return false end
+  if view == 'chats' then return false end
   drop()
-  state, lines, page = 'chats', {}, 1
+  reset()
+  view = 'chats'
   ask_chats()
-  return chats_screen()
+  return state_str()
 end
 
 -- Leaving: a double tap from the chats, or anything else that stops it.
 function _M.stop()
   drop()
-  state, chats = '', nil
+  view, chats, log = '', nil, {}
 end
 
 return _M

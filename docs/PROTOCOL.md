@@ -751,9 +751,8 @@ module takes in `start()` or `remote()`:
 | Argument | Means |
 | --- | --- |
 | `stop` | stop listening and ask (`MODULE_CALL`) |
-| `h:text` | what was heard; the agent is thinking (`MODULE_CALL`, only seen with Assistant on screen) |
-| `a:text` | the answer |
-| `e:text` | went wrong: no agent set up, no answer, nothing heard |
+| `t:busy` | the current chat, then `\nkind\|text` a line: its newest lines, cut to the screen, whole turns, 900 bytes at most; `busy` `1` while the agent thinks. `kind`: `Q` a question, `T` a tool call (`* Took a photo with the glasses`, ` ..` while it runs), `A` the answer, `C` a command run, `E` went wrong. Sent as the question is heard and as each tool call starts and ends (`MODULE_CALL`, only seen with Assistant on screen), and with the answer (`APP_OPEN`) |
+| `e:text` | went wrong outside a chat: nothing heard, the assistant off |
 | `listen` | listen again |
 | `c:live` | the chats, then `\nid\|title` each, newest 12, titles cut to a row; `live` the id of the chat still going on (asked or picked within ten minutes), `0` for none (`MODULE_CALL`) |
 
@@ -761,18 +760,26 @@ module takes in `start()` or `remote()`:
 chats: `New chat`, then the phone's chats, newest first, the cursor on the
 one still going on, else on `New chat`. It asks with `ASSIST` (`0x04`),
 `>BBI2`: op, id -- `1` the list (again every 5 s until it comes), `2` go
-on with chat `id`: the phone makes it the current chat and answers `a:`
-with its last question and answer, and the next tap asks in it; `3` a new
+on with chat `id`: the phone makes it the current chat and answers `t:`
+with it, and the next tap asks in it; `3` a new
 chat, sent just before `REC_START` when the wearer taps `New chat`, so
 that tap listens at once. Opened by the phone with an argument, Assistant
 skips the list. A double tap anywhere but the list goes back to it, asked
-for again; an `h:`, `a:` or `e:` that comes while the list is up is for a
+for again; a `t:` or `e:` that comes while the list is up is for a
 question dropped on the way and is thrown away.
 
-Text is what the font has, as for notifications, in lines of at most 26 characters,
-24 lines at most. Five fit on screen (`_M.rows`); a longer answer shows four
-a page and `- 1/4 -` under them, and a tilt turns the page. With an `@open` the answer
-is not shown: the app it opened covers it. A tap on an answer asks again.
+A chat on the glasses is a log, four rows and a status row under them
+(`listening 5s`, `thinking..`, `tap = ask`), drawn in colours by kind:
+questions sky blue, tool calls orange, answers white, commands grey,
+errors red. It keeps to its end as lines come; a tilt goes a screen back
+or on, `^` in the status row while not at the end. Text is what the font
+has, Cyrillic included, in lines of at most 26 characters. With an
+`@open` the answer is not shown: the app it opened covers it. A tap asks
+again, in the same chat.
+
+The system prompt tells the agent that "what do I see" means `@photo`,
+the glasses' camera -- never its own screen or tools -- and, with Photos
+and recordings off, that it cannot see and must say so.
 
 The answer is also read aloud, as the agent wrote it (Cyrillic and all),
 in headphones only: before each answer the phone asks Android where speech

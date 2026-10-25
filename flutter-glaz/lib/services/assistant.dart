@@ -97,7 +97,14 @@ These commands bring you something instead. Write only them in that answer; the 
 @getphoto <name>            one of those photos
 @recordings [day]           the wearer's voice recordings, with the start of each transcript
 @transcript <name>          the whole transcript of one
+When the wearer asks what they see or what is in front of them, take @photo first and answer from it. That is the glasses' camera: never your own screen, browser or other tools, and never a guess.
 ''';
+
+/// Said instead of [_queries] when the agent may not see anything.
+const _noCamera =
+    'You cannot see through the glasses: the wearer has not allowed it '
+    '(Glaz > Menu > Assistant, Photos and recordings). If asked what they '
+    'see, say so; never describe your own screen or guess.\n';
 
 String _ymd(DateTime t) =>
     '${t.year}-${t.month.toString().padLeft(2, '0')}-'
@@ -133,7 +140,7 @@ You can control the glasses. Put each command on a line of its own, starting wit
 @set <app>.<key>=<value>    change an app's setting
 @press ok|back|menu|left|right   a button of the phone's remote for the glasses
 After @open the screen shows that app, not your text, so say a few words or nothing.
-${settings.agentFiles ? _queries() : ''}The apps on the glasses:
+${settings.agentFiles ? _queries() : _noCamera}The apps on the glasses:
 $apps''';
 }
 
@@ -152,6 +159,20 @@ class ToolCall {
 
   /// What is kept of a result: enough to see what came back.
   static const kept = 300;
+
+  /// What it did, in words, for the chat on the phone and on the glasses.
+  String get label {
+    final arg = command.arg;
+    final on = arg.isEmpty ? '' : ': $arg';
+    return switch (command.name) {
+      'photo' => 'Took a photo with the glasses',
+      'photos' => 'Looked through photos$on',
+      'getphoto' => 'Looked at a photo$on',
+      'recordings' => 'Looked through recordings$on',
+      'transcript' => 'Read a note$on',
+      _ => '$command',
+    };
+  }
 
   Map<String, Object?> toJson() => {
     'name': command.name,
@@ -513,7 +534,7 @@ class AssistantService extends ChangeNotifier {
           return;
         }
         open(chat);
-        link.callModule('assistant', 'a:${lastOnGlasses(chat)}');
+        link.callModule('assistant', onGlasses(chat));
       case 3:
         newChat();
     }
@@ -535,11 +556,65 @@ class AssistantService extends ChangeNotifier {
     return out.toString();
   }
 
-  /// A chat's last question and answer, for the glasses' screen.
-  static String lastOnGlasses(AssistantChat chat) {
-    if (chat.turns.isEmpty) return 'tap = ask';
-    final t = chat.turns.last;
-    return wrapForGlasses('"${t.question}"\n${t.error ?? t.answer ?? '...'}');
+  /// The most of a chat sent to the glasses at once, in bytes.
+  static const maxBytes = 900;
+
+  /// [chat] for the glasses' screen: `t:<busy>`, then its newest lines,
+  /// `<kind>|<text>` each, cut to the screen, as many as fit in [maxBytes]
+  /// -- Q the questions, T the tool calls, A the answers, C the commands
+  /// run, E what went wrong (docs/PROTOCOL.md, "Assistant").
+  String onGlasses(AssistantChat chat) {
+    final busy = state == AssistantState.thinking && chat == current;
+    final lines = <String>[];
+    var bytes = 4;
+    for (final t in chat.turns.reversed) {
+      final turn = [
+        for (final l in _wrap(t.question)) 'Q|$l',
+        for (final q in t.queries)
+          for (final l in _wrap('* ${q.label}${q.result == null ? ' ..' : ''}'))
+            'T|$l',
+        if (t.error != null)
+          for (final l in _wrap(t.error!)) 'E|$l'
+        else ...[
+          if (t.answer != null)
+            for (final l in _wrap(t.answer!)) 'A|$l',
+          for (final c in t.commands) 'C|${_wrap('$c').first}',
+        ],
+      ];
+      // whole turns, but the newest one as much of its end as fits
+      final size = turn.fold(0, (n, l) => n + utf8.encode(l).length + 1);
+      if (bytes + size > maxBytes) {
+        if (lines.isEmpty) {
+          while (turn.isNotEmpty && bytes < maxBytes) {
+            final l = turn.removeLast();
+            bytes += utf8.encode(l).length + 1;
+            if (bytes <= maxBytes) lines.insert(0, l);
+          }
+        }
+        break;
+      }
+      lines.insertAll(0, turn);
+      bytes += size;
+    }
+    return 't:${busy ? 1 : 0}${lines.map((l) => '\n$l').join()}';
+  }
+
+  static List<String> _wrap(String text) {
+    final w = wrapForGlasses(text.replaceAll('|', '/'));
+    return w.isEmpty ? const [''] : w.split('\n');
+  }
+
+  /// The current chat to the glasses: [open] puts Assistant on screen for
+  /// it, else only an Assistant on screen sees it.
+  void _toGlasses({bool open = false}) {
+    final chat = current;
+    if (chat == null) return;
+    final arg = onGlasses(chat);
+    if (open) {
+      link.openModule('assistant', arg);
+    } else {
+      link.callModule('assistant', arg);
+    }
   }
 
   void _listen(int bits, int rate) {
@@ -620,7 +695,7 @@ class AssistantService extends ChangeNotifier {
     heard = '';
     state = AssistantState.thinking;
     notifyListeners();
-    link.callModule('assistant', 'h:${wrapForGlasses(question, maxLines: 4)}');
+    _toGlasses();
 
     final agent = _agentFor(settings);
     if (agent == null) {
@@ -651,12 +726,14 @@ class AssistantService extends ChangeNotifier {
       final calls = [for (final c in asked) ToolCall(c)];
       t.queries = [...t.queries, ...calls];
       notifyListeners();
+      _toGlasses();
       final results = <QueryResult>[];
       for (final call in calls) {
         final r = await queries!.run(call.command);
         results.add(r);
         call.result = _brief(r);
         notifyListeners();
+        if (turn == _turn) _toGlasses();
       }
       if (turn != _turn) return;
       talk
@@ -690,7 +767,7 @@ class AssistantService extends ChangeNotifier {
     notifyListeners();
     _save();
     final opened = await run(commands);
-    if (!opened) _show('a:', text.isEmpty ? 'OK' : text);
+    if (!opened) _toGlasses(open: true);
     await _say(text);
   }
 
@@ -717,7 +794,7 @@ class AssistantService extends ChangeNotifier {
     state = AssistantState.idle;
     notifyListeners();
     _save();
-    _show('e:', why);
+    _toGlasses(open: true);
   }
 
   /// What the screen keeps of a query's result: its text, photos counted.
