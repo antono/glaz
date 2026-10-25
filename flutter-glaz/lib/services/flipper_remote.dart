@@ -2,33 +2,40 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../flipper/companion.dart';
+import '../flipper/presses.dart';
 import '../flipper/remote_status.dart';
 import '../frame/link.dart';
 import '../frame/protocol.dart';
 import '../glasses_menu.dart';
 import '../settings.dart';
 import 'glasses_lua.dart';
-import 'keys.dart';
 
-/// Tells the Flipper's Glaz app (flipper-glaz/) about the glasses: their
-/// name, free disk and memory, and the app on their screen. The Flipper
-/// is the phone's keyboard remote meanwhile ([KeyRemote]); while a
-/// keyboard is attached, this looks for a Flipper among the paired ones
-/// and writes the status to it whenever it changes.
+/// The Flipper's Glaz app (flipper-glaz/) as a remote for the glasses.
+/// Its presses drive them as a keyboard's do ([gestureFor]), and it is
+/// told about them: their name, free disk and memory, and the app on
+/// their screen, written whenever it changes. While the service is on,
+/// this looks for the paired Flipper, and again once a minute. Off
+/// Android that is a scan, and only while the glasses are connected: the
+/// link scans for them with the same one scanner.
 class FlipperRemote extends ChangeNotifier {
   FlipperRemote(
     this.link,
     this.settings,
-    this.keys,
     this.lua, {
     FlipperStatusPort? port,
-  }) : port = port ?? FlipperStatusBle();
+    FlipperCompanion? companion,
+    void Function(List<int>)? send,
+  }) : companion = companion ?? FlipperCompanion(),
+       port = port ?? FlipperStatusBle(companion: companion),
+       _sendInput = send ?? ((b) => link.send(input, b));
 
   final FrameLink link;
   final Settings settings;
-  final KeyRemote keys;
   final GlassesLua lua;
+  final FlipperCompanion companion;
   final FlipperStatusPort port;
+  final void Function(List<int>) _sendInput;
 
   /// Free disk and memory are asked of the glasses this often, and a
   /// Flipper not found is looked for again.
@@ -40,7 +47,13 @@ class FlipperRemote extends ChangeNotifier {
 
   /// A Flipper with the Glaz app is connected.
   bool connected = false;
+
+  /// The Flippers the phone is paired with (Android only).
+  List<FlipperPaired> paired = const [];
   bool _opening = false;
+
+  /// Goes up with every [forget]: an open under way then is let go.
+  int _forgets = 0;
 
   /// The module on the glasses' screen, by its number in tree order
   /// (APP_START); null: the menu.
@@ -50,7 +63,17 @@ class FlipperRemote extends ChangeNotifier {
   List<int>? _sent;
   Timer? _timer;
 
-  bool get _wanted => settings.serviceOn('flipper_remote') && keys.keyboard;
+  bool get _wanted => settings.serviceOn('flipper_remote');
+
+  /// The Flipper drives the glasses, as a keyboard does (main.dart,
+  /// HANDS_OFF).
+  bool get drives => connected && _wanted;
+
+  /// Off Android the Flipper is found by a scan, which would stop the
+  /// link's own: looked for only once the glasses are there.
+  bool get _mayLook =>
+      defaultTargetPlatform == TargetPlatform.android ||
+      (link.connected && !link.busy);
 
   /// [_wanted] when last looked: the Flipper is looked for as it turns
   /// true, and then once a minute, not on every change of the link.
@@ -59,7 +82,8 @@ class FlipperRemote extends ChangeNotifier {
   void attach() {
     link.events.listen(onEvent);
     link.addListener(_changed);
-    keys.addListener(_changed);
+    settings.addListener(_changed);
+    port.keys.listen(onKeys);
     port.lost.listen((_) {
       connected = false;
       _sent = null;
@@ -67,6 +91,45 @@ class FlipperRemote extends ChangeNotifier {
     });
     _timer = Timer.periodic(every, (_) => _tick());
     _changed();
+    _refresh();
+  }
+
+  /// A press from the Flipper, to the glasses while they are connected
+  /// and free; anything not a press is dropped.
+  @visibleForTesting
+  void onKeys(List<int> bytes) {
+    final p = decodePress(bytes);
+    if (p == null || !drives || !link.connected || link.busy) return;
+    final g = gestureFor(p);
+    if (g != null) _sendInput(g);
+  }
+
+  /// Pairs a Flipper (Android's chooser, then its PIN) and starts
+  /// connecting to it at once; false when none was paired.
+  Future<bool> pair() async {
+    final p = await companion.pair();
+    await _refresh();
+    if (p == null) return false;
+    if (_wanted && !connected) unawaited(_open());
+    return true;
+  }
+
+  /// Unpairs the Flipper at [address], letting go of it first.
+  Future<void> forget(String address) async {
+    _forgets++;
+    if (connected) {
+      connected = false;
+      _sent = null;
+      await port.close();
+      notifyListeners();
+    }
+    await companion.forget(address);
+    await _refresh();
+  }
+
+  Future<void> _refresh() async {
+    paired = await companion.paired();
+    notifyListeners();
   }
 
   /// What the glasses are, as the Flipper shows it.
@@ -119,12 +182,18 @@ class FlipperRemote extends ChangeNotifier {
   }
 
   Future<void> _open() async {
-    if (_opening) return;
+    if (_opening || !_mayLook) return;
     _opening = true;
+    final forgets = _forgets;
     try {
       connected = await port.open();
     } finally {
       _opening = false;
+    }
+    if (connected && (!_wanted || forgets != _forgets)) {
+      // turned off, or the Flipper forgotten, while it was connecting
+      connected = false;
+      await port.close();
     }
     if (!connected) return;
     notifyListeners();
@@ -172,7 +241,7 @@ class FlipperRemote extends ChangeNotifier {
   void dispose() {
     _timer?.cancel();
     link.removeListener(_changed);
-    keys.removeListener(_changed);
+    settings.removeListener(_changed);
     super.dispose();
   }
 }

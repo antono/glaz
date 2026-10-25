@@ -95,12 +95,15 @@ reconnects by itself.
 
 ### The Glaz app on the Flipper
 
-`flipper-glaz/` is a Flipper app of its own (Apps > Bluetooth > Glaz): the
-same keyboard as Keynote, to the pairing, held upright, with the glasses
-on its screen instead of the keys -- their name, free disk and memory, and
-the app they show, or "(disconnected)". glaz tells it those over the same
-connection: More > Services > **Flipper remote**, on unless turned off
+`flipper-glaz/` is a Flipper app of its own (Apps > Bluetooth > Glaz),
+held upright, with the glasses on its screen -- their name, free disk and
+memory, and the app they show, or "(disconnected)". Unlike Keynote it is
+no keyboard: Android's on-screen keyboard stays, and no app but glaz hears
+its keys. Its presses and the glasses' status go both ways over a
+Bluetooth service of its own, and it pairs on its own, as **Glaz**
 (flipper-glaz/README.md, "The link to the phone").
+glaz on the phone does not take its presses yet; until it does,
+`utils/flipper_keys.py` shows them on a computer.
 
 ### Over USB
 

@@ -26,6 +26,10 @@
     <!-- Transcripts (Speech.kt): ML Kit's recognizer will not run without
          it, though the sound comes from the glasses, not the microphone. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Pairing the Flipper through the Companion Device Manager
+         (Companion.kt); the app still runs on phones without it. -->
+    <uses-feature android:name="android.software.companion_device_setup"
+        android:required="false" />
     <application
         android:label="Glaz"
         android:name="${applicationName}"

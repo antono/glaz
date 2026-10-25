@@ -6,12 +6,11 @@
 //! their screen. Keys are told apart by a short and a long press: a long
 //! one is a command of its own, not the short one repeated.
 //!
-//! A draft. For now the keys do what the Flipper's Keynote does: the
-//! Flipper is a Bluetooth keyboard (`hid`), the arrows and OK are held
-//! down as long as the Flipper's keys, Back is Backspace and Android's
-//! Back. The phone writes what it knows of the glasses to a service of
-//! the app's own on the same connection (`link`); until it does, the
-//! glasses show as disconnected.
+//! A draft. The Flipper is no keyboard: each press goes to glaz on the
+//! phone, and to no other app, over a Bluetooth service of the app's own
+//! (`ble`, `link`); the phone writes what it knows of the glasses back
+//! over the same service, and until it does, the glasses show as
+//! disconnected. What a press does is glaz's to say.
 
 #![no_main]
 #![no_std]
@@ -19,7 +18,7 @@
 // Required for panic handler
 extern crate flipperzero_rt;
 
-mod hid;
+mod ble;
 mod link;
 
 use core::ffi::{CStr, c_void};
@@ -49,7 +48,7 @@ static FAP_MANIFEST: ApplicationManifestV1 = ApplicationManifestV1 {
         api_version: API_VERSION,
         ..ApplicationManifestV1::default().base
     },
-    app_version: 1,
+    app_version: 3,
     name: _padded(b"Glaz"),
     has_icon: 1,
     icon: _padded(include_bytes!("glaz-10x10.icon")),
@@ -182,16 +181,15 @@ impl Key {
         })
     }
 
-    /// The keyboard key Keynote holds down for it; Back has none, it
-    /// sends on release (`main`).
-    fn usage(self) -> Option<u16> {
+    /// The key as the phone hears it (`link`).
+    fn code(self) -> u8 {
         match self {
-            Self::Up => Some(hid::KEY_UP),
-            Self::Down => Some(hid::KEY_DOWN),
-            Self::Left => Some(hid::KEY_LEFT),
-            Self::Right => Some(hid::KEY_RIGHT),
-            Self::Ok => Some(hid::KEY_SPACE),
-            Self::Back => None,
+            Self::Up => 1,
+            Self::Down => 2,
+            Self::Left => 3,
+            Self::Right => 4,
+            Self::Ok => 5,
+            Self::Back => 6,
         }
     }
 
@@ -209,11 +207,32 @@ impl Key {
 
 /// A press as the Flipper tells them apart: a short one comes on release
 /// (`InputTypeShort`), a long one while the key is still held, after
-/// about 0.5 s (`InputTypeLong`), and then no short one.
+/// about 0.5 s (`InputTypeLong`), and then no short one; held on, it
+/// repeats (`InputTypeRepeat`) until let go.
 #[derive(Clone, Copy, PartialEq)]
 enum Press {
     Short,
     Long,
+    Repeat,
+}
+
+impl Press {
+    /// The press as the phone hears it (`link`).
+    fn code(self) -> u8 {
+        match self {
+            Self::Short => 1,
+            Self::Long => 2,
+            Self::Repeat => 3,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Short => "short",
+            Self::Long => "long",
+            Self::Repeat => "repeat",
+        }
+    }
 }
 
 /// What the main loop waits for.
@@ -228,11 +247,9 @@ enum Event {
 
 /// What the draw callback shows; the main loop changes it.
 struct State {
-    /// A phone is connected to the Flipper's keyboard.
+    /// A phone is connected to the Flipper.
     phone: bool,
     status: Status,
-    /// The last press, shown at the bottom until the commands exist.
-    last: Option<(Key, Press)>,
 }
 
 /// Draws the screen, upright: 64 wide, 128 high. Called from the GUI
@@ -243,23 +260,13 @@ unsafe extern "C" fn draw_callback(canvas: *mut sys::Canvas, context: *mut c_voi
     unsafe {
         sys::canvas_clear(canvas);
 
-        sys::canvas_set_font(canvas, sys::FontPrimary);
-        sys::canvas_draw_str_aligned(
-            canvas,
-            W / 2,
-            1,
-            sys::AlignCenter,
-            sys::AlignTop,
-            c"Glaz".as_ptr(),
-        );
+        draw_dolphin(canvas, status.name.is_some());
         // The phone: a dot while connected, a ring while not.
         if state.phone {
             sys::canvas_draw_disc(canvas, W - 4, 5, 2);
         } else {
             sys::canvas_draw_circle(canvas, W - 4, 5, 2);
         }
-
-        draw_glasses(canvas, 29, status.name.is_some());
 
         sys::canvas_set_font(canvas, sys::FontSecondary);
         // "(disconnected)" while the phone tells of no glasses; without the
@@ -271,67 +278,94 @@ unsafe extern "C" fn draw_callback(canvas: *mut sys::Canvas, context: *mut c_voi
         sys::canvas_draw_str_aligned(
             canvas,
             W / 2,
-            48,
+            ART_BOTTOM + 2,
             sys::AlignCenter,
             sys::AlignTop,
             name.as_ptr(),
         );
-        sys::canvas_draw_line(canvas, 0, 59, W - 1, 59);
+        sys::canvas_draw_line(canvas, 0, ART_BOTTOM + 12, W - 1, ART_BOTTOM + 12);
 
-        draw_row(canvas, 63, c"Disk", size(status.disk_free));
-        draw_row(canvas, 75, c"Mem", size(status.mem_free));
+        draw_row(canvas, ART_BOTTOM + 16, c"Storage", size(status.disk_free));
+        draw_row(canvas, ART_BOTTOM + 28, c"Mem", size(status.mem_free));
 
-        sys::canvas_draw_str(canvas, 0, 95, c"App".as_ptr());
+        // The app on the glasses' screen, on the last line.
         let app = status.app.unwrap_or(Text::from("-"));
         sys::canvas_draw_str_aligned(
             canvas,
             W / 2,
-            98,
+            127,
             sys::AlignCenter,
-            sys::AlignTop,
+            sys::AlignBottom,
             app.as_ptr(),
         );
-
-        if let Some((key, press)) = state.last {
-            let mut t = Text::new();
-            let _ = write!(
-                t,
-                "{} {}",
-                key.name(),
-                if press == Press::Long {
-                    "long"
-                } else {
-                    "short"
-                }
-            );
-            sys::canvas_draw_str_aligned(
-                canvas,
-                W / 2,
-                127,
-                sys::AlignCenter,
-                sys::AlignBottom,
-                t.as_ptr(),
-            );
-        }
     }
 }
 
-/// Frame from the front: two round lenses on a bridge, the temples going
-/// back. While connected, the display shows in the right lens, the one
-/// it sits behind -- on the left as you look at them.
-unsafe fn draw_glasses(canvas: *mut sys::Canvas, cy: i32, connected: bool) {
-    unsafe {
-        for cx in [16, 47] {
-            sys::canvas_draw_circle(canvas, cx, cy, 12);
-            sys::canvas_draw_circle(canvas, cx, cy, 11);
-        }
-        // The bridge, two pixels thick, and the temples.
-        sys::canvas_draw_line(canvas, 28, cy - 4, 35, cy - 4);
-        sys::canvas_draw_line(canvas, 28, cy - 3, 35, cy - 3);
-        sys::canvas_draw_line(canvas, 4, cy - 5, 0, cy - 7);
-        sys::canvas_draw_line(canvas, 59, cy - 5, 63, cy - 7);
-        if connected {
-            sys::canvas_draw_rbox(canvas, 11, cy - 3, 11, 7, 1);
+/// The text starts this far down; the dolphin sits above it, centred.
+const ART_BOTTOM: i32 = 78;
+
+/// The Flipper's dolphin in Frame glasses: '#' always drawn, '+' only
+/// while glasses are connected -- the display lit in the lens it sits
+/// behind.
+const DOLPHIN: &[&str] = &[
+    "................................###########.....................",
+    ".............................####.........####..................",
+    "..........................####...............###................",
+    "........................###....................###..............",
+    ".......................##........................##.............",
+    "......................##..........................##............",
+    ".....................##............................##...........",
+    ".....................#..............................#...........",
+    "....................##..............................##..........",
+    "....................#................................#..........",
+    "....................#................................##.........",
+    "...................##.................................#.........",
+    "...................#..................................##........",
+    "...................#...................................#........",
+    "...................#........###........................#........",
+    "................#.##......#######......................#........",
+    "...............####......####.####....................#.........",
+    "...............###......###.....###...................#.........",
+    "..............##.##.....####.....##.##########.......#..........",
+    "..............#...#.#######.#....#############......#...........",
+    "..............#...#.######..#.....##..........#.....#...........",
+    "..............#...##...######....###..........#....#............",
+    "..............##.###....####.....##...............#.............",
+    "...............###.########+++++###...............#.............",
+    "..........########.#.....####+####..............................",
+    ".........#......#.........#######............#..................",
+    "........#.....#.............###..............#..................",
+    "........#.####...............................#..................",
+    "........#...................................#...................",
+    ".........#.................................#....................",
+    "..........##########.....................##.....................",
+    "..............#.....####............#####.......................",
+    ".............#..........############............................",
+    ".............#..................................................",
+    "..............#.................................................",
+    "...............##...............................................",
+    "...............#####............................................",
+    "...............##..#######......................................",
+    "................#......#############............................",
+    "................#......############.............................",
+    "................#......###########..............................",
+    "................##....###########...............................",
+    ".................#...##.#.#####.................................",
+    ".................#..##..#.......................................",
+    ".................####...#.......................................",
+    "..................#......#......................................",
+    "..................#......#......................................",
+    ".........................#......................................",
+];
+
+unsafe fn draw_dolphin(canvas: *mut sys::Canvas, connected: bool) {
+    let top = (ART_BOTTOM - DOLPHIN.len() as i32) / 2;
+    for (y, row) in DOLPHIN.iter().enumerate() {
+        let left = (W - row.len() as i32) / 2;
+        for (x, c) in row.bytes().enumerate() {
+            if c == b'#' || (c == b'+' && connected) {
+                unsafe { sys::canvas_draw_dot(canvas, left + x as i32, top + y as i32) };
+            }
         }
     }
 }
@@ -401,16 +435,15 @@ fn main(_args: Option<&CStr>) -> i32 {
     let state = Mutex::new(State {
         phone: false,
         status: Status::unknown(),
-        last: None,
     });
     let queue: MessageQueue<Event> = MessageQueue::new(8);
 
-    let Some(hid) = hid::Hid::start(
+    let Some(ble) = ble::Ble::start(
         Some(bt_status_callback),
         link_data,
         &queue as *const _ as *mut c_void,
     ) else {
-        flipperzero::error!("no Bluetooth keyboard");
+        flipperzero::error!("no Bluetooth");
         return 1;
     };
 
@@ -465,48 +498,19 @@ fn main(_args: Option<&CStr>) -> i32 {
                 continue;
             };
 
-            // Keynote (hid_keynote.c): the arrows and OK held down as long
-            // as the Flipper's keys; a short Back is Backspace, then
-            // Android's Back, which glaz drops (docs/REMOTE.md); a long
-            // Back lets go of everything and leaves.
+            // Every short, long and repeated press goes to the phone, but
+            // a long Back: it leaves, as in the Flipper's own remotes.
             let press = match event.type_ {
-                sys::InputTypePress => {
-                    if let Some(usage) = key.usage() {
-                        hid.kb_press(usage);
-                    }
-                    continue;
-                }
-                sys::InputTypeRelease => {
-                    if let Some(usage) = key.usage() {
-                        hid.kb_release(usage);
-                    }
-                    continue;
-                }
                 sys::InputTypeShort => Press::Short,
                 sys::InputTypeLong => Press::Long,
+                sys::InputTypeRepeat => Press::Repeat,
                 _ => continue,
             };
             if key == Key::Back && press == Press::Long {
-                hid.kb_release_all();
                 break;
             }
-            if key == Key::Back {
-                hid.kb_press(hid::KEY_BACKSPACE);
-                hid.kb_release(hid::KEY_BACKSPACE);
-                hid.consumer_press(hid::CONSUMER_AC_BACK);
-                hid.consumer_release(hid::CONSUMER_AC_BACK);
-            }
-            info!(
-                "press {} {}",
-                key.name(),
-                if press == Press::Long {
-                    "long"
-                } else {
-                    "short"
-                }
-            );
-            state.lock().last = Some((key, press));
-            sys::view_port_update(view_port);
+            ble.send_key(key.code(), press.code());
+            info!("press {} {}", key.name(), press.name());
         }
 
         sys::notification_message(notifications.as_ptr(), &raw const sys::sequence_reset_blue);
@@ -514,7 +518,7 @@ fn main(_args: Option<&CStr>) -> i32 {
         sys::gui_remove_view_port(gui.as_ptr(), view_port);
         sys::view_port_free(view_port);
     }
-    drop(hid);
+    drop(ble);
 
     0
 }

@@ -21,6 +21,7 @@ class ServicesScreen extends StatelessWidget {
         s.notifications,
         s.location,
         s.keys,
+        s.flipperRemote,
       ]),
       builder: (context, _) => _build(context, s),
     );
@@ -89,6 +90,7 @@ class ServicesScreen extends StatelessWidget {
             ),
           ),
         ],
+        if (s.settings.serviceOn('flipper_remote')) ..._flipper(context, s),
         if (s.network.log.isNotEmpty) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 24, 4, 8),
@@ -129,6 +131,68 @@ class ServicesScreen extends StatelessWidget {
     );
   }
 
+  /// The Flipper remote: Android pairs a Flipper here, through the
+  /// system's companion chooser, and lists those paired; elsewhere the
+  /// phone looks for one each time.
+  static List<Widget> _flipper(BuildContext context, Services s) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final remote = s.flipperRemote;
+    if (defaultTargetPlatform != TargetPlatform.android || kIsWeb) {
+      return [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 16, 4, 0),
+          child: Text(
+            'The Flipper is found while its Glaz app runs.',
+            style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+        ),
+      ];
+    }
+    return [
+      if (remote.paired.isNotEmpty) ...[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 24, 4, 8),
+          child: Text(
+            'Paired Flipper',
+            style: text.titleSmall?.copyWith(color: scheme.primary),
+          ),
+        ),
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              for (final f in remote.paired)
+                ListTile(
+                  leading: Icon(
+                    remote.connected
+                        ? Icons.bluetooth_connected
+                        : Icons.bluetooth,
+                  ),
+                  title: Text(f.name ?? f.address),
+                  subtitle: f.name == null ? null : Text(f.address),
+                  trailing: IconButton(
+                    tooltip: 'Forget',
+                    icon: const Icon(Icons.link_off),
+                    onPressed: () => remote.forget(f.address),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+      const SizedBox(height: 16),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: OutlinedButton.icon(
+          onPressed: remote.pair,
+          icon: const Icon(Icons.bluetooth_searching),
+          label: const Text('Pair Flipper'),
+        ),
+      ),
+    ];
+  }
+
   /// The keyboard remote is on but works only with Glaz on screen.
   static bool _keysForeground(Services s) =>
       defaultTargetPlatform == TargetPlatform.android &&
@@ -143,6 +207,16 @@ class ServicesScreen extends StatelessWidget {
             ? 'Only with Glaz on screen: turn it on in Accessibility '
                   'for the background'
             : service.description;
+      case 'flipper_remote':
+        if (!s.settings.serviceOn('flipper_remote')) {
+          return service.description;
+        }
+        if (s.flipperRemote.connected) return 'Connected to the Flipper';
+        return defaultTargetPlatform == TargetPlatform.android &&
+                !kIsWeb &&
+                s.flipperRemote.paired.isEmpty
+            ? 'No Flipper paired yet: Pair Flipper below'
+            : 'Not connected: start Glaz on the Flipper';
       case 'notifications':
         if (!s.notifications.supported) return 'Android only';
         if (!s.notifications.permission) {

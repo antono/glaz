@@ -5,7 +5,9 @@ the glasses. You hold the Flipper upright, as in its own Keynote Vertical
 remote, and press its buttons; instead of the buttons its screen shows the
 glasses, their name, how much room is left on them, how much memory, and
 which app they are showing. Unlike a plain Bluetooth remote, it will tell
-a short press from a long one, and give each its own meaning.
+a short press from a long one, and give each its own meaning. It is no
+keyboard to the phone: the phone's on-screen keyboard stays, and its
+presses reach glaz and no other app.
 
 A draft. What is here:
 
@@ -13,34 +15,39 @@ A draft. What is here:
   front (the display lit in its lens while connected), their name, Disk,
   Mem and App; top right, a dot while the phone is connected, a ring
   while not, and the LED blue, as in the Flipper's Remote;
-- the keys, for now, as the Flipper's Keynote has them (below); the last
-  short or long press shows at the bottom and goes to the Flipper's log;
+- every press sent to the phone (below), short, long or repeated; the
+  last one shows at the bottom and goes to the Flipper's log;
 - hold Back to leave, as in the Flipper's own remotes.
 
-## The keys, for now
+## The keys
 
-The Flipper is a Bluetooth keyboard while the app is open, the Keynote of
-its Remote app moved to Rust (`src/hid.rs`, `src/main.rs`), and glaz on
-the phone takes it as any keyboard (docs/REMOTE.md):
+The Flipper is no Bluetooth keyboard (`src/ble.rs`): it sends each press
+over its own service to glaz on the phone (below, "The link to the
+phone"), and Android, seeing no keyboard, keeps its on-screen one and
+gives the presses to no other app. What a press does is glaz's to say;
+glaz does not take them yet, and `utils/flipper_keys.py` prints them on a
+computer meanwhile.
 
-| Flipper | Sends | Glasses |
-| --- | --- | --- |
-| Up / Down / Left / Right | the arrow, held as long as the key | previous / next item |
-| OK | Space, held as long as the key | select; held, the menu |
-| Back, short | Backspace, then Android's Back | back |
-| Back, long | lets go of every key and leaves | |
+| Flipper | Sends |
+| --- | --- |
+| Up / Down / Left / Right / OK | short, long and repeated presses |
+| Back, short | a short press |
+| Back, long | nothing: leaves, as in the Flipper's own remotes |
 
-It is the same keyboard as the Remote's, to the address, the name
-("Control" and the Flipper's name) and the pairing: it keeps its keys in
-the Remote's own file, `/ext/apps_data/hid_ble/.bt_hid.keys`. A phone
-paired with the Flipper's Remote connects to this app with no new pairing;
-otherwise pair as in docs/REMOTE.md, step 2, with this app open instead of
-Remote. While the app is open the Flipper's own Bluetooth is off, so the
+A long press comes about 0.5 s into holding a key, and then no short one;
+held on, the key repeats until let go.
+
+It pairs on its own, apart from the Flipper and its Remote: as "Glaz",
+no more, for the advertisement to hold the service's 128-bit UUID ("Glaz"
+and the Flipper's name, cut to 8, did not fit), at an address of its own (the Flipper's, third
+byte two up), with its keys in `/ext/apps_data/glaz/.bt.keys`. The
+first time the phone writes to it, both sides show a PIN to confirm.
+While the app is open the Flipper's own Bluetooth is off, so the
 Flipper's screen on the glasses (docs/FLIPPER.md) waits until it closes.
 
-Until the phone tells of glasses -- and it cannot yet, a keyboard only
-sends -- the glasses show as disconnected: "(disconnected)" for the name,
-the lens empty, "-" for Disk, Mem and App (`Status::unknown()`).
+Until the phone tells of glasses, the glasses show as disconnected:
+"(disconnected)" for the name, the lens empty, "-" for Disk, Mem and App
+(`Status::unknown()`).
 
 ## Build
 
@@ -74,21 +81,24 @@ longer on 87. When flipperzero-rs comes out for 88, take it and use
 
 ## The link to the phone
 
-The keyboard only sends; what the Flipper shows of the glasses comes from
-the phone over the same Bluetooth connection. The app's profile carries,
-beside the keyboard, a GATT service of its own (`src/link.rs`):
+The app's profile carries one GATT service, its own (`src/link.rs`),
+advertised so the phone finds it by its UUID:
 
 | | UUID |
 | --- | --- |
 | service | `a96fe95e-083f-402e-8be1-a9d5235813ca` |
 | status, phone to Flipper, written | `99a2eadd-2f24-4073-b412-56fc14ba5ecb` |
+| keys, Flipper to phone, notified | `fdf4c755-bc63-4750-9c39-e6ee8b8f55e9` |
+
+A press, notified while the phone listens, is 3 bytes: a version byte,
+1, the key (1 Up, 2 Down, 3 Left, 4 Right, 5 OK, 6 Back) and the press
+(1 short, 2 long, 3 repeat).
 
 glaz on the phone (More > Services > Flipper remote,
-`flutter-glaz/lib/services/flipper_remote.dart`) looks, while a keyboard
-is attached, among the paired devices named "Control ..." for one with
-this service, connects to it as a second client beside Android's own, and
-writes the status whenever it changes, and free disk and memory once a
-minute. Nothing more to pair, the keys go on as they are.
+`flutter-glaz/lib/services/flipper_remote.dart`) still looks for the
+older Glaz, a keyboard named "Control ...", and finds this one not; until
+it is moved over, `utils/flipper_keys.py` writes a status from a
+computer.
 
 The status, written whole, in one write (glaz asks for an MTU of 185; a
 write in pieces is dropped), at most 64 bytes: a version byte, 1, then
@@ -108,8 +118,6 @@ all (docs/FRAME.md), and the glasses tell only what Lua uses of it.
 
 ## Not done yet
 
-- **The commands**: what each key, short and long, sends instead of
-  Keynote's keys. They need a way back, Flipper to phone: a second
-  characteristic in the glaz service, notified.
-- **Versions**: `version` in `Cargo.toml` and `app_version` in the
-  manifest.
+- **The phone**: glaz taking the presses, and the Flipper found and
+  paired by its service rather than among keyboards; Android's
+  companion devices, to have glaz woken when the Flipper comes.

@@ -147,6 +147,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     Services.instance.settings.addListener(_handsOff);
     Services.instance.keys.addListener(_handsOff);
+    Services.instance.flipperRemote.addListener(_handsOff);
     Services.instance.appCheck.addListener(_offerUpload);
   }
 
@@ -155,6 +156,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     Services.instance.appCheck.removeListener(_offerUpload);
     Services.instance.settings.removeListener(_handsOff);
     Services.instance.keys.removeListener(_handsOff);
+    Services.instance.flipperRemote.removeListener(_handsOff);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -168,13 +170,13 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     _handsOff();
   }
 
-  // a keyboard remote, or the Remote tab in front: the glasses take few
-  // gestures of their own, the keyboard's fewer still
+  // a keyboard remote or the Flipper, or the Remote tab in front: the
+  // glasses take few gestures of their own, a keyboard's fewer still
   void _handsOff() {
     final s = Services.instance;
     s.link.remoteHandsOff = !s.settings.remoteHandsOff
         ? handsOffNone
-        : s.keys.drives(shown: _shown)
+        : s.keys.drives(shown: _shown) || s.flipperRemote.drives
         ? handsOffKeyboard
         : _shown && _current == 'remote'
         ? handsOffRemote
