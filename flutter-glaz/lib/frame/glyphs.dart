@@ -1,8 +1,9 @@
 // Text for the glasses' display, made here, on the phone. The firmware's
 // font (our build, v26.292 and later: docs/FIRMWARE.md) has ASCII, Latin-1,
-// Cyrillic and a few signs; what it has is kept as it is, so Cyrillic stays
-// Cyrillic. Common typography it lacks gets a look-alike, Latin letters it
-// lacks lose their marks, emoji are dropped, anything else becomes '?'.
+// Cyrillic, a few signs and, from v26.298, the 137 most used emoji; what
+// it has is kept as it is, so Cyrillic stays Cyrillic. Common typography
+// it lacks gets a look-alike, Latin letters it lacks lose their marks,
+// other emoji are dropped, anything else becomes '?'.
 // The result goes to the glasses as UTF-8.
 
 /// Whether the font has a glyph for [c] (system_font.h in the firmware).
@@ -12,7 +13,20 @@ bool hasGlyph(int c) =>
     (c >= 0xA1 && c <= 0xFF && !_latin1Gaps.contains(c)) ||
     (c >= 0x400 && c <= 0x45F) ||
     _cyrillicExtra.contains(c) ||
-    _signs.contains(c);
+    _signs.contains(c) ||
+    isFontEmoji(c);
+
+/// Whether [c] is one of the font's emoji: Unicode's 137 most used that are
+/// a single code point (graphical_assets/emoji.py in the firmware).
+bool isFontEmoji(int c) => _emoji.contains(c);
+
+final _emoji = (
+  '😂❤😍🤣😊🙏💕😭😘👍😅👏😁♥🔥💔💖💙😢🤔😆🙄💪😉☺👌🤗💜😔😎😇🌹'
+  '🤦🎉‼💞✌✨🤷😱😌🌸🙌😋💗💚😏💛🙂💓🤩😄😀🖤😃💯🙈👇🎶😒🤭❣❗😜💋'
+  '👀😪😑💥🙋😞😩😡🤪👊☀😥🤤👉💃😳✋😚😝😴🌟😬🙃🍀🌷😻😓⭐✅🌈😈🤘💦'
+  '✔😣🏃💐☹🎊💘😠☝😕🌺🎂🌻😐🖕💝🙊😹🗣💫💀👑🎵🤞😛🔴😤🌼😫⚽🤙☕🏆🧡'
+  '🎁⚡🌞🎈❌'
+).runes.toSet();
 
 // U+00A1..U+00FF the font does not have
 const _latin1Gaps = {

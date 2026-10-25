@@ -156,6 +156,15 @@ then `system_font.h` is made from the PNGs as that folder's readme says.
 First build `v26.292.2200-glaz-cyr`. Since then the phone sends Cyrillic as
 it is, no longer transliterated (`flutter-glaz/lib/frame/glyphs.dart`).
 
+`glaz/emoji`, merged into `glaz/main` on 25.10.2026, puts the 137 most used
+emoji in the system font at their own codepoints: Unicode's emoji
+frequency list, its first 137 that are a single codepoint. Two colors, 40
+pixels tall, so they draw in the text's color; an emoji with U+FE0F after
+it still draws, the selector is skipped. `graphical_assets/emoji.py` draws
+them from Noto Emoji, the monochrome one (SIL OFL); the application grows
+by 33 KB. The phone keeps these emoji and drops the others
+(`glyphs.dart`); on older firmware they are blank.
+
 `glaz/mono-font`, merged into `glaz/main` on 22.10.2026, adds
 `frame.display.mono(text, x, y, {size, bold, color, bg, attrs})`, a
 monospace font for the terminal: every character a cell of size/2 by size

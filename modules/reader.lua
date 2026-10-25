@@ -70,6 +70,7 @@ local LATIN1 = '06>B0F000L0A00M0?D000A06000A000>FGGGGGP@A@AA<;@?FCDDDDDBDCC' ..
 local CYRILLIC = 'AAH?AA<?>PPHCDECF@B?FAP@DDCDGCDCB@DEHEDALNEG@AMBCCB=F@P@BBCC' ..
                  'HABAB=BDIDDAKNEF@@LBAAF=@?5?;MLFCBCC'
 local OTHER_W = 18        -- the font's other Cyrillic (Kazakh, Tatar..): an 'o'
+local EMOJI_W = 40        -- the font's emoji (U+203C, U+2600 on): the widest
 
 local RULE  = string.rep('\xFF', RULE_W * 2 // 8)        -- 2 px high
 local NOTCH = string.rep('\x18', NOTCH_H)                -- 8 wide, 2 lit
@@ -101,6 +102,8 @@ local function glyph_w(c)
     t, base = CYRILLIC, 0x400
   elseif c >= 0x490 and c <= 0x4FF then
     return OTHER_W + SPACING
+  elseif c == 0x203C or c >= 0x2600 then
+    return EMOJI_W + SPACING
   else
     return 0
   end
