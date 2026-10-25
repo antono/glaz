@@ -125,7 +125,7 @@ class Services {
       ReaderService(link, s, readerDir ?? await readerRoot()),
       TermService(link, s, hosts),
       GeminiService(link, s),
-      FlipperRemote(link, s, keys, lua),
+      FlipperRemote(link, s, lua),
       AppCheck(link, s),
     );
     await services.reader.load();

@@ -70,8 +70,8 @@ const services = [
   GlazService(
     'flipper_remote',
     'Flipper remote',
-    "Shows the glasses' name, free space and app in the Glaz app on a "
-        'Flipper Zero, while it is your keyboard remote',
+    "A Flipper Zero's Glaz app drives the glasses and shows their name, "
+        'free space and app',
     true,
   ),
   GlazService(

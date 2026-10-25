@@ -10,6 +10,7 @@ class MainActivity : FlutterActivity() {
     private var speech: Speech? = null
     private var voice: Voice? = null
     private var keyboards: Keyboards? = null
+    private var companion: Companion? = null
 
     /**
      * "glaz/keys": the keyboard remote in the background, KeyRemoteService,
@@ -43,6 +44,7 @@ class MainActivity : FlutterActivity() {
         KeyRemoteService.channel = channel
         speech = Speech(flutterEngine.dartExecutor.binaryMessenger)
         voice = Voice(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
+        companion = Companion(this, flutterEngine.dartExecutor.binaryMessenger)
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
@@ -52,10 +54,18 @@ class MainActivity : FlutterActivity() {
         voice = null
         keyboards?.close()
         keyboards = null
+        companion?.close()
+        companion = null
         KeyRemoteService.channel = null
         KeyRemoteService.taken = emptySet()
         KeyRemoteService.takeAll = false
         super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    /** The Flipper chooser's answer goes to Companion, the rest to Flutter. */
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (companion?.onActivityResult(requestCode, resultCode, data) == true) return
+        super.onActivityResult(requestCode, resultCode, data)
     }
 
     override fun onResume() {
