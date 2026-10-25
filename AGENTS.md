@@ -15,6 +15,9 @@ The glasses run Lua; a laptop talks to them over Bluetooth using Python.
   firmware, what can be bricked.
 - [`docs/PROTOCOL.md`](docs/PROTOCOL.md) — the menu app's wire protocol,
   states, input and design notes.
+- [`docs/RECOVERY.md`](docs/RECOVERY.md) — glasses that look dead: out of
+  range, stuck apps, and stuck in `Frame Update` after a broken firmware
+  update (`utils/dfu.py` installs a firmware from a computer).
 - [`docs/BATTERY.md`](docs/BATTERY.md) — battery drain measurements and
   where the power goes.
 - [`docs/HERMES.md`](docs/HERMES.md) — connecting the Assistant to Hermes
