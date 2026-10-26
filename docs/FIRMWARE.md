@@ -163,7 +163,7 @@ frame has stopped ringing from the tap that sent it to sleep. So waking no
 longer depends on what the Lua app remembers to do. Build
 `v26.289.1613-stable`.
 
-Rule: **every firmware of ours is built from branch `glaz/main`** in
+Rule: **every firmware of ours is built from a `glaz/` branch** in
 `antono/frame-codebase`, and a fix goes in as a branch merged into it,
 never as a branch off upstream `main` alone. `glaz/main` is `glaz/stable` with
 `glaz/double-tap-wake` and `glaz/file-space` (`frame.file.space()`)
@@ -175,6 +175,21 @@ Every feature is a branch `glaz/<topic>`, merged into `glaz/main`.
 `glaz/stable` stays behind: it is moved up to `glaz/main`, a fast-forward
 and never a merge, only when the maintainer says so. Nothing else
 advances it.
+
+**The phone app carries the build of `glaz/stable`**, every build of it:
+the release (`.github/workflows/release.yml`, `FIRMWARE_REF`) and `apk`
+alike. Locally, `firmware` in the root shell (`utils/build_firmware.sh`)
+builds a branch's current commit in a worktree of its own, named by the
+commit's time: `v26.299.1345-glaz` for `glaz/stable`,
+`v26.298.1306-glaz-emoji` for `glaz/emoji`. The same commit always gets
+the same name, so `flutter-glaz/tool/fetch_firmware.sh` can tell that a
+zip is the current one, and fails when it is not there. While a feature
+is being worked on, its build can go into the app as well:
+
+```bash
+firmware glaz/emoji                            # root shell
+FIRMWARE_FEATURE=glaz/emoji apk                # flutter-glaz shell
+```
 
 `glaz/cyrillic-font`, merged into `glaz/main` on 20.10.2026, puts Cyrillic in
 the system font: U+0400..U+045F and the extra letters of Kazakh, Tatar,
@@ -318,7 +333,9 @@ Three things about this that cost time to work out:
       build/frame-firmware-$V.zip
   ```
 
-  `flutter-glaz/tool/fetch_firmware.sh` then copies the zip into the app.
+  `flutter-glaz/tool/fetch_firmware.sh` then copies the zip into the app,
+  if it is the build of `glaz/stable` or of `FIRMWARE_FEATURE`. The root
+  shell's `firmware` does all of this for a branch.
 
 Verified output:
 
@@ -343,7 +360,8 @@ Flashing needs no debugger and no disassembly:
 ### Step 2, in practice
 
 **From the Glaz app** (Glasses > Firmware): pick a package, Install. It
-offers the three newest official releases and our own builds, the zips that
+offers the three newest official releases and our own build of
+`glaz/stable` (plus a feature branch's, when one is being tried), the zips that
 `flutter-glaz/tool/fetch_firmware.sh` puts in `flutter-glaz/assets/firmware/`.
 A custom build is told apart by a suffix on its version, which the build
 stamps into `frame.FIRMWARE_VERSION`:

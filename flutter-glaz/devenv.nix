@@ -21,11 +21,13 @@ let
   # What the app carries but git does not: the Lua compiled to bytecode --
   # the glasses cannot compile main.lua themselves any more -- and the
   # firmware for Update. Built without them, the app had no firmware to
-  # offer.
+  # offer. Without the build of glaz/stable (the root shell's `firmware`)
+  # the app is not built at all; FIRMWARE_FEATURE=glaz/<topic> adds a
+  # feature branch's build too (tool/fetch_firmware.sh).
   appAssets = ''
     cd "$DEVENV_ROOT"
     tool/compile_lua.sh
-    tool/fetch_firmware.sh || echo "firmware not fetched; Update offers what is in assets/firmware" >&2
+    tool/fetch_firmware.sh
   '';
 in
 {

@@ -85,8 +85,10 @@ devenv shell -- linux-app    # the Linux desktop app
 `apk` does, in order: `reveal-key` (the signing key), `tool/compile_lua.sh`
 (the Lua bytecode, from the firmware's Lua in `../../lab-frame-codebase`
 or `$FRAME_CODEBASE`), `tool/fetch_firmware.sh` (the three newest
-official releases via `gh`, plus a custom build if one is there), then
-`flutter build apk --debug`. The result is
+official releases via `gh`, plus our build of firmware branch
+`glaz/stable`, which must be there: `firmware` in the root shell builds
+it; `FIRMWARE_FEATURE=glaz/<topic>` adds a feature branch's build, after
+`firmware glaz/<topic>`), then `flutter build apk --debug`. The result is
 `flutter-glaz/build/app/outputs/flutter-apk/app-debug.apk` (about 170 MB).
 Gradle alone takes about 4 minutes, so give the command a 10-minute
 timeout. Check that the build used the project key and not the debug key:

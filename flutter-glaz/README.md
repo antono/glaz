@@ -114,5 +114,11 @@ Upload takes the Lua from `assets/lua/`, which links to the repository's
 `assets/firmware/`, which are not committed:
 
 ```sh
-tool/fetch_firmware.sh    # three newest official releases + a custom build
+tool/fetch_firmware.sh    # three newest official releases + glaz/stable
 ```
+
+Ours is always the build of the firmware's branch `glaz/stable`, made by
+`firmware` in the repository's root shell; without it the app is not
+built. To try a feature branch too, build it there (`firmware glaz/emoji`)
+and add it here: `FIRMWARE_FEATURE=glaz/emoji tool/fetch_firmware.sh`, or
+`FIRMWARE_FEATURE=glaz/emoji apk`. See ../docs/FIRMWARE.md.
