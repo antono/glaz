@@ -129,12 +129,20 @@ in
   enterShell = ''
     # Flutter prefers the JDK bundled with an installed Android Studio over
     # JAVA_HOME, and an old Android Studio ships Java 11, which Gradle 9
-    # refuses. Point it at this shell's JDK 17 on every entry. This writes
+    # refuses. Its android-sdk setting likewise beats ANDROID_HOME: one left
+    # at ~/Android/Sdk builds against an SDK without this shell's
+    # build-tools and platforms ("Failed to install the following SDK
+    # components"). Point both at this shell's on every entry. This writes
     # Flutter's user config (~/.config/flutter/settings), which is harmless
     # here: Flutter itself only exists inside this shell.
-    if [ "$(flutter config --list 2>/dev/null | sed -n 's/^ *jdk-dir: //p')" != "$JAVA_HOME" ]; then
+    flutter_settings=$(flutter config --list 2>/dev/null)
+    if [ "$(sed -n 's/^ *jdk-dir: //p' <<<"$flutter_settings")" != "$JAVA_HOME" ]; then
       flutter config --jdk-dir="$JAVA_HOME" >/dev/null 2>&1
     fi
+    if [ "$(sed -n 's/^ *android-sdk: //p' <<<"$flutter_settings")" != "$ANDROID_HOME" ]; then
+      flutter config --android-sdk="$ANDROID_HOME" >/dev/null 2>&1
+    fi
+    unset flutter_settings
 
     reveal-key
 
