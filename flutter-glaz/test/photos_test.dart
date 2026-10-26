@@ -137,6 +137,26 @@ void main() {
     expect(series.first.start, DateTime(2026, 10, 14, 18, 4, 10));
   });
 
+  test('deleting the last photo of a series or day takes its folder', () async {
+    receive(5);
+    clock = clock.add(const Duration(seconds: 4));
+    receive(5);
+    receive(0);
+    await photos.flush();
+    final store = photos.store;
+    var day = (await store.days()).single;
+    final series = day.series.single;
+    await store.delete(series.photos.first);
+    expect(await store.seriesPhotos(series.dir), hasLength(1));
+    await store.delete(series.photos.last);
+    expect(series.dir.existsSync(), isFalse);
+    day = (await store.days()).single;
+    expect(day.series, isEmpty);
+    await store.delete(day.photos.single);
+    expect(await store.days(), isEmpty);
+    expect(root.existsSync(), isTrue, reason: 'the root itself stays');
+  });
+
   test('a photo cut short is dropped, not glued to the next', () async {
     photos.onMessage([0x1A, 0]);
     photos.onMessage([0x07, 1, 2, 3]); // the end never came
