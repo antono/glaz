@@ -7,6 +7,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:frame_ble/frame_ble.dart';
 
 import '../services/glaz_log.dart';
+import 'model.dart';
 import 'pairing.dart';
 import 'protocol.dart';
 
@@ -167,6 +168,10 @@ class FrameLink extends ChangeNotifier {
   /// The glasses' name as last seen: a connect straight to [knownId] gets
   /// none from Android, which only knows it from a scan or the pairing.
   String? knownName;
+
+  /// Frame or Halo, from [name]; a name that says neither is taken for
+  /// Frame, as every pair of glasses was before Halo (model.dart).
+  GlassesModel get model => GlassesModel.fromName(name) ?? GlassesModel.frame;
 
   /// Called with what to keep across restarts: the glasses' id, and
   /// whether the link is wanted.
@@ -588,7 +593,7 @@ class FrameLink extends ChangeNotifier {
     final down = downSince;
     glazLog(
       LogKind.link,
-      'up: mtu ${device.device.mtuNow}, attempt $attempt'
+      'up: ${model.label}, mtu ${device.device.mtuNow}, attempt $attempt'
       '${down == null ? '' : ', down ${_span(now.difference(down))}'}'
       ', link $connects, drops $drops',
     );

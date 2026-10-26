@@ -27,6 +27,9 @@ The glasses run Lua; a laptop talks to them over Bluetooth using Python.
   app, paired in glaz, which Android wakes when the Flipper comes near.
 - [`docs/FLIPPER.md`](docs/FLIPPER.md) — a Flipper Zero's screen on the
   glasses: the Flipper's RPC over Bluetooth, and how the phone passes it on.
+- [`docs/HALO.md`](docs/HALO.md) — Brilliant Labs Halo: found by the same
+  scan, told apart by its name (`lib/frame/model.dart`), not supported yet;
+  how it differs from Frame.
 
 ## Layout
 
