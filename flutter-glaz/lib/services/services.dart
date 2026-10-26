@@ -11,6 +11,7 @@ import 'flipper_remote.dart';
 import 'gemini.dart';
 import 'glasses_files.dart';
 import 'glasses_lua.dart';
+import 'hold.dart';
 import 'keys.dart';
 import 'location.dart';
 import 'module_settings.dart';
@@ -48,7 +49,7 @@ class Services {
     this.gemini,
     this.flipperRemote,
     this.appCheck,
-  );
+  ) : hold = LinkHold(link, settings, flipperRemote);
 
   final Settings settings;
   final FrameLink link;
@@ -65,6 +66,10 @@ class Services {
   final GlassesLua lua;
   final FlipperMirror flipper;
   final FlipperRemote flipperRemote;
+
+  /// Android's hold on the links, and its wake by the Flipper; started
+  /// from main(), so tests need no channel.
+  final LinkHold hold;
   final ReaderService reader;
   final TermService term;
   final GeminiService gemini;

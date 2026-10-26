@@ -180,12 +180,23 @@ class ServicesScreen extends StatelessWidget {
             ],
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+          child: Text(
+            "On Android 12 and later, glaz starts by itself when the "
+            "Flipper's Glaz app is open nearby",
+            style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+        ),
       ],
       const SizedBox(height: 16),
       Align(
         alignment: Alignment.centerLeft,
         child: OutlinedButton.icon(
-          onPressed: remote.pair,
+          // the notification that says glaz holds the links, once paired
+          onPressed: () async {
+            if (await remote.pair()) await s.hold.askNotifications();
+          },
           icon: const Icon(Icons.bluetooth_searching),
           label: const Text('Pair Flipper'),
         ),
@@ -211,7 +222,9 @@ class ServicesScreen extends StatelessWidget {
         if (!s.settings.serviceOn('flipper_remote')) {
           return service.description;
         }
-        if (s.flipperRemote.connected) return 'Connected to the Flipper';
+        if (s.flipperRemote.connected) {
+          return 'Connected to ${s.flipperRemote.name ?? 'the Flipper'}';
+        }
         return defaultTargetPlatform == TargetPlatform.android &&
                 !kIsWeb &&
                 s.flipperRemote.paired.isEmpty
@@ -257,6 +270,10 @@ class ServicesScreen extends StatelessWidget {
     if (id == 'notifications' && on && !s.notifications.permission) {
       // the system page comes up; the switch stays off unless it is granted
       if (!await s.notifications.requestPermission()) return;
+    }
+    if (id == 'flipper_remote' && on) {
+      // the notification that says glaz holds the links; a no is fine
+      await s.hold.askNotifications();
     }
     if (id == 'location' && on && !await LocationService.permitted()) {
       // the phone's own permission, asked here and never from the glasses

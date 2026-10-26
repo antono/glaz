@@ -1354,7 +1354,25 @@ from whatever app is in front and hands them to `keys.dart` on the
 `glaz/keys` channel, which turns them into the same `INPUT`s. Keynote's
 echoed Back is dropped there too. Other keys, and all keys while the glasses
 are away, pass untouched. It needs the app alive with its Flutter engine:
-swiped away from the recent apps, Glaz stops taking keys.
+swiped away from the recent apps, Glaz stops taking keys, unless its link
+service (below) keeps the engine running.
+
+**The Flipper's Glaz app is a remote too, and no keyboard**
+(`flipper-glaz/`, `flutter-glaz/lib/services/flipper_remote.dart`). It
+sends each press over its own Bluetooth service (flipper-glaz/README.md,
+"The link to the phone"), so Android sees no keyboard and no other app
+gets its keys; glaz turns them into the same `INPUT`s
+(`lib/flipper/presses.dart`): up and left `[2, 255]`, down and right
+`[2, 1]`, OK `[1, 1]`, OK held `[1, 3]`, Back `[1, 2]`. While it is
+connected the phone sends `HANDS_OFF` `[2]`, as for a keyboard, in the
+background too and with no accessibility service. On Android it is
+paired as a companion device (More > Services > Flipper remote > Pair
+Flipper; `Companion.kt`), and Android starts glaz when it comes near
+(`FlipperPresence.kt`): glaz runs `main()` in an engine of its own with
+no screen (`GlazEngine.kt`), the one the screen shows when opened, and a
+foreground service with a notification (`LinkService.kt`,
+`lib/services/hold.dart`) keeps it while the Flipper is near or
+connected, or the glasses are. See docs/REMOTE.md.
 
 The remote also takes photos: `PHOTO_TAKE` (`0x2C`) carries the size and the
 quality, the same two settings as Camera's (the phone shares them). The

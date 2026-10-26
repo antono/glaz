@@ -23,7 +23,8 @@ The glasses run Lua; a laptop talks to them over Bluetooth using Python.
 - [`docs/HERMES.md`](docs/HERMES.md) — connecting the Assistant to Hermes
   Agent: its API server, and Tailscale serve, tailnet HTTP or funnel.
 - [`docs/REMOTE.md`](docs/REMOTE.md) — a Bluetooth keyboard or Flipper
-  Zero as a remote for the glasses, through the phone.
+  Zero as a remote for the glasses, through the phone; the Flipper's Glaz
+  app, paired in glaz, which Android wakes when the Flipper comes near.
 - [`docs/FLIPPER.md`](docs/FLIPPER.md) — a Flipper Zero's screen on the
   glasses: the Flipper's RPC over Bluetooth, and how the phone passes it on.
 

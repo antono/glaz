@@ -24,9 +24,9 @@ A draft. What is here:
 The Flipper is no Bluetooth keyboard (`src/ble.rs`): it sends each press
 over its own service to glaz on the phone (below, "The link to the
 phone"), and Android, seeing no keyboard, keeps its on-screen one and
-gives the presses to no other app. What a press does is glaz's to say;
-glaz does not take them yet, and `utils/flipper_keys.py` prints them on a
-computer meanwhile.
+gives the presses to no other app. What a press does is glaz's to say
+(`flutter-glaz/lib/flipper/presses.dart`); `utils/flipper_keys.py` prints
+them on a computer.
 
 | Flipper | Sends |
 | --- | --- |
@@ -95,10 +95,22 @@ A press, notified while the phone listens, is 3 bytes: a version byte,
 (1 short, 2 long, 3 repeat).
 
 glaz on the phone (More > Services > Flipper remote,
-`flutter-glaz/lib/services/flipper_remote.dart`) still looks for the
-older Glaz, a keyboard named "Control ...", and finds this one not; until
-it is moved over, `utils/flipper_keys.py` writes a status from a
-computer.
+`flutter-glaz/lib/services/flipper_remote.dart`) pairs it there, with
+**Pair Flipper**: Android's list of companion devices, filtered by the
+service's UUID, then the PIN. No pairing in Android's Bluetooth settings
+and no accessibility service is needed. On Android 12 and later glaz
+then need not be open: the Companion Device Manager starts it when this
+app is open nearby, and glaz holds the link with a notification of its
+own (docs/REMOTE.md, "The Glaz app on the Flipper"). iOS and desktop
+have no such thing, nor has Android before 12: there glaz finds the
+Flipper only while it runs (on iOS and desktop by a scan, while the
+glasses are connected). After a force stop in Android's settings,
+Android starts glaz for the Flipper again only once glaz has been opened
+by hand. `utils/flipper_keys.py` writes a status from a computer.
+
+After a failed or cancelled pairing the Flipper's firmware may keep its
+PIN dialog on screen: press Back, or close and reopen Glaz, before
+pairing again.
 
 The status, written whole, in one write (glaz asks for an MTU of 185; a
 write in pieces is dropped), at most 64 bytes: a version byte, 1, then
@@ -115,9 +127,3 @@ skipped.
 
 Free memory is an estimate: Lua's heap on the glasses is about 135 KB in
 all (docs/FRAME.md), and the glasses tell only what Lua uses of it.
-
-## Not done yet
-
-- **The phone**: glaz taking the presses, and the Flipper found and
-  paired by its service rather than among keyboards; Android's
-  companion devices, to have glaz woken when the Flipper comes.
