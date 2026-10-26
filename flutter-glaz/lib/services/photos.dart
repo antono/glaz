@@ -134,6 +134,25 @@ class PhotoStore extends ChangeNotifier {
     return days;
   }
 
+  /// The photos of the series in [dir], oldest first; none once it is gone.
+  Future<List<File>> seriesPhotos(Directory dir) async =>
+      await dir.exists() ? _jpegs(dir) : [];
+
+  /// Deletes [photo], then its series folder and its day folder if that
+  /// left them empty.
+  Future<void> delete(File photo) async {
+    if (await photo.exists()) await photo.delete();
+    var dir = photo.parent;
+    while (dir.path != root.path &&
+        dir.path.startsWith(root.path) &&
+        await dir.exists() &&
+        await dir.list().isEmpty) {
+      await dir.delete();
+      dir = dir.parent;
+    }
+    notifyListeners();
+  }
+
   static String _name(FileSystemEntity e) =>
       e.uri.pathSegments.lastWhere((s) => s.isNotEmpty, orElse: () => '');
 
