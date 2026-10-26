@@ -5,13 +5,17 @@ in your hand, like a presentation clicker, is often easier. The glasses
 cannot pair with a remote themselves. The **phone** does: you connect the
 remote to the phone like any Bluetooth keyboard, and glaz passes its keys
 on to the glasses. A [Flipper Zero](https://flipperzero.one) works well as
-that remote, and this page sets it up as the example.
+that remote, two ways: as a keyboard, in its own Remote app (step 2), or
+with the Glaz app on it, which is no keyboard, shows the glasses on the
+Flipper's screen and wakes glaz by itself ("The Glaz app on the Flipper").
 
 You need:
 
 - glaz on the phone, connected to the glasses;
 - a remote that shows up as a keyboard (HID): a Bluetooth or USB keyboard,
-  a presentation clicker, a gamepad, or a Flipper Zero.
+  a presentation clicker, a gamepad, or a Flipper Zero in its Remote app;
+- or a Flipper Zero with the Glaz app (`flipper-glaz/`), which needs none
+  of steps 1 and 2.
 
 ## How it works
 
@@ -62,6 +66,9 @@ in-front mode.
 
 ## 2. Pair the Flipper Zero
 
+This is the Flipper as a keyboard, in the Remote app of its own firmware;
+for the Glaz app, skip to "The Glaz app on the Flipper".
+
 On the Flipper ([Flipper docs: HID controllers](https://docs.flipper.net/apps/controllers)):
 
 1. **Settings > Bluetooth**, set to **ON**.
@@ -101,9 +108,70 @@ memory, and the app they show, or "(disconnected)". Unlike Keynote it is
 no keyboard: Android's on-screen keyboard stays, and no app but glaz hears
 its keys. Its presses and the glasses' status go both ways over a
 Bluetooth service of its own, and it pairs on its own, as **Glaz**
+(flipper-glaz/README.md, "The link to the phone"). It needs neither the
+pairing in Android's Bluetooth settings nor the accessibility service
+above: that stays for real keyboards and Keynote.
+
+To set it up, open Glaz on the Flipper (Apps > Bluetooth > Glaz), then in
+glaz **More > Services > Flipper remote**: turn it on, press **Pair
+Flipper**, pick **Glaz** in Android's list (Android's companion devices,
+showing only what advertises the Glaz service) and confirm the PIN the
+Flipper shows. glaz asks to show notifications; say yes, or its
+notification stays hidden. Once paired, the service says "Connected to
+Glaz"; Forget, beside the Flipper, unpairs it.
+
+| Flipper | Glasses | `INPUT` |
+| --- | --- | --- |
+| Up / Left, short, long or repeated | previous item | `[2, 255]` |
+| Down / Right, short, long or repeated | next item | `[2, 1]` |
+| OK | select | `[1, 1]` |
+| OK, long | show or hide the menu | `[1, 3]` |
+| Back | back | `[1, 2]` |
+| Back, long | nothing: closes Glaz on the Flipper | |
+
+While the Flipper is connected it drives, as a keyboard does: the glasses
+take of your gestures only the triple tap to sleep (above, "How it
+works"). glaz writes the glasses' name, free disk and memory and the app
+they show to the Flipper as they change; with no glasses connected the
+Flipper shows "(disconnected)".
+
+On Android 12 and later, glaz need not be open. Android's Companion
+Device Manager watches for the paired Flipper and starts glaz when the
+Flipper's Glaz app is open nearby, with no screen; glaz then connects
+the Flipper and the glasses of last time, as when opened by hand. A
+**Glaz** notification says what is connected ("Flipper Glaz and Frame
+connected") and keeps glaz running in the background while the Flipper
+is near or connected, or the glasses are. When both are gone, glaz lets
+go about half a minute later, and the notification with it. Turning the
+Flipper remote off, or Forget, stops the watching. Opened by hand, glaz
+is the same one: the screen shows what already runs, and closing it
+leaves the links up while the notification is there.
+
+- **glaz killed.** If Android or a crash ends glaz, Android binds it
+  again about ten seconds later; with the Flipper remote on, glaz then
+  starts with no screen and connects what is there.
+- **Force stop.** After Settings > Apps > Glaz > Force stop, Android no
+  longer starts glaz for the Flipper until glaz is opened by hand once.
+- **Android 8 to 11** pair the same way but cannot watch for the
+  Flipper: there, as on iOS and desktop, it works only while glaz runs.
+- **iOS and desktop** have no Companion Device Manager and no pairing
+  in glaz: the Flipper works only while glaz runs, found by a scan for
+  its service while the glasses are connected, and looked for again once
+  a minute.
+- **Nearby devices.** The notification and the hold need glaz's Nearby
+  devices permission, which it asks for anyway to reach the glasses.
+- **The glasses asleep.** If glaz is gone for more than about a minute
+  and a half, the glasses go to sleep, and only a tap wakes them; glaz
+  woken by the Flipper then waits for them.
+- **A failed pairing.** After a failed or cancelled pairing the Flipper's
+  firmware may keep its PIN dialog on screen. Press Back on the Flipper
+  (or close and reopen Glaz) before pairing again.
+
+Each press comes to the phone as 3 bytes on the keys characteristic: a
+version, 1, the key (1 Up, 2 Down, 3 Left, 4 Right, 5 OK, 6 Back) and the
+press (1 short, 2 long, 3 repeat); the status goes the other way
 (flipper-glaz/README.md, "The link to the phone").
-glaz on the phone does not take its presses yet; until it does,
-`utils/flipper_keys.py` shows them on a computer.
+`utils/flipper_keys.py` shows its presses on a computer.
 
 ### Over USB
 
@@ -138,4 +206,10 @@ sends other keys does nothing on the glasses: add its keys to the sets in
   field has the focus, the keys are for typing.
 - **The Flipper does not show up on the phone.** Bluetooth on the Flipper
   is off, or the Remote app is not open: the Flipper advertises only while
-  it is.
+  it is. For the Glaz app, the same: it advertises only while open.
+- **The Flipper's Glaz says "(disconnected)".** The phone has it but not
+  the glasses: connect them on the Glaz tab. A ring top right instead of
+  a dot: the phone does not have the Flipper either; check that the
+  Flipper remote is on and the Flipper paired (More > Services).
+- **Glaz no longer starts for the Flipper.** glaz was force-stopped:
+  open it once by hand.

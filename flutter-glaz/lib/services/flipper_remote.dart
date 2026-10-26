@@ -10,6 +10,7 @@ import '../frame/protocol.dart';
 import '../glasses_menu.dart';
 import '../settings.dart';
 import 'glasses_lua.dart';
+import 'glaz_log.dart';
 
 /// The Flipper's Glaz app (flipper-glaz/) as a remote for the glasses.
 /// Its presses drive them as a keyboard's do ([gestureFor]), and it is
@@ -17,7 +18,9 @@ import 'glasses_lua.dart';
 /// their screen, written whenever it changes. While the service is on,
 /// this looks for the paired Flipper, and again once a minute. Off
 /// Android that is a scan, and only while the glasses are connected: the
-/// link scans for them with the same one scanner.
+/// link scans for them with the same one scanner. On Android the
+/// system also wakes glaz when the Flipper comes near, and says so
+/// ([appeared], hold.dart).
 class FlipperRemote extends ChangeNotifier {
   FlipperRemote(
     this.link,
@@ -48,6 +51,9 @@ class FlipperRemote extends ChangeNotifier {
   /// A Flipper with the Glaz app is connected.
   bool connected = false;
 
+  /// The connected Flipper's name.
+  String? get name => connected ? port.name : null;
+
   /// The Flippers the phone is paired with (Android only).
   List<FlipperPaired> paired = const [];
   bool _opening = false;
@@ -62,6 +68,13 @@ class FlipperRemote extends ChangeNotifier {
   int? _memFree;
   List<int>? _sent;
   Timer? _timer;
+
+  /// Whose status last reached this connection's Flipper: logged when
+  /// it changes, not with every write. Empty: nothing yet.
+  String? _told = '';
+
+  /// What Android was last told by [_observe]; null: nothing yet.
+  bool? _observing;
 
   bool get _wanted => settings.serviceOn('flipper_remote');
 
@@ -110,8 +123,29 @@ class FlipperRemote extends ChangeNotifier {
     final p = await companion.pair();
     await _refresh();
     if (p == null) return false;
+    if (_wanted) {
+      // the new association is watched too
+      _observing = true;
+      unawaited(companion.observe(true));
+    }
     if (_wanted && !connected) unawaited(_open());
     return true;
+  }
+
+  /// Android saw the paired Flipper come near (LinkHold): connected now
+  /// rather than at the next minute's look.
+  void appeared() {
+    if (_wanted && !connected) unawaited(_open());
+  }
+
+  /// Android wakes glaz as a paired Flipper comes near while the service
+  /// is on, and no more once it is off.
+  void _observe() {
+    if (paired.isEmpty) return;
+    final on = _wanted;
+    if (on == _observing) return;
+    _observing = on;
+    unawaited(companion.observe(on));
   }
 
   /// Unpairs the Flipper at [address], letting go of it first.
@@ -129,6 +163,7 @@ class FlipperRemote extends ChangeNotifier {
 
   Future<void> _refresh() async {
     paired = await companion.paired();
+    _observe();
     notifyListeners();
   }
 
@@ -178,6 +213,7 @@ class FlipperRemote extends ChangeNotifier {
       port.close();
       notifyListeners();
     }
+    _observe();
     _send();
   }
 
@@ -196,6 +232,7 @@ class FlipperRemote extends ChangeNotifier {
       await port.close();
     }
     if (!connected) return;
+    _told = '';
     notifyListeners();
     _send(); // what is known now; disk and memory once the glasses answer
     await _ask();
@@ -232,9 +269,20 @@ class FlipperRemote extends ChangeNotifier {
     final bytes = encodeStatus(status);
     if (listEquals(bytes, _sent)) return;
     _sent = bytes;
-    port.write(bytes).catchError((Object _) {
-      _sent = null; // tried again with the next change
-    });
+    final glasses = status.name;
+    port
+        .write(bytes)
+        .then((_) {
+          if (_told == glasses) return;
+          _told = glasses;
+          glazLog(
+            LogKind.link,
+            'Flipper remote: told ${glasses ?? 'no glasses'}',
+          );
+        })
+        .catchError((Object _) {
+          _sent = null; // tried again with the next change
+        });
   }
 
   @override

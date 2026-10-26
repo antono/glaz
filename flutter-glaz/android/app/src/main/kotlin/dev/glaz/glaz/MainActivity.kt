@@ -1,76 +1,42 @@
 package dev.glaz.glaz
 
+import android.content.Context
 import android.content.Intent
-import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
-import io.flutter.plugin.common.MethodChannel
 
+/**
+ * Shows the one engine, GlazEngine: made here if the Flipper or the link
+ * service has not made it already. Its channels live on the engine, so
+ * Dart runs the same with this activity or without it.
+ */
 class MainActivity : FlutterActivity() {
-    private var speech: Speech? = null
-    private var voice: Voice? = null
-    private var keyboards: Keyboards? = null
-    private var companion: Companion? = null
+    override fun provideFlutterEngine(context: Context): FlutterEngine =
+        GlazEngine.get(context, "app")
 
-    /**
-     * "glaz/keys": the keyboard remote in the background, KeyRemoteService,
-     * and whether one is attached, Keyboards.
-     */
+    /** Kept while the link service holds a link; else it goes as before. */
+    override fun shouldDestroyEngineWithHost() =
+        isFinishing && !isChangingConfigurations && !LinkService.running
+
+    // not super's: it registers nothing for an engine given by the host
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-        super.configureFlutterEngine(flutterEngine)
-        val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "glaz/keys")
-        val keyboards = Keyboards(applicationContext, channel)
-        this.keyboards = keyboards
-        channel.setMethodCallHandler { call, result ->
-            when (call.method) {
-                "take" -> {
-                    KeyRemoteService.taken =
-                        (call.arguments as List<*>).map { (it as Number).toInt() }.toSet()
-                    result.success(null)
-                }
-                "takeAll" -> {
-                    KeyRemoteService.takeAll = call.arguments as Boolean
-                    result.success(null)
-                }
-                "background" -> result.success(KeyRemoteService.running)
-                "keyboard" -> result.success(keyboards.attached)
-                "settings" -> {
-                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                    result.success(null)
-                }
-                else -> result.notImplemented()
-            }
-        }
-        KeyRemoteService.channel = channel
-        speech = Speech(flutterEngine.dartExecutor.binaryMessenger)
-        voice = Voice(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
-        companion = Companion(this, flutterEngine.dartExecutor.binaryMessenger)
+        GlazEngine.activity = this
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
-        speech?.close()
-        speech = null
-        voice?.close()
-        voice = null
-        keyboards?.close()
-        keyboards = null
-        companion?.close()
-        companion = null
-        KeyRemoteService.channel = null
-        KeyRemoteService.taken = emptySet()
-        KeyRemoteService.takeAll = false
-        super.cleanUpFlutterEngine(flutterEngine)
+        if (GlazEngine.activity === this) GlazEngine.activity = null
     }
 
     /** The Flipper chooser's answer goes to Companion, the rest to Flutter. */
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (companion?.onActivityResult(requestCode, resultCode, data) == true) return
+        if (GlazEngine.companion?.onActivityResult(requestCode, resultCode, data) == true) return
         super.onActivityResult(requestCode, resultCode, data)
     }
 
     override fun onResume() {
         super.onResume()
         KeyRemoteService.foreground = true
+        LinkService.update(this)
     }
 
     override fun onPause() {

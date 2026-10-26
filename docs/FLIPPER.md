@@ -13,7 +13,9 @@ You need:
 - a Flipper Zero with Bluetooth on (**Settings > Bluetooth**, ON), and not
   in its Bluetooth Remote app (Keynote and the rest): that turns the
   Flipper into a keyboard, and a keyboard has no screen to share. Leave it
-  with Back held.
+  with Back held. Nor in the Glaz app (flipper-glaz/, docs/REMOTE.md):
+  while it is open the Flipper's own Bluetooth is off. Hold Back to leave
+  it too.
 
 ## Use
 

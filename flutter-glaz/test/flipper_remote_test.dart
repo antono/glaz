@@ -12,6 +12,7 @@ import 'package:glaz/frame/protocol.dart';
 import 'package:glaz/glasses_menu.dart';
 import 'package:glaz/services/flipper_remote.dart';
 import 'package:glaz/services/glasses_lua.dart';
+import 'package:glaz/services/glaz_log.dart';
 import 'package:glaz/settings.dart';
 
 class FakeFlipper implements FlipperStatusPort {
@@ -24,15 +25,23 @@ class FakeFlipper implements FlipperStatusPort {
   bool there = true;
   int opened = 0;
   int closed = 0;
+  bool _open = false;
+
+  @override
+  String? get name => _open ? 'Glaz' : null;
 
   @override
   Future<bool> open() async {
     opened++;
-    return slow?.future ?? there;
+    return _open = await (slow?.future ?? Future.value(there));
   }
 
   @override
-  Future<void> close() async => closed++;
+  Future<void> close() async {
+    _open = false;
+    closed++;
+  }
+
   @override
   Future<void> write(List<int> bytes) async => written.add(bytes);
   @override
@@ -62,6 +71,12 @@ class FakeCompanion implements FlipperCompanion {
   @override
   Future<void> forget(String address) async =>
       list.removeWhere((p) => p.address == address);
+
+  /// What [observe] was told, in order.
+  final observed = <bool>[];
+
+  @override
+  Future<void> observe(bool on) async => observed.add(on);
 }
 
 /// The status' text fields, by tag, as the Flipper reads them.
@@ -107,6 +122,19 @@ void main() {
       final b = encodeStatus(GlassesStatus(name: 'Очки ${'x' * 40}'));
       expect(b[2], maxText);
       expect(String.fromCharCodes(b.sublist(3, 8)), '???? ');
+    });
+  });
+
+  group('flipperLabel', () {
+    test('the association\'s name first', () {
+      expect(flipperLabel('Glaz', 'Flipper Uge1t', '13:37'), 'Glaz');
+    });
+
+    test('a device made from an address has no name: Bluetooth\'s, '
+        'else the address', () {
+      expect(flipperLabel(null, '', '13:37:13:37:01:37'), '13:37:13:37:01:37');
+      expect(flipperLabel('', 'Glaz', '13:37'), 'Glaz');
+      expect(flipperLabel(null, 'Glaz', '13:37'), 'Glaz');
     });
   });
 
@@ -419,6 +447,102 @@ void main() {
         expect(remote.connected, isFalse);
         expect(remote.paired, isEmpty);
         expect(flipperZero.closed, 1);
+      });
+    });
+
+    test('Android watches for the paired Flipper while the service is on', () {
+      fakeAsync((async) {
+        companion.list.add(const FlipperPaired('13:37:13:37:01:37', 'Glaz'));
+        remote.attach();
+        async.flushMicrotasks();
+        expect(companion.observed, [true]);
+        changed(link); // nothing that matters: not told again
+        settings.setService('flipper_remote', false);
+        settings.setService('flipper_remote', true);
+        async.flushMicrotasks();
+        expect(companion.observed, [true, false, true]);
+      });
+    });
+
+    test('nothing paired: Android not asked to watch', () {
+      fakeAsync((async) {
+        remote.attach();
+        async.flushMicrotasks();
+        settings.setService('flipper_remote', false);
+        expect(companion.observed, isEmpty);
+      });
+    });
+
+    test('pair: the new Flipper watched for too', () {
+      fakeAsync((async) {
+        companion.list.add(const FlipperPaired('13:37:13:37:13:37', null));
+        remote.attach();
+        async.flushMicrotasks();
+        remote.pair();
+        async.flushMicrotasks();
+        expect(companion.observed, [true, true]);
+      });
+    });
+
+    test('appeared: connected at once, not a minute on', () {
+      fakeAsync((async) {
+        flipperZero.there = false;
+        remote.attach();
+        async.flushMicrotasks();
+        flipperZero.there = true;
+        remote.appeared();
+        async.flushMicrotasks();
+        expect(flipperZero.opened, 2);
+        expect(remote.connected, isTrue);
+        remote.appeared(); // connected: nothing more
+        async.flushMicrotasks();
+        expect(flipperZero.opened, 2);
+      });
+    });
+
+    test('appeared while off: left alone', () {
+      fakeAsync((async) {
+        settings.setService('flipper_remote', false);
+        remote.attach();
+        async.flushMicrotasks();
+        remote.appeared();
+        async.flushMicrotasks();
+        expect(flipperZero.opened, 0);
+      });
+    });
+
+    test('the name: the connected Flipper\'s', () {
+      fakeAsync((async) {
+        flipperZero.there = false;
+        remote.attach();
+        async.flushMicrotasks();
+        expect(remote.name, isNull);
+        flipperZero.there = true;
+        async.elapse(FlipperRemote.every);
+        expect(remote.name, 'Glaz');
+      });
+    });
+
+    test('whose status the Flipper has is logged as it changes', () {
+      fakeAsync((async) {
+        bool told(LogEntry e) => e.text.startsWith('Flipper remote: told');
+        final before = GlazLog.instance.entries.where(told).length;
+        remote.attach();
+        async.flushMicrotasks();
+        remote.onEvent([appStart, 1]);
+        async.flushMicrotasks();
+        var logged = GlazLog.instance.entries.where(told).toList();
+        expect(logged.length, before + 1);
+        expect(logged.last.text, 'Flipper remote: told Frame 137');
+        changed(link); // the same glasses: not logged again
+        async.flushMicrotasks();
+        expect(GlazLog.instance.entries.where(told).length, before + 1);
+        link.state = LinkState.disconnected;
+        changed(link);
+        async.flushMicrotasks();
+        logged = GlazLog.instance.entries.where(told).toList();
+        expect(logged.length, before + 2);
+        expect(logged.last.text, 'Flipper remote: told no glasses');
       });
     });
 

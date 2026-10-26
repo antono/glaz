@@ -27,6 +27,8 @@ Future<void> main() async {
   await Services.start();
   // the link from the start, to the glasses of last time (frame/link.dart)
   final s = Services.instance;
+  // why glaz started: opened, or woken by the Flipper with no screen
+  await s.hold.start();
   s.link.onRemember = (id, name, wanted) {
     s.settings
       ..linkDevice = id
@@ -139,7 +141,16 @@ List<String> tabOrderFrom(List<String>? saved) {
 class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   String _current = tabs.first.id;
   bool _editing = false;
-  bool _shown = true;
+  // a start with no screen (the Flipper woke glaz) is not shown
+  bool _shown = _showing(WidgetsBinding.instance.lifecycleState);
+
+  /// Whether glaz is on screen in [state]: inactive still is -- a
+  /// dialog, the shade, an unfocused window.
+  static bool _showing(AppLifecycleState? state) =>
+      state == AppLifecycleState.resumed || state == AppLifecycleState.inactive;
+
+  /// Notifications asked for once a run, with glaz on screen.
+  bool _askedNotifications = false;
 
   @override
   void initState() {
@@ -149,11 +160,14 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     Services.instance.keys.addListener(_handsOff);
     Services.instance.flipperRemote.addListener(_handsOff);
     Services.instance.appCheck.addListener(_offerUpload);
+    // the paired Flipper is known a moment after the start
+    Services.instance.flipperRemote.addListener(_askNotifications);
   }
 
   @override
   void dispose() {
     Services.instance.appCheck.removeListener(_offerUpload);
+    Services.instance.flipperRemote.removeListener(_askNotifications);
     Services.instance.settings.removeListener(_handsOff);
     Services.instance.keys.removeListener(_handsOff);
     Services.instance.flipperRemote.removeListener(_handsOff);
@@ -163,11 +177,26 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // inactive is still on screen: a dialog, the shade, an unfocused window
-    _shown =
-        state == AppLifecycleState.resumed ||
-        state == AppLifecycleState.inactive;
+    _shown = _showing(state);
     _handsOff();
+    if (state != AppLifecycleState.resumed) return;
+    // what was put off while glaz ran with no screen
+    _offerUpload();
+    _askNotifications();
+  }
+
+  // the notification that says glaz holds the links, with a Flipper
+  // paired and its remote on: asked once a run, on screen
+  void _askNotifications() {
+    final s = Services.instance;
+    if (_askedNotifications ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
+        !s.settings.serviceOn('flipper_remote') ||
+        s.flipperRemote.paired.isEmpty) {
+      return;
+    }
+    _askedNotifications = true;
+    s.hold.askNotifications();
   }
 
   // a keyboard remote or the Flipper, or the Remote tab in front: the
@@ -194,6 +223,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     final app = s.appCheck.app;
     if (app != GlassesApp.missing && app != GlassesApp.stopped) return;
     if (_offeredFor == s.link.connects || s.link.busy || !mounted) return;
+    // no screen: asked when glaz is next on it
+    if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
     _offeredFor = s.link.connects;
     final missing = app == GlassesApp.missing;
     final ok = await showDialog<bool>(

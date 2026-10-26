@@ -9,6 +9,8 @@ import android.companion.AssociationInfo
 import android.companion.AssociationRequest
 import android.companion.BluetoothLeDeviceFilter
 import android.companion.CompanionDeviceManager
+import android.companion.DeviceNotAssociatedException
+import android.companion.ObservingDevicePresenceRequest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -34,18 +36,22 @@ import java.util.UUID
  *                    {address, name, bonded}; null when cancelled
  *   associated()     this app's Flipper(s): [{address, name}]
  *   forget(address)  drops the association; the pairing stays
+ *   observe(on)      whether Android wakes glaz as the Flipper comes near
  *
  * Android 13 on answers onAssociationPending and onAssociationCreated;
  * before that onDeviceFound, and the device comes back in the chooser's
  * result, onActivityResult in MainActivity. Addresses are upper case, as
  * flutter_blue_plus has them.
  */
-class Companion(private val activity: Activity, messenger: BinaryMessenger) :
+class Companion(private val context: Context, messenger: BinaryMessenger) :
     MethodChannel.MethodCallHandler {
+
+    /** The activity on screen, for the chooser; none, no pairing. */
+    var activity: Activity? = null
 
     private val channel = MethodChannel(messenger, "glaz/companion")
     private val cdm: CompanionDeviceManager? =
-        activity.getSystemService(CompanionDeviceManager::class.java)
+        context.getSystemService(CompanionDeviceManager::class.java)
     private val main = Handler(Looper.getMainLooper())
 
     // the one associate() under way
@@ -67,6 +73,10 @@ class Companion(private val activity: Activity, messenger: BinaryMessenger) :
                     forget(cdm, call.arguments as String)
                     result.success(null)
                 }
+                "observe" -> {
+                    observe(cdm, call.arguments as Boolean)
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         } catch (e: Exception) {
@@ -77,6 +87,7 @@ class Companion(private val activity: Activity, messenger: BinaryMessenger) :
 
     private fun associate(cdm: CompanionDeviceManager, result: MethodChannel.Result) {
         if (pending != null) return result.error("busy", "already pairing", null)
+        if (activity == null) return result.error("no_screen", "open glaz to pair", null)
         pending = result
         val filter = BluetoothLeDeviceFilter.Builder()
             .setScanFilter(ScanFilter.Builder().setServiceUuid(ParcelUuid(GLAZ)).build())
@@ -103,7 +114,7 @@ class Companion(private val activity: Activity, messenger: BinaryMessenger) :
             }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            cdm.associate(request, activity.mainExecutor, callback)
+            cdm.associate(request, context.mainExecutor, callback)
         } else {
             @Suppress("DEPRECATION")
             cdm.associate(request, callback, main)
@@ -113,7 +124,8 @@ class Companion(private val activity: Activity, messenger: BinaryMessenger) :
     private fun choose(chooser: IntentSender) {
         if (pending == null) return
         try {
-            activity.startIntentSenderForResult(chooser, REQUEST, null, 0, 0, 0)
+            val a = activity ?: return failed("chooser: no screen")
+            a.startIntentSenderForResult(chooser, REQUEST, null, 0, 0, 0)
         } catch (e: Exception) {
             failed("chooser: $e")
         }
@@ -179,7 +191,7 @@ class Companion(private val activity: Activity, messenger: BinaryMessenger) :
                 }
             }
             bonding = r
-            activity.registerReceiver(r, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
+            context.registerReceiver(r, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
             val t = Runnable {
                 Log.w(TAG, "pairing with $address timed out")
                 done(device.bondState == BluetoothDevice.BOND_BONDED)
@@ -215,17 +227,23 @@ class Companion(private val activity: Activity, messenger: BinaryMessenger) :
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             cdm.myAssociations
                 .filter { it.deviceMacAddress?.toString().equals(address, ignoreCase = true) }
-                .forEach { cdm.disassociate(it.id) }
+                .forEach {
+                    watch(cdm, it, false)
+                    cdm.disassociate(it.id)
+                }
         } else {
             // Android keeps them as it was given them
             @Suppress("DEPRECATION")
             cdm.associations
                 .filter { it.equals(address, ignoreCase = true) }
-                .forEach { cdm.disassociate(it) }
+                .forEach {
+                    watch(cdm, it, false)
+                    cdm.disassociate(it)
+                }
         }
     }
 
-    private fun adapter() = activity.getSystemService(BluetoothManager::class.java).adapter
+    private fun adapter() = context.getSystemService(BluetoothManager::class.java).adapter
 
     private fun nameOf(address: String): String? = try {
         nameOf(adapter().getRemoteDevice(address.uppercase()))
@@ -260,7 +278,7 @@ class Companion(private val activity: Activity, messenger: BinaryMessenger) :
         timeout = null
         bonding?.let {
             try {
-                activity.unregisterReceiver(it)
+                context.unregisterReceiver(it)
             } catch (_: Exception) {
             }
         }
@@ -282,6 +300,64 @@ class Companion(private val activity: Activity, messenger: BinaryMessenger) :
 
         /** onFailure's words for the chooser closed or declined. */
         private val CANCELS = listOf("cancel", "reject")
+
+        // observe() said once that this Android has no presence to watch
+        private var told = false
+
+        /**
+         * Android tells FlipperPresence when the Flipper comes and goes, even
+         * with glaz not running, for as long as [on]. Android keeps it across
+         * restarts; a force stop pauses it until glaz is opened by hand.
+         */
+        fun observe(cdm: CompanionDeviceManager, on: Boolean) {
+            when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
+                    cdm.myAssociations.forEach { watch(cdm, it, on) }
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+                    @Suppress("DEPRECATION")
+                    cdm.associations.forEach { watch(cdm, it, on) }
+                else -> if (!told) {
+                    told = true
+                    Log.i(TAG, "observe: Android ${Build.VERSION.SDK_INT} has no presence")
+                }
+            }
+        }
+
+        /** One association watched or not: by its id on 16, its address before. */
+        private fun watch(cdm: CompanionDeviceManager, info: AssociationInfo, on: Boolean) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+                try {
+                    val request = ObservingDevicePresenceRequest.Builder()
+                        .setAssociationId(info.id)
+                        .build()
+                    if (on) cdm.startObservingDevicePresence(request)
+                    else cdm.stopObservingDevicePresence(request)
+                    Log.i(TAG, "observe ${info.id}: $on")
+                } catch (e: Exception) {
+                    Log.w(TAG, "observe ${info.id}: $e")
+                }
+                return
+            }
+            val mac = info.deviceMacAddress ?: return
+            watch(cdm, mac.toString(), on)
+        }
+
+        /** Android 12 to 15: by the address Android keeps. */
+        private fun watch(cdm: CompanionDeviceManager, address: String, on: Boolean) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+            try {
+                @Suppress("DEPRECATION")
+                if (on) cdm.startObservingDevicePresence(address)
+                else cdm.stopObservingDevicePresence(address)
+                Log.i(TAG, "observe $address: $on")
+            } catch (e: DeviceNotAssociatedException) {
+                Log.w(TAG, "observe $address: $e")
+            } catch (e: SecurityException) {
+                Log.w(TAG, "observe $address: $e")
+            } catch (e: IllegalStateException) {
+                Log.w(TAG, "observe $address: $e")
+            }
+        }
 
         /** The glaz service, flipper-glaz/src/link.rs. */
         private val GLAZ = UUID.fromString("a96fe95e-083f-402e-8be1-a9d5235813ca")

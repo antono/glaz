@@ -70,4 +70,16 @@ class FlipperCompanion {
       glazLog(LogKind.link, 'Flipper forget: ${e.message}', problem: true);
     }
   }
+
+  /// Whether Android wakes glaz when a paired Flipper comes near
+  /// (FlipperPresence.kt), for every Flipper paired; Android keeps it.
+  Future<void> observe(bool on) async {
+    try {
+      await channel.invokeMethod<void>('observe', on);
+    } on MissingPluginException {
+      return;
+    } on PlatformException catch (e) {
+      glazLog(LogKind.link, 'Flipper observe: ${e.message}', problem: true);
+    }
+  }
 }

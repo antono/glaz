@@ -44,6 +44,15 @@ List<int> encodeStatus(GlassesStatus s) {
 
 const maxText = 23;
 
+/// A Flipper's name for the log and the screen: the one Android's
+/// association keeps, else the one Bluetooth has, else its address.
+String flipperLabel(String? name, String platformName, String address) =>
+    name != null && name.isNotEmpty
+    ? name
+    : platformName.isNotEmpty
+    ? platformName
+    : address;
+
 /// A way to the Flipper's Glaz app: the status goes to it, its key
 /// presses come back. The service is written against this, so tests give
 /// it a Flipper of their own.
@@ -53,6 +62,9 @@ abstract class FlipperStatusPort {
   Future<bool> open();
   Future<void> close();
   Future<void> write(List<int> bytes);
+
+  /// The connected Flipper's name; null while none is.
+  String? get name;
 
   /// The keys characteristic's notifications, as they come: a press
   /// each (presses.dart).
@@ -91,6 +103,7 @@ class FlipperStatusBle implements FlipperStatusPort {
 
   BluetoothDevice? _device;
   BluetoothCharacteristic? _status;
+  String? _name;
   StreamSubscription<BluetoothConnectionState>? _state;
   StreamSubscription<List<int>>? _pressed;
   final _keys = StreamController<List<int>>.broadcast();
@@ -100,18 +113,27 @@ class FlipperStatusBle implements FlipperStatusPort {
   Stream<List<int>> get keys => _keys.stream;
   @override
   Stream<void> get lost => _lost.stream;
+  @override
+  String? get name => _name;
 
   @override
   Future<bool> open() async {
     if (Platform.isAndroid) {
+      // the association's name: a device made from an address has none
       for (final p in await companion.paired()) {
-        if (await _try(BluetoothDevice.fromId(p.address))) return true;
+        if (await _try(BluetoothDevice.fromId(p.address), p.name)) return true;
       }
       return false;
     }
+    // the scan result has the name
     final d = await _scan();
-    return d != null && await _try(d);
+    return d != null && await _try(d, null);
   }
+
+  /// What [d] is called in the log and on screen: [name] if known, else
+  /// what Bluetooth says, else its address.
+  static String label(BluetoothDevice d, String? name) =>
+      flipperLabel(name, d.platformName, d.remoteId.str);
 
   /// The nearest Flipper advertising the glaz service, if one does in
   /// [scanFor]. A connected Flipper does not advertise. The scanner is
@@ -143,7 +165,8 @@ class FlipperStatusBle implements FlipperStatusPort {
     }
   }
 
-  Future<bool> _try(BluetoothDevice d) async {
+  Future<bool> _try(BluetoothDevice d, String? name) async {
+    final label = FlipperStatusBle.label(d, name);
     try {
       await d.connect(timeout: const Duration(seconds: 10));
     } catch (_) {
@@ -162,17 +185,19 @@ class FlipperStatusBle implements FlipperStatusPort {
           .where((c) => c.uuid == status)
           .firstOrNull;
       if (glaz == null || char == null) {
-        glazLog(LogKind.link, 'Flipper remote: ${d.platformName} has no Glaz');
+        glazLog(LogKind.link, 'Flipper remote: $label has no Glaz');
         await d.disconnect();
         return false;
       }
       _device = d;
       _status = char;
+      _name = label;
       await _state?.cancel();
       _state = d.connectionState.listen((s) {
         if (s == BluetoothConnectionState.disconnected && _device == d) {
           _device = null;
           _status = null;
+          _name = null;
           _pressed?.cancel();
           _pressed = null;
           _state?.cancel();
@@ -189,7 +214,7 @@ class FlipperStatusBle implements FlipperStatusPort {
       }
       glazLog(
         LogKind.link,
-        'Flipper remote: ${d.platformName}, mtu ${d.mtuNow}'
+        'Flipper remote: $label, mtu ${d.mtuNow}'
         '${keys == null ? ', no keys' : ''}',
       );
       return true;
@@ -220,6 +245,7 @@ class FlipperStatusBle implements FlipperStatusPort {
     final d = _device;
     _device = null;
     _status = null;
+    _name = null;
     try {
       await d?.disconnect();
     } catch (_) {}
