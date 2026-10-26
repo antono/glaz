@@ -62,6 +62,12 @@
 
 local data = require('data.min')
 
+-- The display, Frame's or Halo's: its layout, and text and show() that
+-- work on both (app/glaz_display.lua, docs/HALO.md).
+local display = require('glaz_display')
+local DL = display.layout
+local draw = display.text
+
 -- The menu tree, in display order. A string names a module in modules/; a
 -- table is a submenu -- its label, then its entries, which may themselves be
 -- submenus. Each module must return a table with a .label and either .run()
@@ -189,8 +195,8 @@ local WAKE_TAPS = { threshold = 7, quiet = 0, duration = 0, latch = true,
 -- answers is given up on after NET_TIMEOUT -- the phone has its own,
 -- shorter, timeout.
 local NOTICE_SECONDS = 5
-local NOTICE_CHARS   = 26     -- characters per line, under the 29 of
-                              -- (640 - LEFT_X) / CHAR_W: the font is
+local NOTICE_CHARS   = DL.notice_chars  -- per line; on Frame under the
+                              -- 29 of (640 - LEFT_X) / CHAR_W: the font is
                               -- proportional and overflow is dropped
 local NET_TIMEOUT    = 20
 
@@ -208,16 +214,17 @@ local TAP_BOUNCE = 0.15  -- taps closer than this are sensor bounce, not input
 local TAP_WINDOW = 0.75  -- max gap between taps belonging to one multi-tap
 local TAP_TOGGLE = 3     -- taps that fire at once: sleep, or the remote's Menu
 
--- Layout. Display is 640x400. x=1 is clipped, so nothing starts left of
--- LEFT_X. A row is 55px. The breadcrumb sits above the list, close to the
--- top edge (y=1 is visible), so five rows still fit: the last one starts at
--- 285 and ends near 326, inside the measured VISIBLE_BOTTOM of 340.
-local ROW_H        = 55
-local CRUMB_Y      = 10
-local TOP_Y        = 65
-local LEFT_X       = 60
-local VISIBLE_ROWS = 5
-local TEXT_ROWS    = 3     -- lines of module output: rows 3..5
+-- Layout, from glaz_display.lua; Halo's is there. Frame: the display is
+-- 640x400. x=1 is clipped, so nothing starts left of LEFT_X. A row is
+-- 55px. The breadcrumb sits above the list, close to the top edge (y=1 is
+-- visible), so five rows still fit: the last one starts at 285 and ends
+-- near 326, inside the measured VISIBLE_BOTTOM of 340.
+local ROW_H        = DL.row_h
+local CRUMB_Y      = DL.crumb_y
+local TOP_Y        = DL.top_y
+local LEFT_X       = DL.left_x
+local VISIBLE_ROWS = DL.visible_rows
+local TEXT_ROWS    = DL.text_rows  -- lines of module output: rows 3..5
 
 -- The top bar, one row at CRUMB_Y, left to right: the breadcrumb, the
 -- background icon, the Bluetooth icon, the clock and the battery level. The right-hand pieces have fixed x positions, so the
@@ -239,8 +246,8 @@ local STATUS_PERIOD  = 1   -- seconds between checks for a new minute
 -- of two bytes, first pixel in the high bit (sprite_engine.sv). A set bit
 -- draws palette index 1 + ICON_PALETTE, a clear bit is transparent; 9 makes
 -- it index 10, GREEN.
-local ICON_X       = 376
-local ICON_Y       = CRUMB_Y + 10
+local ICON_X       = DL.icon_x
+local ICON_Y       = DL.icon_y
 local ICON_W       = 16
 local ICON_PALETTE = 9
 local ICON_PLAY    = '\x00\x00\x18\x00\x1E\x00\x1F\x00\x1F\xC0\x1F\xF0' ..
@@ -257,7 +264,7 @@ local ICON_REC     = '\x00\x00\x00\x00\x00\x00\x07\xE0\x0F\xF0\x1F\xF8' ..
 -- Bluetooth icon: the rune, right of the background icon, always shown. Same
 -- bitmap format as ICON_PLAY. Palette offsets: 13 draws index 14, SKYBLUE,
 -- while a host is connected; 1 draws index 2, GREY, while none is.
-local BT_X          = 400
+local BT_X          = DL.bt_x
 local BT_ON_PALETTE = 13
 local BT_OFF_PALETTE = 1
 local ICON_BT       = '\x00\x00\x01\x80\x01\xC0\x01\xB0\x19\x98\x0D\xB0' ..
@@ -284,17 +291,17 @@ local HANDS_OFF_LEASE = 40   -- seconds
 -- The framebuffer is 640x400 but the wearer does not see all of it. Measured
 -- by probing: y=340 is visible, y=370 is not, so the bottom is clipped.
 -- Centring must use these numbers, not 640x400, or it lands low.
-local SCREEN_W       = 640
-local VISIBLE_BOTTOM = 340
+local SCREEN_W       = DL.screen_w
+local VISIBLE_BOTTOM = DL.visible_bottom
 
 -- The built-in font is NOT monospaced, so positioning each piece of text by
 -- a single character width never lines up: 'okulo' is narrower than five
 -- average glyphs. Measured width of '<' specifically is 22px; the firmware
 -- handles every other advance itself, as long as a whole string is drawn in
 -- one call. CHAR_W below is only a rough average, used for centring.
-local BRACKET_W = 22
-local CHAR_W    = 20
-local CHAR_H    = 24
+local BRACKET_W = DL.bracket_w
+local CHAR_W    = DL.char_w
+local CHAR_H    = DL.char_h
 
 -- Parsers. MENU_SET carries plain text; HIDE/SHOW carry nothing and the mere
 -- presence of the item is the signal.
@@ -563,29 +570,10 @@ local function send(code, value)
   pcall(frame.bluetooth.send, string.char(code, value))
 end
 
--- show() only asks the FPGA to flip, and returns at once. The flip waits for
--- the panel to finish its frame, and then the new back buffer is zeroed --
--- about 30 ms in all (display_buffers.sv). A draw in that window lands in
--- the buffer being shown or is wiped by the zeroing, so pixels go missing.
--- So every flip waits here until the FPGA's buffer status (register 0x18,
--- bit 1: switch pending or clearing) says the back buffer is free again.
-local SHOW_WAIT = 0.1   -- seconds; a stuck status must not hang the app
-
-local function show()
-  frame.display.show()
-  local deadline = frame.time.utc() + SHOW_WAIT
-  while frame.time.utc() < deadline do
-    local ok, status = pcall(frame.fpga_read, 0x18, 1)
-    if not ok or string.byte(status) & 2 == 0 then return end
-  end
-end
-
--- There is no frame.display.clear() in this firmware, so "blank" means
--- drawing a single space and flipping the buffer.
-local function blank()
-  frame.display.text(' ', LEFT_X, TOP_Y)
-  show()
-end
+-- show() flips Frame's back buffer and waits until the next one is free;
+-- on Halo, which draws at once, it does nothing. blank() empties the
+-- screen. Both are in glaz_display.lua.
+local show, blank = display.show, display.blank
 
 -- The micro-OLED keeps drawing power even with a blank frame on it, and the
 -- firmware only powers it down by itself around frame.sleep(), which this app
@@ -669,14 +657,15 @@ end
 -- leading crumbs give way to '..': the end of the path is what matters. The
 -- width is only estimated -- the font is proportional, see CHAR_W.
 local function draw_crumbs(parts, right_x)
-  local fit = (right_x - LEFT_X) // CHAR_W
+  local fit = display.halo and display.fit(CRUMB_Y, DL.small)
+              or (right_x - LEFT_X) // CHAR_W
   local text = table.concat(parts, CRUMB_SEP)
   local first = 1
   while ulen(text) > fit and first < #parts do
     first = first + 1
     text = '..' .. CRUMB_SEP .. table.concat(parts, CRUMB_SEP, first)
   end
-  frame.display.text(text, LEFT_X, CRUMB_Y, { color = 'SKYBLUE' })
+  draw(text, LEFT_X, CRUMB_Y, 'SKYBLUE', DL.small)
 end
 
 -- The whole top bar. last: an extra crumb (the running module's name).
@@ -708,8 +697,15 @@ local function draw_top_bar(last, crumbs)
   end
   draw_crumbs(parts, ((bg or rec) and ICON_X or BT_X) - CHAR_W // 2)
 
-  frame.display.text(clock_text(), TIME_X, CRUMB_Y, { color = 'GREY' })
   local level = battery_level()
+  if display.halo then
+    -- one line near the top edge, centred: the clock and the battery
+    draw(clock_text() .. (level and '  ' .. level .. '%' or ''), 0,
+         DL.status_y, (level and level <= BATTERY_LOW) and 'RED' or 'GREY',
+         DL.small)
+    return
+  end
+  frame.display.text(clock_text(), TIME_X, CRUMB_Y, { color = 'GREY' })
   if level then
     frame.display.text(level .. '%', BATTERY_X, CRUMB_Y,
                        { color = (level <= BATTERY_LOW) and 'RED' or 'GREY' })
@@ -729,17 +725,18 @@ local function err_text(e)
 end
 
 local function render()
+  -- Halo keeps what was drawn: each screen starts from a cleared panel
+  display.begin()
   -- A notification covers everything; what was under it carries on and is
   -- drawn again when it goes.
   if notice then
     set_display(true)
     draw_top_bar(nil, { notice[1] })
     if notice[2] ~= '' then
-      frame.display.text(ucut(notice[2], NOTICE_CHARS), LEFT_X,
-                         TOP_Y, { color = 'YELLOW' })
+      draw(ucut(notice[2], NOTICE_CHARS), LEFT_X, TOP_Y, 'YELLOW')
     end
     for i, line in ipairs(wrap(notice[3], NOTICE_CHARS, VISIBLE_ROWS - 1)) do
-      frame.display.text(line, LEFT_X, TOP_Y + ROW_H * i, { color = 'WHITE' })
+      draw(line, LEFT_X, TOP_Y + ROW_H * i, 'WHITE')
     end
     show()
     return
@@ -758,7 +755,7 @@ local function render()
     if mod and mod.draw then
       local ok, e = pcall(mod.draw)
       if not ok then
-        frame.display.text(err_text(e), LEFT_X, TOP_Y, { color = 'WHITE' })
+        draw(err_text(e), LEFT_X, TOP_Y, 'WHITE')
       end
       if mod.quiet then
         show()
@@ -774,8 +771,7 @@ local function render()
     local row = 0
     for line in string.gmatch(run_text, '[^\n]+') do
       if row >= rows then break end
-      frame.display.text(line, LEFT_X, TOP_Y + ROW_H * (first + row),
-                         { color = 'WHITE' })
+      draw(line, LEFT_X, TOP_Y + ROW_H * (first + row), 'WHITE')
       row = row + 1
     end
     show()
@@ -793,7 +789,7 @@ local function render()
 
   if #items == 0 then
     draw_top_bar()
-    frame.display.text('empty', LEFT_X, TOP_Y + ROW_H * 2, { color = 'GREY' })
+    draw('empty', LEFT_X, TOP_Y + ROW_H * 2, 'GREY')
     show()
     return
   end
@@ -812,9 +808,9 @@ local function render()
     local label = items[i].label
     if items[i].items then label = label .. ' >' end   -- a submenu
     if i == lv.sel then
-      frame.display.text('> ' .. label, LEFT_X, y, { color = 'WHITE' })
+      draw('> ' .. label, LEFT_X, y, 'WHITE')
     else
-      frame.display.text('  ' .. label, LEFT_X, y, { color = 'GREY' })
+      draw('  ' .. label, LEFT_X, y, 'GREY')
     end
     row = row + 1
   end
@@ -871,7 +867,7 @@ local function say_goodnight()
   end
   if not ok then
     blank()   -- whatever half a frame got drawn
-    frame.display.text('sleeping...', LEFT_X, TOP_Y + ROW_H)
+    draw('sleeping...', LEFT_X, TOP_Y + ROW_H)
     show()
     local t = frame.time.utc() + 1
     while frame.time.utc() < t do frame.sleep(0.05) end
@@ -1179,13 +1175,14 @@ end)
 -- word alone is drawn over it in the text colour, offset by the width of
 -- '<'. This needs exactly one measured number; placing three separate pieces
 -- needs two offsets, and with a proportional font neither can be derived
--- from a character count.
+-- from a character count. Halo centres each line in a font of one width,
+-- so the word lands inside its brackets by itself.
 local function draw_splash_text()
   local full = '<' .. SPLASH_TEXT .. '>'
   local x = (SCREEN_W - #full * CHAR_W) // 2
   local y = (VISIBLE_BOTTOM - CHAR_H) // 2
-  frame.display.text(full, x, y, { color = SPLASH_BRACKETS })
-  frame.display.text(SPLASH_TEXT, x + BRACKET_W, y, { color = SPLASH_COLOR })
+  draw(full, x, y, SPLASH_BRACKETS)
+  draw(SPLASH_TEXT, x + BRACKET_W, y, SPLASH_COLOR)
 end
 
 local function draw_splash()
@@ -1794,8 +1791,7 @@ function app_loop()
     if rc == false then
       pcall(stop_app, true, true)
       if bg then pcall(quit, bg) end
-      frame.display.text(' ', LEFT_X, TOP_Y)
-      show()
+      blank()
       if not string.find(tostring(err), 'break signal', 1, true) then
         error(err, 0)
       end

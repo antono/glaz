@@ -31,6 +31,26 @@ With Halo connected the app does not look for the glaz app (`AppCheck`),
 so it never offers to upload Frame's bytecode, and the Glasses tab says
 Halo is not supported yet.
 
+## Display
+
+`app/glaz_display.lua` is what `frame_app.lua` draws through: the layout
+for each display, `text()`, `show()`, `begin()` and `blank()`. It tells the
+two apart by `frame.display.width()`, which Halo answers with 256 and
+Frame does not have.
+
+On Halo the menu, the top bar, notifications and module text go on the
+round panel: rows of 16 px Dogica text 30 px apart, centred and cut to the
+width of the circle at their height (`fit()`); the clock and battery in
+8 px near the top edge, the breadcrumb under them, the icons at the bottom.
+Palette names map to the same colours as numbers. Text is folded to
+printable ASCII. Halo draws at once and keeps what was drawn, so every
+screen starts from `clear()`.
+
+Modules that draw for themselves (Reader, Flipper, the eye while going to
+sleep) still assume Frame's screen, and module text is cut to the round
+rows: those are ported one by one. The phone app does not upload to Halo
+yet, so none of this reaches one from the app.
+
 ## What differs from Frame
 
 Collected from a working Halo client (Valogen's Santos, iOS) and the
