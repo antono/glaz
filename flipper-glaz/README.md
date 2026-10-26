@@ -3,20 +3,22 @@
 **In plain words:** an app for the Flipper Zero that makes it a remote for
 the glasses. You hold the Flipper upright, as in its own Keynote Vertical
 remote, and press its buttons; instead of the buttons its screen shows the
-glasses, their name, how much room is left on them, how much memory, and
-which app they are showing. Unlike a plain Bluetooth remote, it will tell
-a short press from a long one, and give each its own meaning. It is no
-keyboard to the phone: the phone's on-screen keyboard stays, and its
-presses reach glaz and no other app.
+Flipper's dolphin in Frame glasses, then the glasses' name, how much room
+is left on them, how much memory, and which app they are showing. Unlike
+a plain Bluetooth remote, it will tell a short press from a long one,
+and give each its own meaning. It is no keyboard to the phone: the
+phone's on-screen keyboard stays, and its presses reach glaz and no
+other app.
 
 A draft. What is here:
 
-- the screen, upright, 64x128: the glasses drawn as Frame looks from the
-  front (the display lit in its lens while connected), their name, Disk,
-  Mem and App; top right, a dot while the phone is connected, a ring
-  while not, and the LED blue, as in the Flipper's Remote;
-- every press sent to the phone (below), short, long or repeated; the
-  last one shows at the bottom and goes to the Flipper's log;
+- the screen, upright, 64x128: the Flipper's dolphin in round Frame
+  glasses (the display lit in a lens while glasses are connected), under
+  it their name, Storage and Mem, and the app on the glasses on the last
+  line; top right, a dot while the phone is connected, a ring while not,
+  and the LED blue, as in the Flipper's Remote;
+- every press sent to the phone (below), short, long or repeated, and
+  to the Flipper's log;
 - hold Back to leave, as in the Flipper's own remotes.
 
 ## The keys
@@ -46,8 +48,8 @@ While the app is open the Flipper's own Bluetooth is off, so the
 Flipper's screen on the glasses (docs/FLIPPER.md) waits until it closes.
 
 Until the phone tells of glasses, the glasses show as disconnected:
-"(disconnected)" for the name, the lens empty, "-" for Disk, Mem and App
-(`Status::unknown()`).
+"(disconnected)" for the name, the lens empty, "-" for Storage, Mem and
+the app (`Status::unknown()`).
 
 ## Build
 
