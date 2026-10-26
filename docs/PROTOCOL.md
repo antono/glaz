@@ -134,10 +134,13 @@ Reader draws its word that way.
   `on_back` a double tap always leaves. Only the double tap goes through it:
   the remote's Menu, `MENU_SHOW` and the timeouts leave at once, from any
   level.
-- `on_hit(n)` — `n` raw hits from the accelerometer since the last call,
-  bounces and the taps of a double or triple included. For measuring taps
-  (`modules/taptune.lua`); a module never takes `frame.imu.tap_callback`
-  over, which would leave the app without taps.
+- `on_hit(n, flags)` — `n` raw hits from the accelerometer since the last
+  call, bounces and the taps of a double or triple included. `flags` is the
+  tap status byte of the last knock's first hit, not its rebound (MC6470
+  register `0x03`, which side was tapped), or `nil` on firmware that does
+  not pass it. For measuring taps (`modules/taptune.lua`); a module never
+  takes `frame.imu.tap_callback` over, which would leave the app without
+  taps.
 - `remote(arg)` — the phone calls the module (`MODULE_CALL`, see
   [Recorder](#recorder)), `arg` a string whose meaning is the module's. A
   background module not running is started into the background for it; a
@@ -325,7 +328,9 @@ While IDLE the IMU is not polled at all, which saves battery.
 ### Why taps are counted in the loop, not the callback
 
 `frame.imu.tap_callback` only increments a counter; classification happens in
-the main loop. The callback stays trivial so it cannot stall the sensor.
+the main loop. The callback stays trivial so it cannot stall the sensor. It
+also keeps the status byte firmware glaz passes it (`nil` on stock), for
+`on_hit`; counting and classification ignore it.
 
 Three tap constants do the work:
 

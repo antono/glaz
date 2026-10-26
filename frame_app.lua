@@ -491,6 +491,9 @@ local tap_at    = 0   -- utc() of the last accepted tap (set in callback)
 local tap_shake = 0   -- utc() of the last hit of any kind, bounces included
 local tap_hits  = 0   -- every hit counted, bounces included: on_hit(n)
 local hits_seen = 0   -- tap_hits already handed to a module
+local tap_flags = nil -- status 0x03 of the first hit of the last knock, not
+                      -- its rebound: which way it pushed the chip; nil on
+                      -- firmware that passes no argument
 local tap_mute  = 0   -- swallow taps until this time, after a toggle
 local remote_dir = 0  -- a tilt from the phone's remote, taken as if by roll
 local tap_remote = false  -- tap_n came from the phone's remote, not the arm
@@ -1151,8 +1154,13 @@ end
 -- iterations are IDLE_PERIOD apart -- far enough that three real taps looked
 -- like sensor bounce and were thrown away, so the menu never opened. Loop
 -- pacing and gesture recognition must not be coupled.
-frame.imu.tap_callback(function()
+-- Firmware glaz passes the accelerometer's tap status byte (which side,
+-- for Tap tune); stock firmware passes nothing. Counting ignores it. Only
+-- a hit that starts a burst sets it: the bounces after an impact are the
+-- rebound, and usually push the other way.
+frame.imu.tap_callback(function(flags)
   local t = frame.time.utc()
+  if t - tap_shake > TAP_BOUNCE then tap_flags = flags end
   tap_shake = t                       -- every hit shakes the glasses
   tap_hits = tap_hits + 1
   if t - tap_at < TAP_BOUNCE then return end   -- bounce, not a new tap
@@ -1614,7 +1622,8 @@ function app_loop()
       -- 3. the running module. Tilt only reaches a module that takes it
       --    (on_roll), and only moves its cursor -- it never leaves the
       --    module. A module without on_roll does not poll the IMU at all.
-      --    Raw hits, bounces included, go to on_hit(n): Tap tune counts them.
+      --    Raw hits, bounces included, go to on_hit(n, flags): Tap tune
+      --    counts them; flags is the last knock's status byte, or nil.
       --    Under a notification the module gets neither: it would act
       --    unseen, and the taps that dismiss it are not the module's.
       local hits = tap_hits - hits_seen
@@ -1633,7 +1642,7 @@ function app_loop()
           module_input(mod.on_roll, dir)
 
         elseif hits > 0 and mod and mod.on_hit and hands_off == 0 then
-          module_input(mod.on_hit, hits)
+          module_input(mod.on_hit, hits, tap_flags)
 
         elseif mod and mod.mode == 'app' then
           -- keep refreshing until closed or left alone for APP_TIMEOUT;
