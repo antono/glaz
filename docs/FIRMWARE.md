@@ -28,12 +28,12 @@ From the datasheet, sections 9.6 to 9.8:
 
 | Reg | Name | Contents |
 | --- | --- | --- |
-| `0x03` | `SR` | tap status; **reading it clears and re-arms** |
+| `0x03` | `SR` | tap status, bits 0..5 `X+ X- Y+ Y- Z+ Z-`; **reading it clears and re-arms** |
 | `0x06` | `INTEN` | per-axis interrupt enables |
 | `0x07` | `MODE` | `IAH` `IPP` … `OPCON[1:0]` — `0xC0` standby, `0xC1` wake |
 | `0x08` | `SRTFR` | `TAP_LATCH` \| `FLIP_*` \| `RATE[3:0]` |
 | `0x09` | `TAPEN` | `TAP_EN` \| `THRDUR` \| per-axis enables |
-| `0x0A`–`0x0C` | `TTTRX/Y/Z` | **two registers in one**, selected by `THRDUR` |
+| `0x0A`–`0x0C` | `TTTRX/Y/Z` | one per axis, X Y Z; **two registers in one**, selected by `THRDUR` |
 
 That last row is the crux. With `THRDUR = 1` the address holds the **tap
 threshold**; with `THRDUR = 0` the same address holds **`QUIET[7:4]`** and
@@ -67,14 +67,16 @@ One file: `source/application/lua_libraries/imu.c`.
   changing these settings"; performing the full cycle is what makes the
   settings changeable at runtime.
 - Both halves of `0x0A`–`0x0C` are now written: first with `THRDUR = 0` for
-  quiet and duration, then with `THRDUR = 1` for the threshold.
+  quiet and duration, then with `THRDUR = 1` for the threshold, each axis
+  its own (`0x0A` X, `0x0B` Y, `0x0C` Z, datasheet table 23).
 - A new Lua function is registered.
+- The tap callback gets the status byte (see "Which side was tapped").
 
 ### `frame.imu.tap_config`
 
 ```lua
 frame.imu.tap_config{
-  threshold = 7,    -- 0..255  how hard a knock must be
+  threshold = 7,    -- 0..255  how hard a knock must be, all three axes
   quiet     = 0,    -- 0..15   silence enforced after a tap (anti-bounce)
   duration  = 0,    -- 0..15   minimum impulse length
   rate      = 256,  -- Hz: 1 2 4 8 16 32 64 128 256
@@ -87,19 +89,45 @@ Every field is optional; omitted fields keep their current value. Called with
 no arguments it **returns** the current settings as a table, so a calibration
 app can display and round-trip them.
 
+`threshold` also takes a table, one value per axis; axes it leaves out keep
+their current value:
+
+```lua
+frame.imu.tap_config{threshold = {x = 137, z = 9}}  -- y unchanged
+```
+
+The table form takes only the keys `x`, `y` and `z`, and at least one of
+them; a list such as `{137, 137, 137}` or `{X = 137}` is an error.
+
+The returned table always has `thresholds = {x =, y =, z =}`, and
+`threshold` as a plain integer only while the three are equal, as they are
+by default (`0x07` each). The setter takes `thresholds` too, so passing the
+returned table back restores every axis; when a table has both, `threshold`
+is applied last and wins. A caller that only knows `threshold` reads and
+writes it as before while the axes are equal. Once they differ it reads
+`nil`, and writing `threshold` sets all three axes to that one value: Tap
+tune then shows `thr ?`, and a tap on that row sets every axis to `3`.
+
 ---
 
 ## Calibrating
 
 [`modules/taptune.lua`](../modules/taptune.lua) is a menu module for tuning in
-place. Tilt moves the cursor over `threshold`, `quiet`, `duration` and
-`test`; a single tap on a setting steps it to its next value (the screen says
-which) and reprograms the chip. On `test` a tap changes nothing. A hit
+place. Tilt moves the cursor over `threshold`, `quiet`, `duration`, `axes`
+and `test`; a single tap on a setting steps it to its next value (the screen
+says which) and reprograms the chip. On `test` a tap changes nothing. A hit
 counter shows every hit since the last change, bounces included.
 
 The counter is the actual measurement: on `test`, knock **once** and watch
 whether it advances by one or by five. Raise `quiet` until one knock reads as
 one tap.
+
+The fourth setting, `axes`, switches between `0x08` (-Y, the default) and
+`0x3F` (all six directions; the screen shows `08` and `3F`), and the last
+row shows the last knock's status byte, from its first hit and not the
+rebound, raw and decoded as `X+ X- Y+ Y- Z+ Z-` (bits 0..5, datasheet
+table 17): knock the left arm, the right arm and the front with `axes`
+at `0x3F` and note the bits. `axes` goes back when the module closes.
 
 The module checks for `frame.imu.tap_config` and shows
 `needs the glaz firmware` on stock firmware rather than failing.
@@ -392,11 +420,28 @@ Reverting is re-flashing the official release `.zip`.
 
 ---
 
-## TODO
+## Which side was tapped
 
-- **Which side was tapped.** `lua_imu_tap_callback_handler()` (`imu.c`)
-  reads status register `0x03` only to clear the interrupt and throws the
-  value away. If that register holds per-axis, per-sign tap bits (check the
-  datasheet), pass it to the Lua callback and widen `axes` beyond `0x08`
-  (-Y). Taps on the left arm, the right arm and the front would then be
+Branch `tap-direction` (firmware and app). What the firmware does:
+
+- `lua_imu_tap_callback_handler()` (`imu.c`) still reads status register
+  `0x03` to clear the interrupt, and now passes the whole byte to the Lua
+  callback: `frame.imu.tap_callback(function(status) ... end)`. A callback
+  that takes no argument works as before.
+- Per the datasheet (table 17) its bits are `0` X+, `1` X-, `2` Y+, `3` Y-,
+  `4` Z+, `5` Z-, the same order as `INTEN` and `TAPEN`; bit 7 is
+  `ACQ_INT` (a sample is ready) and can be set too, so mask with `0x3F`.
+- `tap_config{threshold = {x =, y =, z =}}` sets a threshold per axis, so
+  a direction that rings too easily can be made harder on its own.
+
+Defaults are unchanged: `axes = 0x08` (-Y only), threshold `0x07` on every
+axis, and `imu_prepare_wakeup()` restores them before sleep.
+
+Still to measure on the glasses (none of this is confirmed yet):
+
+- which bits a knock on the left arm, the right arm and the front sets,
+  with `axes = 0x3F` in Tap tune; and whether the rebound sets the
+  opposite sign;
+- a threshold per axis that takes those knocks but not head movement;
+- then widen the default `axes` beyond `0x08`, so the three sides become
   three different buttons, without counting taps.
