@@ -15,8 +15,9 @@ import 'term.dart';
 ///
 /// | Keys | Glasses |
 /// | --- | --- |
-/// | up, left, Page Up, previous track | previous item |
-/// | down, right, Page Down, next track | next item |
+/// | left, Page Up, previous track | previous item |
+/// | right, Page Down, next track | next item |
+/// | up / down | a module's own (Scales: the scale); else previous / next |
 /// | Space, Enter, D-pad centre, A, play | select; held, the menu |
 /// | Backspace, Esc, B | back |
 /// | Menu, Start | the menu |
@@ -50,16 +51,19 @@ class KeyRemote extends ChangeNotifier with WidgetsBindingObserver {
   static const backEcho = Duration(milliseconds: 500);
 
   static final _previous = {
-    LogicalKeyboardKey.arrowUp,
     LogicalKeyboardKey.arrowLeft,
     LogicalKeyboardKey.pageUp,
     LogicalKeyboardKey.mediaTrackPrevious,
   };
   static final _next = {
-    LogicalKeyboardKey.arrowDown,
     LogicalKeyboardKey.arrowRight,
     LogicalKeyboardKey.pageDown,
     LogicalKeyboardKey.mediaTrackNext,
+  };
+  // a pair of their own (INPUT [3, ...]): a module may take them (Scales)
+  static final _upDown = {
+    LogicalKeyboardKey.arrowUp,
+    LogicalKeyboardKey.arrowDown,
   };
   static final _ok = {
     LogicalKeyboardKey.space,
@@ -99,6 +103,7 @@ class KeyRemote extends ChangeNotifier with WidgetsBindingObserver {
       if ({
         ..._previous,
         ..._next,
+        ..._upDown,
         ..._ok,
         ..._back,
         ..._menu,
@@ -320,7 +325,11 @@ class KeyRemote extends ChangeNotifier with WidgetsBindingObserver {
       return _echo = at != null && event.timeStamp - at < backEcho;
     }
     final List<int> gesture;
-    if (_previous.contains(key)) {
+    // Up and Down: the glasses treat them as previous and next where the
+    // module on screen has no use of its own for them
+    if (_upDown.contains(key)) {
+      gesture = [3, key == LogicalKeyboardKey.arrowUp ? 255 : 1];
+    } else if (_previous.contains(key)) {
       gesture = [2, 255];
     } else if (_next.contains(key)) {
       gesture = [2, 1];

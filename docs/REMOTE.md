@@ -26,8 +26,10 @@ take them as the wearer's own gestures (docs/PROTOCOL.md, "Remote"):
 
 | Keys | Glasses | `INPUT` |
 | --- | --- | --- |
-| Up, Left, Page Up, previous track | previous item (tilt left) | `[2, 255]` |
-| Down, Right, Page Down, next track | next item (tilt right) | `[2, 1]` |
+| Left, Page Up, previous track | previous item (tilt left) | `[2, 255]` |
+| Right, Page Down, next track | next item (tilt right) | `[2, 1]` |
+| Up | the module's own, if it has a use for it (Scales: the previous scale); else previous item | `[3, 255]` |
+| Down | the module's own (Scales: the next scale); else next item | `[3, 1]` |
 | Space, Enter, D-pad centre, A, play/pause | select (single tap) | `[1, 1]` |
 | the same, held 600 ms or longer | show or hide the menu | `[1, 3]` |
 | Backspace, Esc, B | back (double tap) | `[1, 2]` |
@@ -82,7 +84,7 @@ to:
 
 | Flipper | Sends | Glasses |
 | --- | --- | --- |
-| Up / Down | arrow keys | previous / next item |
+| Up / Down | arrow keys | the module's own (Scales: the scale); else previous / next item |
 | Left / Right | arrow keys | previous / next item |
 | OK | Space | select; held, the menu |
 | Back | Backspace | back |
@@ -122,8 +124,10 @@ Glaz"; Forget, beside the Flipper, unpairs it.
 
 | Flipper | Glasses | `INPUT` |
 | --- | --- | --- |
-| Up / Left, short, long or repeated | previous item | `[2, 255]` |
-| Down / Right, short, long or repeated | next item | `[2, 1]` |
+| Left, short, long or repeated | previous item | `[2, 255]` |
+| Right, short, long or repeated | next item | `[2, 1]` |
+| Up, short, long or repeated | the module's own (Scales: the previous scale); else previous item | `[3, 255]` |
+| Down, short, long or repeated | the module's own (Scales: the next scale); else next item | `[3, 1]` |
 | OK | select | `[1, 1]` |
 | OK, long | show or hide the menu | `[1, 3]` |
 | Back | back | `[1, 2]` |

@@ -927,6 +927,11 @@ class FrameLink extends ChangeNotifier {
   Future<void> remoteTilt({required bool next}) =>
       send(input, [2, next ? 1 : 255]);
 
+  /// The remote: Up or Down ([down]). A module with keys of its own for
+  /// them (Scales: the scale) takes them; elsewhere they are a tilt.
+  Future<void> remoteUpDown({required bool down}) =>
+      send(input, [3, down ? 1 : 255]);
+
   /// The remote: take a photo, [size] px square, JPEG [quality] 1 (very
   /// low) to 5 (very high). It comes back as a Camera photo does.
   Future<void> remotePhoto(int size, int quality) =>

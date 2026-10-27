@@ -50,6 +50,8 @@ class RemoteScreen extends StatelessWidget {
             enabled: on,
             onPrevious: () => press(() => link.remoteTilt(next: false)),
             onNext: () => press(() => link.remoteTilt(next: true)),
+            onUp: () => press(() => link.remoteUpDown(down: false)),
+            onDown: () => press(() => link.remoteUpDown(down: true)),
             onSelect: () => press(() => link.remoteTaps(1)),
           ),
         ),
@@ -98,11 +100,13 @@ class _Pad extends StatelessWidget {
     required this.enabled,
     required this.onPrevious,
     required this.onNext,
+    required this.onUp,
+    required this.onDown,
     required this.onSelect,
   });
 
   final bool enabled;
-  final VoidCallback onPrevious, onNext, onSelect;
+  final VoidCallback onPrevious, onNext, onUp, onDown, onSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -129,12 +133,7 @@ class _Pad extends StatelessWidget {
         ),
         child: Stack(
           children: [
-            arrow(
-              Icons.keyboard_arrow_up,
-              onPrevious,
-              Alignment.topCenter,
-              'Previous',
-            ),
+            arrow(Icons.keyboard_arrow_up, onUp, Alignment.topCenter, 'Up'),
             arrow(
               Icons.keyboard_arrow_left,
               onPrevious,
@@ -149,9 +148,9 @@ class _Pad extends StatelessWidget {
             ),
             arrow(
               Icons.keyboard_arrow_down,
-              onNext,
+              onDown,
               Alignment.bottomCenter,
-              'Next',
+              'Down',
             ),
             Center(
               child: SizedBox.square(

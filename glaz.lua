@@ -475,6 +475,8 @@ local tap_flags = nil -- status 0x03 of the first hit of the last knock, not
                       -- firmware that passes no argument
 local tap_mute  = 0   -- swallow taps until this time, after a toggle
 local remote_dir = 0  -- a tilt from the phone's remote, taken as if by roll
+local remote_ud  = 0  -- the remote's Up (-1) or Down (1): a module's
+                      -- on_up_down, else the same as a tilt
 local tap_remote = false  -- tap_n came from the phone's remote, not the arm
 local hands_off = 0       -- HANDS_OFF: 0, or the wearer's gestures off --
                           -- 1 the Remote tab, 2 a keyboard remote
@@ -1394,6 +1396,8 @@ function app_loop()
               tap_remote = true
             elseif kind == 2 then
               remote_dir = value == 1 and 1 or -1
+            elseif kind == 3 then
+              remote_ud = value == 1 and 1 or -1
             end
             last_act = now
           end
@@ -1574,8 +1578,19 @@ function app_loop()
           dir = (mod and mod.on_roll and not notice) and remote_dir or 0
           remote_dir = 0
         end
+        -- Up and Down: a module's own pair of keys if it has on_up_down,
+        -- else previous / next as Left and Right
+        local ud = remote_ud
+        remote_ud = 0
+        if ud ~= 0 and mod and not notice and not mod.on_up_down
+           and mod.on_roll and dir == 0 then
+          dir, ud = ud, 0
+        end
 
-        if dir ~= 0 then
+        if ud ~= 0 and mod and mod.on_up_down and not notice then
+          module_input(mod.on_up_down, ud)
+
+        elseif dir ~= 0 then
           module_input(mod.on_roll, dir)
 
         elseif hits > 0 and mod and mod.on_hit and hands_off == 0 then
@@ -1618,6 +1633,7 @@ function app_loop()
       elseif visible and not notice and #level().items > 0 then
         local dir = hands_off ~= 0 and 0 or roll_step(now)
         if remote_dir ~= 0 then dir, remote_dir = remote_dir, 0 end
+        if remote_ud ~= 0 then dir, remote_ud = remote_ud, 0 end
         if dir ~= 0 then move(dir) end
 
         -- 5. auto-hide after a spell of inactivity

@@ -141,6 +141,10 @@ Reader draws its word that way.
   `on_back` a double tap always leaves. Only the double tap goes through it:
   the remote's Menu, `MENU_SHOW` and the timeouts leave at once, from any
   level.
+- `on_up_down(dir)` — the remote's Up (`-1`) or Down (`1`), `INPUT [3, ...]`
+  (a keyboard's arrows, a Flipper's, the Remote tab's): a second pair of
+  keys beside the tilt, which Left and Right are. Scales picks the scale
+  with it. Without `on_up_down` they are previous / next, as a tilt.
 - `on_hit(n, flags)` — `n` raw hits from the accelerometer since the last
   call, bounces and the taps of a double or triple included. `flags` is the
   tap status byte of the last knock's first hit, not its rebound (MC6470
@@ -386,7 +390,7 @@ which splits long messages into MTU-sized packets and reassembles them.
 | `0x28` | `LOCATION` | 14 bytes `>BBi4i4I2I2`: id, status, lat and lon in microdegrees, accuracy m, age s — see [Location](#location) |
 | `0x29` | `FILES_GET` | `[id]` + path (`''` the root): list a folder — see [Files](#files) |
 | `0x2A` | `FILE_GET` | `[id]` + path: read a file — see [Files](#files) |
-| `0x2B` | `INPUT` | `[kind, value]`: the phone's remote — `[1, n]` n taps, `[2, 1]` tilt right, `[2, 255]` tilt left; see [Remote](#remote) |
+| `0x2B` | `INPUT` | `[kind, value]`: the phone's remote — `[1, n]` n taps, `[2, 1]` tilt right, `[2, 255]` tilt left, `[3, 1]` Down, `[3, 255]` Up; see [Remote](#remote) |
 | `0x2C` | `PHOTO_TAKE` | `>I2B`: size in px (square, even, 100..720), JPEG quality 1 very low .. 5 very high — the remote's photo; see [Remote](#remote) |
 | `0x2D` | `MODULE_CALL` | text, `module` `\n` `arg`: calls that module's `remote(arg)` — the remote's record button is `recorder\non` / `recorder\noff`; see [Recorder](#recorder) |
 | `0x2F` | `APP_OPEN` | text, `module`, optionally `\n` `arg`: puts that module on screen as if picked in the menu; `arg` goes to its `start()`, or to `remote(arg)` if it is not started again -- on screen already or back from the background; see [Assistant](#assistant) |
@@ -1355,8 +1359,10 @@ wearer's own gesture, through the same code:
 
 | Press | `INPUT` | Same as |
 | --- | --- | --- |
-| up, left | `[2, 255]` | a tilt toward the left shoulder: previous item |
-| down, right | `[2, 1]` | a tilt toward the right shoulder: next item |
+| left | `[2, 255]` | a tilt toward the left shoulder: previous item |
+| right | `[2, 1]` | a tilt toward the right shoulder: next item |
+| up | `[3, 255]` | the module's `on_up_down(-1)` if it has one (Scales: the previous scale); else as left |
+| down | `[3, 1]` | the module's `on_up_down(1)` (Scales: the next scale); else as right |
 | OK | `[1, 1]` | a single tap: select, or bring back the last app |
 | Back | `[1, 2]` | a double tap |
 | Menu | `[1, 3]` | show or hide the menu (a triple on the arm is sleep instead) |
@@ -1420,8 +1426,8 @@ service (below) keeps the engine running.
 sends each press over its own Bluetooth service (flipper-glaz/README.md,
 "The link to the phone"), so Android sees no keyboard and no other app
 gets its keys; glaz turns them into the same `INPUT`s
-(`lib/flipper/presses.dart`): up and left `[2, 255]`, down and right
-`[2, 1]`, OK `[1, 1]`, OK held `[1, 3]`, Back `[1, 2]`. While it is
+(`lib/flipper/presses.dart`): left `[2, 255]`, right `[2, 1]`, up
+`[3, 255]`, down `[3, 1]`, OK `[1, 1]`, OK held `[1, 3]`, Back `[1, 2]`. While it is
 connected the phone sends `HANDS_OFF` `[2]`, as for a keyboard, in the
 background too and with no accessibility service. On Android it is
 paired as a companion device (More > Services > Flipper remote > Pair

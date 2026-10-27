@@ -38,14 +38,21 @@ void main() {
     return a && b;
   }
 
-  test('arrows tilt, Backspace is back, Menu the menu', () {
-    expect(press(LogicalKeyboardKey.arrowUp, 0), isTrue);
+  test('Left and Right tilt, Up and Down are their own pair, Backspace is '
+      'back, Menu the menu', () {
+    expect(press(LogicalKeyboardKey.arrowLeft, 0), isTrue);
     press(LogicalKeyboardKey.arrowRight, 1000);
+    expect(press(LogicalKeyboardKey.arrowUp, 1500), isTrue);
+    press(LogicalKeyboardKey.arrowDown, 1700);
+    press(LogicalKeyboardKey.pageUp, 1800);
     press(LogicalKeyboardKey.backspace, 2000);
     press(LogicalKeyboardKey.contextMenu, 3000);
     expect(sent, [
       [2, 255],
       [2, 1],
+      [3, 255],
+      [3, 1],
+      [2, 255],
       [1, 2],
       [1, 3],
     ]);
@@ -130,7 +137,7 @@ void main() {
     bg(0, dpadUp, 5000);
     bg(2, dpadUp, 5050);
     expect(sent, [
-      [2, 255],
+      [3, 255],
       [2, 1],
       [1, 1],
       [1, 3],

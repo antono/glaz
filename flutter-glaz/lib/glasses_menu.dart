@@ -437,8 +437,8 @@ const glassesMenu = <MenuSection>[
       ModuleKind.app,
       Icons.music_note,
       'Scales on the fretboard of a guitar, bass, banjo, ukulele or '
-          'balalaika: the minor pentatonic and a mode beside it. Tilt to '
-          'move up the neck, tap for the next mode.',
+          'balalaika, under the pentatonic it grows from. Tilt to move up '
+          'the neck; a remote\'s Up and Down, or a tap, pick the scale.',
       settings: [
         ModuleSetting.choice(
           'key',

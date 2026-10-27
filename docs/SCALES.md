@@ -72,8 +72,20 @@ fret 0 has a nut after its first column.
 
 | Glasses | Flipper / keyboard (docs/REMOTE.md) | Does |
 | --- | --- | --- |
-| tilt right / left | Down, Right / Up, Left | next box up / down the neck; on the list, the next instrument |
-| single tap | OK | next mode: pentatonic, Dorian, blues, Phrygian; on the list, take the instrument |
+| tilt right / left | Right / Left | next box up / down the neck; on the list, the next instrument |
+| -- | Down / Up | the next / previous scale; on the list, the next instrument |
+| single tap | OK | the next scale; on the list, take the instrument |
+
+The scales, in Up / Down order: minor pentatonic, blues, Dorian,
+Phrygian, natural minor (Aeolian), harmonic minor, melodic minor,
+Locrian, major pentatonic, major blues, major (Ionian), Mixolydian,
+Lydian, Phrygian dominant. With two at once, a minor scale is drawn under
+the minor pentatonic and a major one under the major pentatonic; the
+boxes up the neck are that pentatonic's. Each scale's own note is green:
+Dorian's 6th, Phrygian's flat 2nd, minor's flat 6th, the harmonic and
+melodic minor's 7th, Locrian's flat 5th, the blues' flat 5th, major
+blues' minor 3rd, major's 7th, Mixolydian's flat 7th, Lydian's sharp 4th,
+Phrygian dominant's major 3rd.
 | double tap | Back | back to the list; on the list, to the menu |
 
 On the phone, Glaz > Menu > Scales: **Key** (C to B, A by default) and

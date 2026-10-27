@@ -6,15 +6,18 @@
 -- It opens on the instruments: tilt to one, tap to take it. Then:
 --
 --   tilt right / left -- the next box up / down the neck
---   single tap        -- the next mode: pentatonic, Dorian, blues, Phrygian
+--   single tap        -- the next scale (MODES)
 --   double tap        -- back to the instruments; there, to the menu
 --
 -- A Flipper or a keyboard does the same through the phone (docs/REMOTE.md):
--- its arrows tilt, OK taps, Back is the double tap. The key and the view
--- (two scales or one) are set on the phone, Glaz > Menu > Scales.
+-- Left and Right tilt, OK taps, Back is the double tap, and Up and Down
+-- (on_up_down) pick the previous / next scale. The key and the view (two
+-- scales or one) are set on the phone, Glaz > Menu > Scales.
 --
--- Colours: the root red, the mode's own note -- the one that makes it what
--- it is, Dorian's raised 6th -- green, the rest white. Frame only for now.
+-- Two at once: a scale under the pentatonic it grows from, the minor one
+-- or, for a major scale, the major one. Colours: the root red, the scale's
+-- own note -- the one that makes it what it is, Dorian's raised 6th --
+-- green, the rest white. Frame only for now.
 local _M = {}
 
 _M.label = 'Scales'
@@ -26,17 +29,46 @@ _M.quiet = true           -- draw() is the screen; tick() text is not shown
 local KEYS = { C = 0, ['C#'] = 1, D = 2, Eb = 3, E = 4, F = 5, ['F#'] = 6,
                G = 7, Ab = 8, A = 9, Bb = 10, B = 11 }
 
--- Scales as semitones above the root; flavour is the mode's own note,
--- drawn green. The first is the base the others are shown against.
+-- Scales as semitones above the root; flavour is the scale's own note,
+-- drawn green. A major one (major) is shown against the major pentatonic,
+-- the rest against the minor one; the boxes are the pentatonic's.
+local MINOR_PENT = { name = 'minor pent', short = 'm pent',
+                     notes = { 0, 3, 5, 7, 10 } }
+local MAJOR_PENT = { name = 'major pent', short = 'M pent',
+                     notes = { 0, 2, 4, 7, 9 }, major = true }
 local MODES = {
-  { name = 'minor pent', short = 'pent',   notes = { 0, 3, 5, 7, 10 } },
-  { name = 'dorian',     short = 'dorian', notes = { 0, 2, 3, 5, 7, 9, 10 },
-    flavour = 9 },
-  { name = 'blues',      short = 'blues',  notes = { 0, 3, 5, 6, 7, 10 },
+  MINOR_PENT,
+  { name = 'blues',       short = 'blues',  notes = { 0, 3, 5, 6, 7, 10 },
     flavour = 6 },
-  { name = 'phrygian',   short = 'phryg',  notes = { 0, 1, 3, 5, 7, 8, 10 },
+  { name = 'dorian',      short = 'dorian', notes = { 0, 2, 3, 5, 7, 9, 10 },
+    flavour = 9 },
+  { name = 'phrygian',    short = 'phryg',  notes = { 0, 1, 3, 5, 7, 8, 10 },
     flavour = 1 },
+  { name = 'minor',       short = 'minor',  notes = { 0, 2, 3, 5, 7, 8, 10 },
+    flavour = 8 },                                       -- Aeolian
+  { name = 'harm minor',  short = 'harm',   notes = { 0, 2, 3, 5, 7, 8, 11 },
+    flavour = 11 },
+  { name = 'mel minor',   short = 'melod',  notes = { 0, 2, 3, 5, 7, 9, 11 },
+    flavour = 11 },
+  { name = 'locrian',     short = 'locr',   notes = { 0, 1, 3, 5, 6, 8, 10 },
+    flavour = 6 },
+  MAJOR_PENT,
+  { name = 'major blues', short = 'Mblues', notes = { 0, 2, 3, 4, 7, 9 },
+    flavour = 3, major = true },
+  { name = 'major',       short = 'major',  notes = { 0, 2, 4, 5, 7, 9, 11 },
+    flavour = 11, major = true },                        -- Ionian
+  { name = 'mixolydian',  short = 'mixo',   notes = { 0, 2, 4, 5, 7, 9, 10 },
+    flavour = 10, major = true },
+  { name = 'lydian',      short = 'lydian', notes = { 0, 2, 4, 6, 7, 9, 11 },
+    flavour = 6, major = true },
+  { name = 'phryg dom',   short = 'ph dom', notes = { 0, 1, 4, 5, 7, 8, 10 },
+    flavour = 4, major = true },
 }
+
+-- The pentatonic a scale is shown against, and whose boxes it takes
+local function base_of(m)
+  return m.major and MAJOR_PENT or MINOR_PENT
+end
 
 -- Instruments: open strings as semitones above C, drawn from the first
 -- (the highest) on top. Boxes start on the string ref (the lowest unless
@@ -108,7 +140,7 @@ local last_input = 0
 local function box_start(n)
   local it = INSTRUMENTS[inst]
   local root = (key - it.strings[it.ref or #it.strings]) % 12
-  local s = root + MODES[1].notes[n]
+  local s = root + base_of(MODES[mode]).notes[n]
   if s + FRETS - 1 > it.last and s >= 12 then s = s - 12 end
   return s
 end
@@ -179,8 +211,9 @@ function _M.draw()
   local text = frame.display.text
   text(NAMES[key + 1] .. ' ' .. m.name, LEFT_X, TITLE_Y, { color = 'WHITE' })
   text('fr ' .. start, FRET_X, TITLE_Y, { color = 'GREY' })
-  if dual and mode > 1 then
-    for i, s in ipairs({ MODES[1], m }) do
+  local base = base_of(m)
+  if dual and m ~= base then
+    for i, s in ipairs({ base, m }) do
       local b = DUAL[i]
       text(s.short, LEFT_X, b.y + LABEL_Y, { color = 'GREY' })
       draw_board(b, s, start)
@@ -209,7 +242,7 @@ end
 
 function _M.on_roll(dir)
   if picked then
-    box = (box - 1 + dir) % #MODES[1].notes + 1
+    box = (box - 1 + dir) % #MINOR_PENT.notes + 1
   else
     inst = (inst - 1 + dir) % #INSTRUMENTS + 1
   end
@@ -223,6 +256,15 @@ function _M.on_tap()
   else
     picked, box = true, 1
   end
+  last_input = frame.time.utc()
+  return state()
+end
+
+-- The remote's Up and Down: the previous / next scale; choosing the
+-- instrument, the cursor, as a tilt
+function _M.on_up_down(dir)
+  if not picked then return _M.on_roll(dir) end
+  mode = (mode - 1 + dir) % #MODES + 1
   last_input = frame.time.utc()
   return state()
 end

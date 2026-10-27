@@ -168,13 +168,12 @@ void main() {
     });
 
     test('mapped to the glasses\' gestures', () {
-      const previous = [2, 255], next = [2, 1];
       final table = {
         for (final press in FlipperPress.values) ...{
-          (FlipperKey.up, press): previous,
-          (FlipperKey.left, press): previous,
-          (FlipperKey.down, press): next,
-          (FlipperKey.right, press): next,
+          (FlipperKey.up, press): [3, 255],
+          (FlipperKey.left, press): [2, 255],
+          (FlipperKey.down, press): [3, 1],
+          (FlipperKey.right, press): [2, 1],
         },
         (FlipperKey.ok, FlipperPress.short): [1, 1],
         (FlipperKey.ok, FlipperPress.long): [1, 3],

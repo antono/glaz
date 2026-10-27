@@ -881,8 +881,10 @@ class AssistantService extends ChangeNotifier {
     'ok' => link.remoteTaps(1),
     'back' => link.remoteTaps(2),
     'menu' => link.remoteTaps(3),
-    'left' || 'up' => link.remoteTilt(next: false),
-    'right' || 'down' => link.remoteTilt(next: true),
+    'left' => link.remoteTilt(next: false),
+    'right' => link.remoteTilt(next: true),
+    'up' => link.remoteUpDown(down: false),
+    'down' => link.remoteUpDown(down: true),
     _ => Future.value(),
   };
 

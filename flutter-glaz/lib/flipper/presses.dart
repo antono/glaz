@@ -47,13 +47,16 @@ FlipperKeyPress? decodePress(List<int> bytes) {
 }
 
 /// The glasses' input for a press (docs/PROTOCOL.md, "Remote"), as
-/// KeyRemote (keys.dart) sends a keyboard's: up and left the previous
-/// item, down and right the next, repeats stepping the same way; OK
-/// selects, held the menu; Back goes back. Null: nothing for the
-/// glasses. A long Back closes the Flipper's app.
+/// KeyRemote (keys.dart) sends a keyboard's: left the previous item, right
+/// the next; up and down their own pair, which a module may take (Scales)
+/// and the glasses otherwise treat as previous and next; repeats step the
+/// same way; OK selects, held the menu; Back goes back. Null: nothing for
+/// the glasses. A long Back closes the Flipper's app.
 List<int>? gestureFor(FlipperKeyPress p) => switch ((p.key, p.press)) {
-  (FlipperKey.up || FlipperKey.left, _) => const [2, 255],
-  (FlipperKey.down || FlipperKey.right, _) => const [2, 1],
+  (FlipperKey.left, _) => const [2, 255],
+  (FlipperKey.right, _) => const [2, 1],
+  (FlipperKey.up, _) => const [3, 255],
+  (FlipperKey.down, _) => const [3, 1],
   (FlipperKey.ok, FlipperPress.short) => const [1, 1],
   (FlipperKey.ok, FlipperPress.long) => const [1, 3],
   (FlipperKey.back, FlipperPress.short) => const [1, 2],
