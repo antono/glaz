@@ -34,8 +34,9 @@ const KEYS_UUID: [u8; 16] = [
 ];
 /// Version, key, press.
 pub const KEYS_LEN: u16 = 3;
-/// The longest status, two names of 23 bytes and both numbers, is 63.
-pub const STATUS_MAX_LEN: u16 = 64;
+/// The longest status, two names of 23 bytes, both numbers and the
+/// battery, is 66.
+pub const STATUS_MAX_LEN: u16 = 72;
 
 // From the ST BLE stack headers (lib/stm32wb_copro).
 const UUID_TYPE_128: u8 = 0x02;

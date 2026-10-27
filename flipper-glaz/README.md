@@ -3,8 +3,9 @@
 **In plain words:** an app for the Flipper Zero that makes it a remote for
 the glasses. You hold the Flipper upright, as in its own Keynote Vertical
 remote, and press its buttons; instead of the buttons its screen shows the
-Flipper's dolphin in Frame glasses, then the glasses' name, how much room
-is left on them, how much memory, and which app they are showing. Unlike
+Flipper's dolphin in Frame glasses, then the glasses' name, their
+battery, how much room is left on them, how much memory, and which app
+they are showing. Unlike
 a plain Bluetooth remote, it will tell a short press from a long one,
 and give each its own meaning. It is no keyboard to the phone: the
 phone's on-screen keyboard stays, and its presses reach glaz and no
@@ -15,8 +16,9 @@ A draft. What is here:
 - the screen, upright, 64x128: the Flipper's dolphin in round Frame
   glasses (the display lit in a lens while glasses are connected), under
   it their name, Storage and Mem, and the app on the glasses on the last
-  line; top right, a dot while the phone is connected, a ring while not,
-  and the LED blue, as in the Flipper's Remote;
+  line; top left, the glasses' battery, filled as far as it is charged,
+  and its percent; top right, a dot while the phone is connected, a ring
+  while not, and the LED blue, as in the Flipper's Remote;
 - every press sent to the phone (below), short, long or repeated, and
   to the Flipper's log;
 - hold Back to leave, as in the Flipper's own remotes.
@@ -123,7 +125,7 @@ PIN dialog on screen: press Back, or close and reopen Glaz, before
 pairing again.
 
 The status, written whole, in one write (glaz asks for an MTU of 185; a
-write in pieces is dropped), at most 64 bytes: a version byte, 1, then
+write in pieces is dropped), at most 72 bytes: a version byte, 1, then
 fields as tag, length, value. A field left out is not known; no name, no
 glasses connected to the phone: "(disconnected)". Tags not known are
 skipped.
@@ -134,6 +136,7 @@ skipped.
 | 2 | free disk, bytes, u32 little-endian | `frame.file.space().free` (glaz firmware) |
 | 3 | free memory, bytes, u32 little-endian | 135 KB less `collectgarbage('count')` |
 | 4 | the app on the glasses, ASCII, at most 23 bytes | `APP_START` / `APP_STOP` (docs/PROTOCOL.md), "Menu" between |
+| 5 | the glasses' battery, percent, u8 | the minute's battery check (`STATUS`, docs/PROTOCOL.md) |
 
 Free memory is an estimate: Lua's heap on the glasses is about 135 KB in
 all (docs/FRAME.md), and the glasses tell only what Lua uses of it.

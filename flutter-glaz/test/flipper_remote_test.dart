@@ -103,6 +103,7 @@ void main() {
         encodeStatus(
           const GlassesStatus(
             name: 'Frame',
+            battery: 137,
             diskFree: 137 * 1024,
             memFree: 137,
             app: 'Clock',
@@ -114,6 +115,7 @@ void main() {
           2, 4, 0x00, 0x24, 0x02, 0x00,
           3, 4, 137, 0, 0, 0,
           4, 5, ...'Clock'.codeUnits,
+          5, 1, 100,
         ],
       );
     });

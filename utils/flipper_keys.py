@@ -25,7 +25,7 @@ KEY_NAMES = {1: "Up", 2: "Down", 3: "Left", 4: "Right", 5: "OK", 6: "Back"}
 PRESS_NAMES = {1: "short", 2: "long", 3: "repeat"}
 
 
-def status(name, disk, mem, app):
+def status(name, battery, disk, mem, app):
     """The status as Status::parse in flipper-glaz/src/main.rs reads it."""
     out = bytearray([1])
     for tag, text in ((1, name), (4, app)):
@@ -33,6 +33,7 @@ def status(name, disk, mem, app):
         out += bytes([tag, len(b)]) + b
     for tag, n in ((2, disk), (3, mem)):
         out += bytes([tag, 4]) + struct.pack("<I", n)
+    out += bytes([5, 1, battery])
     return bytes(out)
 
 
@@ -64,7 +65,7 @@ async def main():
         # The Flipper drops a status written in pieces.
         print("MTU", client.mtu_size)
         await client.write_gatt_char(
-            STATUS, status(args.name, 137 * 1024, 137 * 1024, "Menu"), response=True
+            STATUS, status(args.name, 37, 137 * 1024, 137 * 1024, "Menu"), response=True
         )
         print("Status written; press the Flipper's keys, Ctrl-C to stop.")
         while client.is_connected:

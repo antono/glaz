@@ -9,8 +9,17 @@ import 'companion.dart';
 /// What the Flipper's Glaz app (flipper-glaz/) shows of the glasses.
 /// Null: not known; no [name], no glasses connected.
 class GlassesStatus {
-  const GlassesStatus({this.name, this.diskFree, this.memFree, this.app});
+  const GlassesStatus({
+    this.name,
+    this.battery,
+    this.diskFree,
+    this.memFree,
+    this.app,
+  });
   final String? name;
+
+  /// Charge, in percent.
+  final int? battery;
   final int? diskFree;
   final int? memFree;
   final String? app;
@@ -19,7 +28,8 @@ class GlassesStatus {
 /// The status as the Flipper reads it (`Status::parse` in
 /// flipper-glaz/src/main.rs): a version byte, 1, then fields as tag,
 /// length, value -- 1 the name, 2 free disk and 3 free memory in bytes
-/// as u32 little-endian, 4 the app. A field not known is left out.
+/// as u32 little-endian, 4 the app, 5 the battery in percent, a byte. A
+/// field not known is left out.
 List<int> encodeStatus(GlassesStatus s) {
   final out = <int>[1];
   void text(int tag, String? v) {
@@ -39,6 +49,8 @@ List<int> encodeStatus(GlassesStatus s) {
   number(2, s.diskFree);
   number(3, s.memFree);
   text(4, s.app);
+  final battery = s.battery;
+  if (battery != null) out.addAll([5, 1, battery.clamp(0, 100)]);
   return out;
 }
 

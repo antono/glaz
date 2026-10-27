@@ -2,8 +2,8 @@
 //!
 //! Held upright like the Flipper's own Keynote Vertical remote, but where
 //! Keynote draws its keys this draws the glasses, then what the phone
-//! tells about them: their name, free disk, free memory and the app on
-//! their screen. Keys are told apart by a short and a long press: a long
+//! tells about them: their name, battery, free disk, free memory and the
+//! app on their screen. Keys are told apart by a short and a long press: a long
 //! one is a command of its own, not the short one repeated.
 //!
 //! A draft. The Flipper is no keyboard: each press goes to glaz on the
@@ -48,7 +48,7 @@ static FAP_MANIFEST: ApplicationManifestV1 = ApplicationManifestV1 {
         api_version: API_VERSION,
         ..ApplicationManifestV1::default().base
     },
-    app_version: 3,
+    app_version: 4,
     name: _padded(b"Glaz"),
     has_icon: 1,
     icon: _padded(include_bytes!("glaz-10x10.icon")),
@@ -107,6 +107,8 @@ impl Write for Text {
 struct Status {
     /// The glasses' Bluetooth name; `None` while no glasses are connected.
     name: Option<Text>,
+    /// Charge, in percent.
+    battery: Option<u8>,
     disk_free: Option<u32>,
     mem_free: Option<u32>,
     /// The app on the glasses' screen, or the menu.
@@ -118,6 +120,7 @@ impl Status {
     const fn unknown() -> Self {
         Self {
             name: None,
+            battery: None,
             disk_free: None,
             mem_free: None,
             app: None,
@@ -135,6 +138,7 @@ impl Status {
     /// | 2 | free disk, bytes, u32 little-endian |
     /// | 3 | free memory, bytes, u32 little-endian |
     /// | 4 | the app on the glasses, text |
+    /// | 5 | the glasses' battery, percent, u8 |
     fn parse(data: &[u8]) -> Option<Self> {
         let (&version, mut rest) = data.split_first()?;
         if version != 1 {
@@ -151,6 +155,7 @@ impl Status {
                 2 => status.disk_free = number(),
                 3 => status.mem_free = number(),
                 4 => status.app = Some(text()),
+                5 => status.battery = value.first().map(|&b| b.min(100)),
                 _ => {}
             }
         }
@@ -269,6 +274,9 @@ unsafe extern "C" fn draw_callback(canvas: *mut sys::Canvas, context: *mut c_voi
         }
 
         sys::canvas_set_font(canvas, sys::FontSecondary);
+        if let Some(battery) = status.battery {
+            draw_battery(canvas, battery);
+        }
         // "(disconnected)" while the phone tells of no glasses; without the
         // brackets if the font makes it wider than the screen.
         let mut name = status.name.unwrap_or(Text::from("(disconnected)"));
@@ -367,6 +375,19 @@ unsafe fn draw_dolphin(canvas: *mut sys::Canvas, connected: bool) {
                 unsafe { sys::canvas_draw_dot(canvas, left + x as i32, top + y as i32) };
             }
         }
+    }
+}
+
+/// The glasses' battery, top left, across from the phone's dot: a
+/// battery filled as far as it is charged, the percent beside it.
+unsafe fn draw_battery(canvas: *mut sys::Canvas, percent: u8) {
+    unsafe {
+        sys::canvas_draw_frame(canvas, 0, 2, 12, 7);
+        sys::canvas_draw_box(canvas, 12, 4, 2, 3);
+        sys::canvas_draw_box(canvas, 2, 4, 8 * percent as usize / 100, 3);
+        let mut t = Text::new();
+        let _ = write!(t, "{}%", percent);
+        sys::canvas_draw_str_aligned(canvas, 16, 1, sys::AlignLeft, sys::AlignTop, t.as_ptr());
     }
 }
 

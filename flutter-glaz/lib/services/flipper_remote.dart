@@ -174,6 +174,7 @@ class FlipperRemote extends ChangeNotifier {
     final app = _app;
     return GlassesStatus(
       name: link.name ?? 'Frame',
+      battery: link.battery,
       diskFree: _diskFree,
       memFree: _memFree,
       app: app != null && app >= 1 && app <= modules.length
