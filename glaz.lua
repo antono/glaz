@@ -181,11 +181,6 @@ local SLEEP_AFTER     = 30    -- idle seconds before parking in frame.sleep()
 -- glasses unreachable until tapped: they wait this long for it first.
 local LINK_GRACE      = 60    -- seconds
                               -- (never while a module runs in the background)
--- What the accelerometer wakes the glasses with: the firmware's defaults.
--- A tap wakes the nRF; since firmware glaz it then takes a second
--- one for the glasses to stay awake. See docs/FIRMWARE.md.
-local WAKE_TAPS = { threshold = 7, quiet = 0, duration = 0, latch = true,
-                    axes = 0x08, rate = 256 }
 
 -- Host services (docs/PROTOCOL.md). A notification pops up over whatever is
 -- on screen and goes away by itself, or with a tap -- unless pop-ups are off
@@ -778,12 +773,9 @@ end
 -- switched on, switched off. Applied at boot and after every module exits,
 -- so a module that forgets to clean up in stop() -- or whose stop() errors --
 -- still cannot leave the camera or the microphone draining the battery.
--- The camera is powered at boot, so this also shuts it down then. A module
--- that wants it must call frame.camera.power_save(false) first: while
--- saving, only camera.read() and camera.read_raw() remain available.
+-- What there is to switch off is the part's (D.release_hardware).
 local function release_hardware()
-  pcall(frame.camera.power_save, true)
-  pcall(frame.microphone.stop)
+  pcall(D.release_hardware)
 end
 
 -- A photo for the phone's remote: glaz_photo, loaded for it alone; Frame's
@@ -1100,7 +1092,12 @@ end
 -- for Tap tune); stock firmware passes nothing. Counting ignores it. Only
 -- a hit that starts a burst sets it: the bounces after an impact are the
 -- rebound, and usually push the other way.
-frame.imu.tap_callback(function(flags)
+--
+-- That is Frame, whose firmware calls once for every hit (tap_hit). Halo's
+-- counts them itself and says the gesture whole: one, two or three taps
+-- (tap_gesture). Each part wires its glasses' callback to the one that
+-- fits (D.taps).
+local function tap_hit(flags)
   local t = frame.time.utc()
   if t - tap_shake > TAP_BOUNCE then tap_flags = flags end
   tap_shake = t                       -- every hit shakes the glasses
@@ -1113,7 +1110,18 @@ frame.imu.tap_callback(function(flags)
   end
   tap_at = t
   tap_remote = false
-end)
+end
+
+local function tap_gesture(n)
+  local t = frame.time.utc()
+  tap_n = n
+  tap_at = t - TAP_WINDOW - 0.01      -- whole: no more taps to wait for
+  tap_shake = t
+  tap_hits = tap_hits + n
+  tap_remote = false
+end
+
+D.taps(tap_hit, tap_gesture)
 
 local function draw_splash()
   set_display(true)
@@ -1686,26 +1694,18 @@ function app_loop()
         sleep_requested = false
         say_goodnight()
         set_display(false)
-        -- A tap is all that wakes the glasses, and the accelerometer goes to
-        -- sleep with whatever it was last set to: Tap tune's harder
-        -- threshold or longer duration, and it took many taps or none woke
-        -- them (firmware glaz/main). The stock settings go back first;
-        -- setting them also clears a tap still latched, which would hold the
-        -- wake-up line where no tap can move it. Stock firmware has no
-        -- tap_config, and needs neither.
-        if frame.imu.tap_config then pcall(frame.imu.tap_config, WAKE_TAPS) end
         save_last(last)
-        frame.sleep()
+        D.sleep()   -- the glasses' deepest sleep that a tap wakes from
 
         local woke = frame.time.utc()
         tap_n, tap_at, tap_shake = 0, 0, woke
         armed, roll_dir, roll_hold = 0, 0, 0
         last_act = woke
 
-        -- Only with the firmware's stay_awake does frame.sleep() return;
-        -- otherwise waking is a reset, and the boot carries on (see
-        -- woke_by_tap at the top of app_loop). Here too: the last module,
-        -- or the menu at the root.
+        -- Frame: only with the firmware's stay_awake does frame.sleep()
+        -- return; otherwise waking is a reset, and the boot carries on (see
+        -- woke_by_tap at the top of app_loop). Halo's standby() returns.
+        -- Here too: the last module, or the menu at the root.
         save_last(nil)
         splash_until = 0
         if last then run_module(last) else open_menu(true) end

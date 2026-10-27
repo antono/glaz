@@ -92,6 +92,9 @@ and how it is drawn is its parts', `glaz.frame.lua` and `glaz.halo.lua`
 | `power(on)` | the panel on or off |
 | `top_bar(bar)` | the breadcrumb, icons, clock and battery: `bar.path(n)` gives the path cut to n characters; `bar.icon`, `bar.link` are `{ palette offset, bits }`; `bar.clock`, `bar.level`, `bar.low` |
 | `splash(word, color, brackets)` | `<glaz>` on start |
+| `release_hardware()` | switch off what a module may have left on: the camera, the microphone |
+| `taps(hit, gesture)` | wire the glasses' tap callback: Frame's calls once a hit, counted by `glaz.lua` (`hit(flags)`); Halo's says the gesture whole (`gesture(n)`, n = 1, 2, 3) |
+| `sleep()` | the deepest sleep a tap wakes from: Frame's `frame.sleep()`, Halo's `frame.standby()` |
 
 The icons themselves are assets, so they are in `glaz.lua`; both parts draw
 them with `bitmap()`.

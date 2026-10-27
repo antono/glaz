@@ -47,6 +47,8 @@ The glasses run Lua; a laptop talks to them over Bluetooth using Python.
 - `host_test.py` — reference host: uploads everything, then listens
 - `utils/` — diagnostics, run individually
 - `check.sh` — static checks, no device needed
+- `tests/` — glaz on Halo in Brilliant Labs' Halo emulator (`halo` in the
+  root shell; docs/HALO.md)
 - `sprites/` — the eye as glasses pixel art, for `utils/show_sprite.py`;
   not uploaded: the phone draws the eye itself during Upload
 - `flutter-glaz/` — the Flutter companion app (phone side)
@@ -69,6 +71,7 @@ check                    # ./check.sh
 upload                   # python host_test.py
 python utils/connect.py
 python utils/phone_lua.py 'frame.battery_level()'   # through the phone
+halo                     # glaz on Halo, in the Halo emulator (pytest)
 
 cd flutter-glaz && devenv shell   # first run downloads the Android SDK
 emulator-start &         # Android emulator

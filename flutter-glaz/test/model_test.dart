@@ -15,8 +15,8 @@ void main() {
     expect(GlassesModel.fromName('My glasses'), isNull);
   });
 
-  test('only Frame runs the glasses app for now', () {
-    expect(GlassesModel.frame.supported, isTrue);
-    expect(GlassesModel.halo.supported, isFalse);
+  test('only Frame loads bytecode', () {
+    expect(GlassesModel.frame.loadsBytecode, isTrue);
+    expect(GlassesModel.halo.loadsBytecode, isFalse);
   });
 }

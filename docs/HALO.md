@@ -13,11 +13,13 @@ Underneath, much is different:
 - firmware updates go over MCUmgr instead of Nordic DFU.
 
 glaz is being built for Halo the way docs/DEVICES.md describes: each file
-gets a Halo part next to its Frame one. The app's menu, top bar and a few
-simple modules have one already. The phone does not upload to Halo yet. It
-finds Halo, names it, and keeps Upload, Restart and Files off. It lists in
-the Menu tab only the apps that run on Halo. It offers it no firmware,
-since Frame's is never offered to Halo and the app has none for Halo yet.
+gets a Halo part next to its Frame one. The app's menu, top bar, taps and
+sleep have one already, and so do a few simple modules. The phone finds
+Halo, names it, and uploads to it the app and the apps that run there,
+which are also all its Menu tab lists. It offers Halo no firmware, since
+Frame's is never offered to Halo and the app has none for Halo yet. All
+of it has been tried in Brilliant Labs' Halo emulator, none of it on a
+Halo yet.
 
 Sources, cited below by these short names:
 
@@ -51,9 +53,8 @@ Halo's GATT has characteristics Frame's does not have, which would tell the
 two apart after connecting
 ([issue #6](https://github.com/antono/glaz/issues/6)); see Bluetooth below.
 
-With Halo connected, the phone does not look for the glaz app (`AppCheck`),
-so it never offers to upload. The Glasses tab says Halo is not supported
-yet.
+With Halo connected, the Glasses tab says that Halo support is new and
+has been tried in the emulator only.
 
 ## Hardware
 
@@ -171,20 +172,62 @@ What has a Halo part (docs/DEVICES.md):
   and the breadcrumb; below them, Frame's icons as bitmaps. Palette names
   become the same colours as numbers. Text is folded to printable ASCII.
   Every screen starts from `clear()`, since Halo keeps what was drawn.
+  Taps come whole from Halo's firmware, `'single'`, `'double'` or
+  `'triple'`, and go to the same gestures as Frame's counted ones. Sleep is
+  `standby()`, which keeps Bluetooth and wakes on a tap or the button;
+  `sleep()` would wake on the button only.
 - **Modules.** About, Battery, Bluetooth, Firmware, Uptime, Stopwatch,
   Weather and Notifications (Settings) use only what both pairs of glasses
   have, so each has an empty Halo part.
+- **Upload.**
+  - Text only: Halo's `require()` refuses bytecode.
+  - The picture on the glasses while it runs is a line of text and the
+    progress (`HaloPicture`): the eye does not fit the round panel.
+  - There is no room check: Halo's firmware has no `frame.file.space()`.
 
-Not tried on a Halo yet, and not uploaded there by the phone yet.
+## Trying it without a Halo
+
+Brilliant Labs' Halo emulator, [`halo-emulator`](https://pypi.org/project/halo-emulator/)
+(in [brilliant_sdk](https://github.com/brilliantlabsAR/brilliant_sdk),
+`python/packages/halo_emulator`), runs Lua on a stand-in for Halo's
+`frame.*` API. It has a 256x256 screen drawn with the firmware's fonts,
+taps and the button to inject, and the Bluetooth sends to read back.
+
+In the root devenv shell:
+
+```sh
+halo                              # pytest tests
+HALO_SHOTS=/tmp/halo halo         # and keep the screens as PNG
+```
+
+`tests/halo_sandbox.py` lays out the files as the phone uploads them to
+Halo, and `tests/test_halo.py` starts glaz from `main.lua` and checks four
+things:
+
+- it starts without errors;
+- a double tap opens the menu;
+- a single tap goes into Apps and the first app there, and a double tap
+  comes back;
+- a triple tap goes to standby, and a tap wakes it.
+
+The emulator (2.3.0) follows firmware 0.8.12. Its `frame.file` is simpler
+than the firmware's today (`lua_file.c`, 0.8.22):
+
+- it takes only Python's file modes;
+- it has no `read(n)`;
+- `read()` keeps the line break;
+- `listdir()` gives names only.
+
+`halo_sandbox.py` gives it the firmware's `frame.file` instead. It has no
+`frame.camera` either.
 
 ## Next steps
 
-1. **Upload for Halo.**
-   - Text only: `luaFiles(..., model: GlassesModel.halo)` sends no
-     bytecode, and Upload compiles nothing on the glasses.
-   - Halo's REPL ring (1 KB) is smaller than Frame's line. A full one
+1. **Upload on a Halo.**
+   - Whether uploadScript's writes fit Halo's REPL ring (1 KB). A full one
      refuses the write.
-   - Then turn on `supported` in `model.dart`.
+   - Whether `listdir('/')` lists `/lfs`. Upload clears old files with it,
+     and the menu finds its modules with it.
    - Its firmware: the Firmware screen offers each pair of glasses only its
      own (`frame-firmware-*`, `halo-firmware-*` in assets/firmware/), and
      has none for Halo yet. Halo updates over MCUmgr, which the app does not
@@ -195,12 +238,10 @@ Not tried on a Halo yet, and not uploaded there by the phone yet.
    - The sign of `frame.imu.direction().roll`.
    - How Android reports a full REPL ring.
 3. **The app on Halo**, in `glaz.lua` and its parts:
-   - Taps: Halo's callback says single, double or triple itself, where
-     `glaz.lua` counts single taps.
    - The button.
-   - `standby()` in place of deep sleep, which on Halo wakes only on the
-     button.
    - The eye before sleep (`glaz_blink`, Frame's only).
+   - Module text is cut to the round rows; modules that draw for
+     themselves need Halo parts.
 4. **Modules, one by one.**
    - The camera first: Photo, Translate's photos, the remote's
      (`glaz_photo`, Frame's only).

@@ -23,13 +23,6 @@ enum GlassesModel {
     return null;
   }
 
-  /// Whether the glasses app runs on them. Halo is found and named, but
-  /// its display, camera, sleep and firmware update differ from Frame's
-  /// (docs/HALO.md), and the bytecode Upload sends is Frame's: Upload,
-  /// Restart, Files and Firmware stay off for Halo until glaz has a Halo
-  /// build.
-  bool get supported => this == frame;
-
   /// Whether its require() loads bytecode. Halo's loads text only
   /// (lua_file.c in halo-firmware), so Upload sends it source.
   bool get loadsBytecode => this == frame;

@@ -3,6 +3,10 @@ frame-ble==1.1.1
 frame-msg==5.2.1
 # Sprite previews and pixel-art tooling.
 pillow==11.3.0
+# Brilliant Labs' Halo emulator, for the app on Halo without one
+# (tests/test_halo.py, docs/HALO.md).
+halo-emulator==2.3.0
+pytest
 # Over-the-air firmware flashing from Linux with nrf5-ota-dfu-python
 # (docs/FIRMWARE.md): it needs these next to bleak.
 pexpect

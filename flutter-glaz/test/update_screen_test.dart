@@ -86,4 +86,40 @@ frame = { display = {
     expect(r.stderr, isEmpty);
     expect(r.stdout, contains('ok'));
   });
+
+  test("Halo's picture: text only, centred, numbers for colours", () async {
+    final writes = <String>[];
+    final picture = HaloPicture((lua, token) async => writes.add(lua));
+    await picture.load();
+    await picture.draw('Uploading: glaz_app.halo.lua', progress: 0.5);
+    await picture.draw('Checking...');
+    await picture.draw('Firmware', second: 'v0.8.22 it is');
+    for (final w in writes) {
+      expect(w.length, lessThanOrEqualTo(GlassesPicture.maxWrite), reason: w);
+    }
+    // Halo's display as the firmware has it: text takes 0xRRGGBB, a line
+    // inside the 256 px panel
+    const stub = '''
+local lines = {}
+frame = { display = {
+  set_font = function(id, size) assert(id == 0 and size % 8 == 0) end,
+  text = function(s, x, y, color)
+    assert(type(color) == 'number', 'colour not a number')
+    assert(x >= 1 and x + #s * 8 <= 257 and y >= 1 and y <= 256, 'off screen')
+    lines[#lines + 1] = s
+  end,
+  clear = function() lines = {} end,
+  power_save = function(on) assert(on == false) end,
+} }
+''';
+    final script = [
+      stub,
+      ...writes,
+      "assert(lines[1] == 'Firmware' and lines[2] == 'v0.8.22 it is') "
+          "print('ok')",
+    ].join('\n');
+    final r = await Process.run('lua', ['-e', script]);
+    expect(r.stderr, isEmpty);
+    expect(r.stdout, contains('ok'));
+  });
 }

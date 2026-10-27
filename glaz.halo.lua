@@ -105,6 +105,30 @@ function D.top_bar(bar)
   icon(BT_X, bar.link)
 end
 
+-- What a module may have left on: the camera and the microphone.
+function D.release_hardware()
+  pcall(function() frame.camera.power_save(true) end)
+  pcall(function() frame.microphone.stop() end)
+end
+
+-- Taps: the firmware counts them and says the gesture whole, 'single',
+-- 'double' or 'triple' (gesture; see tap_gesture in glaz.lua).
+local TAPS = { single = 1, double = 2, triple = 3 }
+
+function D.taps(_, gesture)
+  frame.imu.tap_callback(function(kind)
+    local n = TAPS[kind]
+    if n then gesture(n) end
+  end)
+end
+
+-- Sleep that a tap wakes from: standby() keeps Bluetooth and returns on a
+-- tap, the button or sound. sleep() would drop Bluetooth, and only the
+-- button would wake the glasses.
+function D.sleep()
+  frame.standby()
+end
+
 -- '<glaz>' centred, the brackets in a second colour: one width for every
 -- character, so the word drawn alone, centred too, lands inside them.
 function D.splash(word, color, brackets)

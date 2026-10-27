@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../frame/link.dart';
+import '../frame/model.dart';
 import '../frame/pairing.dart';
 import '../frame/upload.dart';
 import '../services/app_check.dart';
@@ -395,8 +396,8 @@ class _GlassesAppCard extends StatelessWidget {
 
   Widget _build(BuildContext context, FrameLink link, GlassesApp app) {
     final text = Theme.of(context).textTheme;
-    final ready = link.connected && !link.busy && link.model.supported;
-    final unsupported = link.connected && !link.model.supported;
+    final ready = link.connected && !link.busy;
+    final halo = link.connected && link.model == GlassesModel.halo;
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -424,16 +425,13 @@ class _GlassesAppCard extends StatelessWidget {
               title: const Text('Last attempt failed'),
               subtitle: Text(link.taskError!),
             ),
-          if (unsupported)
-            ListTile(
-              leading: const Icon(
-                Icons.info_outline,
-                color: FrameColors.yellow,
-              ),
-              title: Text('${link.model.label} is not supported yet'),
-              subtitle: const Text(
-                'glaz finds these glasses, but its app runs on Frame only '
-                'for now (docs/HALO.md)',
+          if (halo)
+            const ListTile(
+              leading: Icon(Icons.info_outline, color: FrameColors.yellow),
+              title: Text('Halo support is new'),
+              subtitle: Text(
+                'Tried in the Halo emulator, not yet on a Halo: the menu and '
+                'a few apps (docs/HALO.md)',
               ),
             ),
           if (ready && app == GlassesApp.missing)

@@ -109,6 +109,38 @@ function D.top_bar(bar)
   end
 end
 
+-- What a module may have left on: the camera, powered at boot too, and
+-- the microphone. A module that wants the camera must call
+-- frame.camera.power_save(false) first: while saving, only camera.read()
+-- and camera.read_raw() remain available.
+function D.release_hardware()
+  pcall(frame.camera.power_save, true)
+  pcall(frame.microphone.stop)
+end
+
+-- Taps: the firmware calls once for every hit, and glaz.lua counts them
+-- (hit; see tap_hit there).
+function D.taps(hit)
+  frame.imu.tap_callback(hit)
+end
+
+-- What the accelerometer wakes the glasses with: the firmware's defaults.
+-- A tap wakes the nRF; since firmware glaz it then takes a second
+-- one for the glasses to stay awake. See docs/FIRMWARE.md.
+local WAKE_TAPS = { threshold = 7, quiet = 0, duration = 0, latch = true,
+                    axes = 0x08, rate = 256 }
+
+-- Deep sleep, which a tap wakes from, as a reset. The accelerometer goes to
+-- sleep with whatever it was last set to: Tap tune's harder threshold or
+-- longer duration, and it took many taps or none woke them (firmware
+-- glaz/main). The stock settings go back first; setting them also clears a
+-- tap still latched, which would hold the wake-up line where no tap can
+-- move it. Stock firmware has no tap_config, and needs neither.
+function D.sleep()
+  if frame.imu.tap_config then pcall(frame.imu.tap_config, WAKE_TAPS) end
+  frame.sleep()
+end
+
 -- '<glaz>' centred, with the brackets in a second colour. Two overlapping
 -- draws, not three adjacent ones. The whole string goes down in the
 -- bracket colour first, so the firmware computes every advance; then the

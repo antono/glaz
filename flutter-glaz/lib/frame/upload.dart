@@ -361,11 +361,14 @@ const unhook =
     'pcall(frame.imu.tap_callback,nil) '
     'pcall(frame.bluetooth.receive_callback,nil)';
 
+/// Puts [files] (luaFiles) on the glasses, [model] being which they are:
+/// the picture on them while it runs is that model's.
 Future<void> uploadApp(
   BrilliantDevice device,
   List<LuaFile> files,
-  void Function(String step, [double? progress]) report,
-) async {
+  void Function(String step, [double? progress]) report, {
+  GlassesModel model = GlassesModel.frame,
+}) async {
   final repl = Repl(device);
 
   report('Stopping the app');
@@ -383,7 +386,9 @@ Future<void> uploadApp(
   await repl.ready();
   // the eye wired up, with what is going on under it; its art lives in Lua
   // globals, so after a reset it is loaded again
-  final picture = GlassesPicture(repl.run);
+  final picture = model == GlassesModel.halo
+      ? HaloPicture(repl.run)
+      : GlassesPicture(repl.run);
   await picture.load();
   await picture.draw('Uploading...', progress: 0);
 
