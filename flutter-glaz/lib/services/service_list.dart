@@ -49,6 +49,13 @@ const services = [
     true,
   ),
   GlazService(
+    'tuner',
+    'Tuner',
+    "Hears an instrument, with the phone's microphone or the glasses', "
+        "and tells the glasses' Tuner the note",
+    true,
+  ),
+  GlazService(
     'location',
     'Location',
     "Tells the apps you allow where the phone is",

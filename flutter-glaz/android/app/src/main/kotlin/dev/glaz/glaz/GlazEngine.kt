@@ -41,6 +41,7 @@ object GlazEngine {
 
     private var speech: Speech? = null
     private var voice: Voice? = null
+    private var tuner: Tuner? = null
     private var keyboards: Keyboards? = null
 
     /** The engine, made and running main() if there is none. Main thread. */
@@ -97,6 +98,7 @@ object GlazEngine {
         KeyRemoteService.channel = channel
         speech = Speech(messenger)
         voice = Voice(app, messenger)
+        tuner = Tuner(app, messenger)
         companion = Companion(app, messenger).also { it.activity = activity }
         LinkService.attach(app, messenger)
     }
@@ -107,6 +109,8 @@ object GlazEngine {
         speech = null
         voice?.close()
         voice = null
+        tuner?.close()
+        tuner = null
         keyboards?.close()
         keyboards = null
         companion?.close()
