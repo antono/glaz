@@ -127,8 +127,9 @@ and with the glaz firmware the file system holds about 44 of them
 
 ## On the phone
 
-- **Which glasses.** `FrameLink.model`, from the name they advertise
-  (`model.dart`, docs/HALO.md).
+- **Which glasses.** `FrameLink.model`: once connected, from their Lua
+  service (only Halo's has `7a230005-...`); before that, from the name they
+  advertise (`model.dart`, docs/HALO.md).
 - **Which apps they have.** `GlassesParts` (`lib/frame/parts.dart`) reads
   the parts from the app's assets once, at start: a module is on a pair of
   glasses when it has a part for them.

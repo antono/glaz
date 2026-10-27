@@ -29,6 +29,15 @@ Sources, cited below by these short names:
 - **docs:** Brilliant's documentation (`lab-frame-docs/halo/`).
 - **[mkt]:** the product page,
   [brilliant.xyz](https://brilliant.xyz/products/halo).
+- **Santos:** [valogen-eu/santos](https://gitlab.com/valogen-eu/santos),
+  an iOS assistant that runs on Halo and Frame, worth studying for Halo.
+  Its `HALO_TODO.md` and `CLAUDE.md` are field notes from real devices:
+  - the break is `"interrupted"` on Halo and must be raised again from
+    every pcall;
+  - tap and button callbacks are set again after standby, a Lua restart
+    and a reconnect;
+  - uploads go one file at a time;
+  - `require` has no cache.
 
 Nothing here has been measured from glaz yet.
 
@@ -45,13 +54,18 @@ name tells them apart:
 | `Halo 3C` | Halo: `"Halo %02X"` of one byte of its address (`M:ble_connection.c:303`) |
 
 `GlassesModel.fromName` (`flutter-glaz/lib/frame/model.dart`) reads the
-name. A name that says neither is taken for Frame, as every pair was
-before: none yet, or one given in the phone's Bluetooth settings. The Log's
-`up:` line says which model came up.
+name, but only as a hint: it may be missing, or changed.
 
-Halo's GATT has characteristics Frame's does not have, which would tell the
-two apart after connecting
-([issue #6](https://github.com/antono/glaz/issues/6)); see Bluetooth below.
+Once connected, the Lua service decides
+([issue #6](https://github.com/antono/glaz/issues/6)). Only Halo's has
+`7a230005-...`, its speaker's audio from the host (`HALO_AUDIO_TX_UUID`;
+see Bluetooth below). `GlassesModel.fromGatt` reads the characteristics
+frame_ble discovered on connecting, and they win over the name. When the
+two disagree, the Log says so, and the model is kept after the link goes:
+the glasses of last time.
+
+Glasses that say neither, by name or by GATT, are taken for Frame, as every
+pair was before. The Log's `up:` line says which model came up.
 
 With Halo connected, the Glasses tab says that Halo support is new and
 has been tried in the emulator only.
@@ -175,7 +189,14 @@ What has a Halo part (docs/DEVICES.md):
   Taps come whole from Halo's firmware, `'single'`, `'double'` or
   `'triple'`, and go to the same gestures as Frame's counted ones. Sleep is
   `standby()`, which keeps Bluetooth and wakes on a tap or the button;
-  `sleep()` would wake on the button only.
+  `sleep()` would wake on the button only. The tap callback is set again
+  after standby, as Santos does.
+- **The host's break** is `"interrupted"` on Halo, raised once, where
+  Frame's `"break signal"` comes on every instruction until the chunk
+  unwinds. glaz_boot's part says which (`D.BREAK`), `glaz_break(e)` tells
+  it, and every pcall into the app's or a module's code lets it through
+  (`try` in `glaz.lua`). Otherwise the phone could not stop the app for an
+  upload, and glaz_boot would take the break for a crash and restart it.
 - **Modules.** About, Battery, Bluetooth, Firmware, Uptime, Stopwatch,
   Weather and Notifications (Settings) use only what both pairs of glasses
   have, so each has an empty Halo part.
