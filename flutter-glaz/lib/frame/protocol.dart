@@ -57,6 +57,10 @@ const noticesGet = 0x0E;
 /// 3, 4 reserved (phone microphone, photo)
 const translate = 0x0F;
 
+/// modules/tuner.lua: [1, mic] a tuning on screen, listen (mic 0 the
+/// phone's, 1 the glasses'), [0] stop
+const tuner = 0x03;
+
 /// modules/assistant.lua: [op, id (2)] -- op 1 the chats, 2 go on with
 /// chat id, 3 a new chat
 const assist = 0x04;
@@ -81,6 +85,9 @@ const forAssistant = 1;
 
 // REC_START's fourth byte: the sound is for Translate
 const forTranslate = 2;
+
+// REC_START's fourth byte: the sound is for the Tuner
+const forTuner = 3;
 
 // PHOTO_FROM's byte: the photo is Translate's to read, not to keep
 const photoForTranslate = 255;
@@ -127,6 +134,7 @@ const codeNames = {
   geminiGet: 'GEM_GET',
   noticesGet: 'NOTICES_GET',
   translate: 'TRANSLATE',
+  tuner: 'TUNER',
   photoChunk: 'photo chunk',
   photoEnd: 'photo end',
   audioChunk: 'audio chunk',

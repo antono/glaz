@@ -430,7 +430,8 @@ Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 | `0x0C` | `TERM` | `[0x0C, 1, cols, rows]` / `[0x0C, 0]` / `[0x0C, 2, seq]` | Terminal: start a shell this size, stop, frame `seq` taken — see [Terminal](#terminal) |
 | `0x07` | photo chunk | `[0x07, jpeg bytes...]` | part of a photo (Camera module) |
 | `0x08` | photo end | `[0x08]` | last chunk; the photo is complete |
-| `0x1F` | `REC_START` | `[0x1F, bits, rate / 1000, for]` | Recorder starts a recording — see [Recorder](#recorder); `for` = `1`: the Assistant listening, see [Assistant](#assistant); `2`: Translate listening, see [Translate](#translate). Any `for` but `0` (or none) is not a recording |
+| `0x1F` | `REC_START` | `[0x1F, bits, rate / 1000, for]` | Recorder starts a recording — see [Recorder](#recorder); `for` = `1`: the Assistant listening, see [Assistant](#assistant); `2`: Translate listening, see [Translate](#translate); `3`: the Tuner listening, see [Tuner](#tuner). Any `for` but `0` (or none) is not a recording |
+| `0x03` | `TUNER` | `[0x03, 1, mic]` / `[0x03, 0]` | Tuner: listen, with the phone's microphone (`mic` 0) or the glasses' (1); stop -- see [Tuner](#tuner) |
 | `0x04` | `ASSIST` | `[0x04, op, id (2)]` | Assistant lists the chats (`1`), goes on with chat `id` (`2`) or starts a new one (`3`) -- see [Assistant](#assistant) |
 | `0x10` | `REC_DROP` | `[0x10]` | Assistant was left mid-question (a double tap): forget it, ask nothing, drop an answer on its way — see [Assistant](#assistant) |
 | `0x05` | audio chunk | `[0x05, samples...]` | part of a recording |
@@ -974,6 +975,51 @@ and a sentence that cannot be translated shows as its original and an
 `E` line. Once they are there, nothing goes to the Internet. Translate
 is a service of its own (Services), on by default; off, the glasses say
 `Translate is off on phone`. On the Linux desktop there is no ML Kit.
+
+### Tuner
+
+Tuner (`modules/tuner.lua`) tunes a string instrument. It opens on a list
+of instruments -- guitar, banjo, balalaika, domra, ukulele, bass guitar,
+violin -- each with its standard tuning beside it; tilt picks one, a tap
+tunes it, a double tap goes back to the list. The list opens at the
+instrument tuned last (a pref on the glasses).
+
+Tuning, the screen shows the instrument's open strings as players name
+them (a guitar's `E2 A2 D3 G3 B3 E4`, a banjo's short fifth string
+first), the string nearest to the note heard lit, a scale of -50 to +50
+cents from that string with a needle, the note heard, its cents and its
+Hz, and what to do: `tune up`, `tune down`, `in tune`. Green within 5
+cents, yellow within 20, red beyond. Nothing heard for a moment, the last
+note stays, grey.
+
+The glasses only draw; the phone (`flutter-glaz/lib/services/tuner.dart`)
+hears and finds the pitch (YIN), from one of two microphones, the module's
+setting `mic` (Glaz > Menu > Tuner):
+
+- `phone` (the default): the phone's own, 16 kHz, through `Tuner.kt`
+  (Android's `AudioRecord`, the unprocessed source where there is one:
+  the voice processing of the usual one fights a held note). It hears
+  better and costs the glasses nothing, but Android gives an app in the
+  background silence: glaz must be open on the phone, and the glasses say
+  so (`open glaz on the phone`). There is none in the Linux app.
+- `glasses`: the glasses stream their microphone as Recorder does, 16 bit
+  at 8 kHz, `REC_START`'s `for` = `3`.
+
+With a tuning on screen the module sends `TUNER [0x03, 1, mic]`, again
+every 3 s until the phone answers, and `TUNER [0x03, 0]` when it goes back
+to the list or stops. The phone answers with `MODULE_CALL` `tuner`:
+
+| Argument | Means |
+| --- | --- |
+| `p<pitch> <hz>` | a note: `pitch` in hundredths of a semitone, MIDI numbering (`4512`: A2 and 12 cents), `hz` in tenths |
+| `p` | nothing heard any more |
+| `s<text>` | no note, and why (`allow the microphone`); an empty text only says the phone is listening |
+
+The pitch is found every 100 ms over the last 128 ms of sound, and is the
+median of the last three found; the phone sends the latest when the one
+before has gone, so a slow link drops readings, never queues them. The
+glasses work out the string and the cents: the instruments and their
+tunings live only in the module.
 
 ### Reader
 

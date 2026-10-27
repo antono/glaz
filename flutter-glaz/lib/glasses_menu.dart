@@ -364,6 +364,27 @@ const glassesMenu = <MenuSection>[
       'Tap to start or pause, tilt to reset.',
     ),
     GlassesModule(
+      'tuner',
+      'Tuner',
+      ModuleKind.app,
+      Icons.music_note,
+      'Tilt to pick an instrument, tap to tune it: its strings, the note '
+          'heard and how far off. Double tap goes back to the list.',
+      settings: [
+        ModuleSetting.choice(
+          'mic',
+          'Microphone',
+          'phone',
+          ['phone', 'glasses'],
+          optionLabels: ["The phone's", "The glasses'"],
+          help:
+              "The phone's hears better and costs the glasses nothing; it "
+              'needs glaz open on the phone. The glasses send their sound '
+              'over Bluetooth.',
+        ),
+      ],
+    ),
+    GlassesModule(
       'files',
       'Files',
       ModuleKind.app,

@@ -25,6 +25,7 @@ import 'speech.dart';
 import 'term.dart';
 import 'transcripts.dart';
 import 'translate.dart';
+import 'tuner.dart';
 import 'voice.dart';
 
 /// The app's long-lived parts, made once at startup.
@@ -49,6 +50,7 @@ class Services {
     this.gemini,
     this.flipperRemote,
     this.appCheck,
+    this.tuner,
   ) : hold = LinkHold(link, settings, flipperRemote);
 
   final Settings settings;
@@ -74,6 +76,7 @@ class Services {
   final TermService term;
   final GeminiService gemini;
   final AppCheck appCheck;
+  final TunerService tuner;
 
   static late Services instance;
 
@@ -132,6 +135,7 @@ class Services {
       GeminiService(link, s),
       FlipperRemote(link, s, lua),
       AppCheck(link, s),
+      TunerService(link, s),
     );
     await services.reader.load();
     await services.assistant.load();
@@ -141,6 +145,7 @@ class Services {
     services.flipper.attach();
     services.flipperRemote.attach();
     services.term.attach();
+    services.tuner.attach();
     services.keys.terminal = services.term;
     link.onConnected.add(() async {
       if (s.serviceOn('clock')) await link.sendClock();
