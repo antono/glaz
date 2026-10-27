@@ -158,6 +158,12 @@ class Services {
     link.onConnected.add(() async {
       if (s.serviceOn('clock')) await link.sendClock();
     });
+    // again with every STATUS: the one on connect or after an upload can
+    // reach the glasses before their app is up, and the top bar shows
+    // --:-- until the next connect
+    link.onStatusAnswer.add(() {
+      if (s.serviceOn('clock')) link.sendClock(log: false);
+    });
     await services.notifications.init();
     return instance = services;
   }

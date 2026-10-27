@@ -313,7 +313,7 @@ The same row is the **top bar**, left to right:
 | breadcrumb | 60 | sky blue |
 | background icon | 376 | green play triangle, a 16×16 1-bit `frame.display.bitmap`; only while a module runs in the background. A red dot instead while the module on screen or in the background sets `_M.rec` (Recorder, recording) |
 | Bluetooth icon | 400 | the Bluetooth rune, same bitmap format; sky blue while a host is connected, grey when not, orange while connected but the host has sent nothing for 150 s (`LINK_QUIET`: the phone asks for `STATUS` every minute, so its app has died or frozen); a keyboard in its place while a keyboard remote drives the glasses (`HANDS_OFF` `[2]`); always shown, rechecked every second |
-| clock | 430 | `HH:MM`, grey; `--:--` until the host sends `CLOCK_SET` |
+| clock | 430 | `HH:MM`, grey; `--:--` until the host sends `CLOCK_SET`: on connect, after a task, and with every `STATUS` answer, since the first two can come while the app is still loading |
 | battery | 545 | `84%`, grey; red at 15 % or below |
 
 The breadcrumb is cut short in front of the icon or the clock. Positions are

@@ -278,4 +278,14 @@ $checks''');
     link.onStatus([0x1B, 255, ...'v25.080.0838'.codeUnits]);
     expect(link.battery, 84, reason: '255 = not sampled, keep the last');
   });
+
+  test('STATUS: the app is up, and onStatusAnswer hears it every time', () {
+    final link = FrameLink();
+    var heard = 0;
+    link.onStatusAnswer.add(() => heard++);
+    link.onStatus([0x1B, 84]);
+    link.onStatus([0x1B, 85]);
+    link.onStatus([0x1B]); // too short: no answer
+    expect(heard, 2);
+  });
 }

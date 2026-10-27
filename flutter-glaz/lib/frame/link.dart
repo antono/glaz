@@ -122,6 +122,11 @@ class FrameLink extends ChangeNotifier {
   /// Called each time the link comes up, including after a reconnect.
   final List<Future<void> Function()> onConnected = [];
 
+  /// Called on every STATUS: the glasses' app is up and taking messages,
+  /// which those sent on connect or after an upload may have reached
+  /// before it was (it loads for seconds). About once a minute.
+  final List<void Function()> onStatusAnswer = [];
+
   Stream<List<int>> get events => _events.stream;
 
   /// The glasses as connected now -- after a reconnect, not the device a
@@ -776,6 +781,9 @@ class FrameLink extends ChangeNotifier {
     battery = m[1] == 255 ? battery : m[1];
     if (m.length > 2) firmware = ascii.decode(m.sublist(2), allowInvalid: true);
     notifyListeners();
+    for (final f in onStatusAnswer) {
+      f();
+    }
   }
 
   /// Runs [job] with the glasses to itself. Messages to the running app
@@ -955,12 +963,13 @@ class FrameLink extends ChangeNotifier {
       callModule('recorder', on ? 'on' : 'off');
 
   /// The wall clock for the top bar: unix time and the UTC offset.
-  Future<void> sendClock() {
+  /// [log]: false keeps the minute's resend out of the log.
+  Future<void> sendClock({bool log = true}) {
     final now = DateTime.now();
     final bytes = ByteData(6)
       ..setUint32(0, now.millisecondsSinceEpoch ~/ 1000)
       ..setInt16(4, now.timeZoneOffset.inMinutes);
-    return send(clockSet, bytes.buffer.asUint8List());
+    return send(clockSet, bytes.buffer.asUint8List(), log: log);
   }
 }
 
