@@ -76,7 +76,7 @@ local MENU = {
   { label = 'Apps',     'assistant', 'translate', 'notifications', 'gemini',
                         'reader', 'photo', 'timeseries', 'recorder',
                         'stopwatch', 'tuner', 'files', 'weather', 'flipper',
-                        'term' },
+                        'term', 'scales' },
   { label = 'Sensors',  'battery', 'tilt', 'taptune' },
   { label = 'Settings', 'brightness', 'notifyset', 'sleep' },
   { label = 'Info',     'bluetooth', 'uptime', 'firmware', 'about' },
