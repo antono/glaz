@@ -208,7 +208,7 @@ end
 -- From wherever the phone says the place is: on start, and for a new text.
 -- Nothing is asked here: tick() asks, and only a module on screen is
 -- ticked. An answer that comes after the module was left starts it in the
--- background for remote() (frame_app.lua, MODULE_CALL); asking from
+-- background for remote() (glaz.lua, MODULE_CALL); asking from
 -- start() would then ask again, and the phone answer again, for ever.
 local function resume()
   words, lo, hi, pos, total, asked = {}, 0, 0, 0, nil, nil
@@ -259,7 +259,7 @@ end
 function _M.busy() return playing end
 
 -- The place, the speed and what is shown: the screen is redrawn when it
--- changes (frame_app.lua; draw() paints it).
+-- changes (glaz.lua; draw() paints it).
 local function state()
   return table.concat({ pos, tostring(words[pos]), wpm, tostring(playing),
                         tostring(total), note }, '|')

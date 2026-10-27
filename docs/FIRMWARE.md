@@ -49,7 +49,7 @@ and the chip faithfully reports each ring as another tap.
 > "ignore multiple taps". The datasheet defines it as: `0` multiple taps are
 > detected and latched, `1` the first tap is latched and the rest ignored until
 > register `0x03` is read. The MC6470 has no hardware double-tap feature — the
-> software counting in `frame_app.lua` is not redundant.
+> software counting in `glaz.lua` is not redundant.
 
 ---
 
@@ -145,7 +145,7 @@ survives a reboot — runtime changes are not persisted.
 the accelerometer powered, as it was last set, and its interrupt is the only
 thing that wakes them. With a harder `threshold` or a long `duration` it took
 many taps to wake them, or none did. So before `frame.sleep()` the app puts
-back the stock settings (`WAKE_TAPS` in `frame_app.lua`). That also clears a
+back the stock settings (`WAKE_TAPS` in `glaz.lua`). That also clears a
 latched tap, which would hold the wake-up line where no new tap can move it.
 The boot after waking programs the `imu.c` defaults again.
 

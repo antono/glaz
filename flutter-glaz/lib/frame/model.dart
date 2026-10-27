@@ -2,7 +2,7 @@
 ///
 /// Frame and Halo share the Lua service (7a230001-...), so the scan in
 /// link.dart finds both; the name they advertise tells them apart: "Frame
-/// 4F", "Halo 1A2B". Frame's bootloader advertises "Frame Update" and has
+/// 4F", "Halo 3C". Frame's bootloader advertises "Frame Update" and has
 /// no Lua service, so the scan never sees it.
 enum GlassesModel {
   frame('Frame'),
@@ -29,4 +29,8 @@ enum GlassesModel {
   /// Restart, Files and Firmware stay off for Halo until glaz has a Halo
   /// build.
   bool get supported => this == frame;
+
+  /// Whether its require() loads bytecode. Halo's loads text only
+  /// (lua_file.c in halo-firmware), so Upload sends it source.
+  bool get loadsBytecode => this == frame;
 }

@@ -218,9 +218,10 @@ Everything below follows from that.
    only from Lua's hook, every call and 2000 instructions, and resets the
    glasses after 6 s (`watchdog.c`). The app's 19 KB of bytecode took 1 to
    3 s, longer the more broken up the heap, and sometimes past 6 s. So
-   `main.lua` on the glasses is a loader (`app/glaz_boot.lua`): it replaces
-   `require()` with one that reads 512 bytes at a time through
-   `frame.file` into `load()`, and loads the app, `glaz_app.lua`. Also:
+   `main.lua` on the glasses is a loader (`app/glaz_boot.frame.lua`, which
+   starts `app/glaz_boot.lua`): it replaces `require()` with one that reads
+   512 bytes at a time through `frame.file` into `load()`, and loads the
+   app, `glaz_app.lua`. Also:
    about 135 KB of heap is Lua's in all (measured: filled until 'not
    enough memory'); the app starts at about 89 KB.
 9. **BlueZ keeps the link after a script is killed.** Once bonded, the link
@@ -235,8 +236,8 @@ Everything below follows from that.
     - `require()` holds the whole source while compiling it: the firmware
       reads the file into one buffer, a byte at a time, and frees it only
       after `luaL_loadbuffer` (`lua_file_require` in `file.c`).
-      `frame_app.lua` is 60 KB, two thirds comments.
-    - Compiled code keeps debug information: `frame_app.lua` loaded is
+      `glaz.lua` is 60 KB, two thirds comments.
+    - Compiled code keeps debug information: `glaz.lua` loaded is
       66 KB, without it 19 KB.
     - All fifteen modules stayed loaded: 70 KB, more than the app.
 
@@ -244,10 +245,10 @@ Everything below follows from that.
     out, line breaks kept: `flutter-glaz/lib/frame/lua_min.dart`), then has
     the glasses compile each one to bytecode without debug information while
     their memory is free (`glaz_compile` in `upload.dart`); and
-    `frame_app.lua` loads a module only while it is on screen or in the
+    `glaz.lua` loads a module only while it is on screen or in the
     background (`load_module`). Start went from 168 KB to 105 KB. Bytecode
     built with the app (`tool/luac_frame.c`) drops only local variables'
-    names: errors keep the file and line, `frame_app.lua:1234: ...`, about
+    names: errors keep the file and line, `glaz.lua:1234: ...`, about
     3 KB more for main. `host_test.py` still sends source as it is.
 
     Then main.lua itself grew past what the glasses could compile in one
@@ -446,7 +447,7 @@ was never set — usable for timeouts.
 
 ## The menu app
 
-A working in-glasses menu lives in [`frame_app.lua`](../frame_app.lua), driven by
+A working in-glasses menu lives in [`glaz.lua`](../glaz.lua), driven by
 the reference host [`host_test.py`](../host_test.py). The wire protocol and the
 design rationale are in [`PROTOCOL.md`](PROTOCOL.md).
 
@@ -478,7 +479,7 @@ stays dark). An error in a tap or Bluetooth callback does the same: the
 firmware raises it again in whatever Lua was running, the app's main loop.
 
 So the loader, `app/glaz_boot.lua`, starts the app again. The main loop
-passes on every error but the break signal (`frame_app.lua`, the end of
+passes on every error but the break signal (`glaz.lua`, the end of
 `app_loop`); the loader then drops the globals the app set and its tap
 and Bluetooth callbacks, so the old app is freed before the new one
 loads, prints the error (the phone's Log, Glasses, has it), keeps it in
@@ -531,8 +532,12 @@ or `crash.txt`.
 ## Layout
 
 ```
-frame_app.lua      the application that runs on the glasses (uploaded as main.lua)
-modules/           one Lua file per menu item
+glaz.lua           the application that runs on the glasses (glaz_app.lua)
+glaz.frame.lua     its part for Frame: the screen (docs/DEVICES.md)
+glaz.halo.lua      its part for Halo
+app/               parts of glaz.lua in files of their own; glaz_boot's
+                   part for the glasses is main.lua there
+modules/           one Lua file per menu item, and its parts
 host_test.py       reference host: uploads everything, then listens
 check.sh           syntax, ASCII and unknown-global checks, no device needed
 docs/              FRAME.md, PLATFORM.md, PROTOCOL.md

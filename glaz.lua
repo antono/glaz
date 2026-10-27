@@ -54,19 +54,19 @@
 --   * pitch/roll noise is about +-4 degrees => hence DEADZONE and threshold
 --   * roll swings about +-30 degrees in use, far more than a nod
 --   * heading is always 0.0, the compass is dead => unusable for navigation
---   * frame.display.clear() does NOT exist; the buffer resets itself after
---     show(), so each frame redraws everything -- and nothing may be drawn
---     until that reset is over, see show()
---   * x=1 is outside the visible field of view -- the first character gets
---     clipped. Everything is drawn at LEFT_X instead.
+--   * the display's own findings are in glaz.frame.lua
+--
+-- This file is the app on every pair of glasses. What differs between them
+-- -- the screen's layout, drawing, the top bar, file modes -- is in this
+-- file's part for the glasses at hand, glaz.frame.lua or
+-- glaz.halo.lua, which the phone uploads next to it and glaz_boot.lua
+-- hands in here as D. Nothing here asks which glasses these are. See
+-- docs/DEVICES.md.
+local D = select(2, ...)
+local DL = D.layout
+local draw = D.text
 
 local data = require('data.min')
-
--- The display, Frame's or Halo's: its layout, and text and show() that
--- work on both (app/glaz_display.lua, docs/HALO.md).
-local display = require('glaz_display')
-local DL = display.layout
-local draw = display.text
 
 -- The menu tree, in display order. A string names a module in modules/; a
 -- table is a submenu -- its label, then its entries, which may themselves be
@@ -195,9 +195,8 @@ local WAKE_TAPS = { threshold = 7, quiet = 0, duration = 0, latch = true,
 -- answers is given up on after NET_TIMEOUT -- the phone has its own,
 -- shorter, timeout.
 local NOTICE_SECONDS = 5
-local NOTICE_CHARS   = DL.notice_chars  -- per line; on Frame under the
-                              -- 29 of (640 - LEFT_X) / CHAR_W: the font is
-                              -- proportional and overflow is dropped
+local NOTICE_CHARS   = DL.notice_chars  -- characters per line, what
+                                        -- the screen holds (the parts)
 local NET_TIMEOUT    = 20
 
 -- Startup banner. IDLE is a blank screen, which is indistinguishable from
@@ -214,25 +213,17 @@ local TAP_BOUNCE = 0.15  -- taps closer than this are sensor bounce, not input
 local TAP_WINDOW = 0.75  -- max gap between taps belonging to one multi-tap
 local TAP_TOGGLE = 3     -- taps that fire at once: sleep, or the remote's Menu
 
--- Layout, from glaz_display.lua; Halo's is there. Frame: the display is
--- 640x400. x=1 is clipped, so nothing starts left of LEFT_X. A row is
--- 55px. The breadcrumb sits above the list, close to the top edge (y=1 is
--- visible), so five rows still fit: the last one starts at 285 and ends
--- near 326, inside the measured VISIBLE_BOTTOM of 340.
+-- Layout, from this glasses' part (glaz.frame.lua, .halo.lua): the
+-- list's rows, the first at TOP_Y, ROW_H apart, drawn at LEFT_X.
 local ROW_H        = DL.row_h
-local CRUMB_Y      = DL.crumb_y
 local TOP_Y        = DL.top_y
 local LEFT_X       = DL.left_x
 local VISIBLE_ROWS = DL.visible_rows
 local TEXT_ROWS    = DL.text_rows  -- lines of module output: rows 3..5
 
--- The top bar, one row at CRUMB_Y, left to right: the breadcrumb, the
--- background icon, the Bluetooth icon, the clock and the battery level. The right-hand pieces have fixed x positions, so the
--- breadcrumb is cut short in front of whichever comes first. Positions are
--- estimates for a proportional font: '100%' must end before x=640, or the
--- firmware drops the glyphs that do not fit.
-local TIME_X       = 430   -- 'HH:MM', or '--:--' until the host sets it
-local BATTERY_X    = 545   -- '84%'
+-- The top bar: the breadcrumb, the background or recording icon, the
+-- Bluetooth icon, the clock and the battery level. Where each goes is the
+-- part's (D.top_bar); what they say is worked out here.
 local BATTERY_LOW  = 15    -- percent; drawn in red at or below this
 -- The battery reading is a voltage estimate and swings by 10-15 points
 -- between samples while the radio transmits (docs/BATTERY.md), so the top bar
@@ -241,67 +232,48 @@ local BATTERY_SAMPLE = 10  -- seconds between battery samples, in any state
 local BATTERY_WINDOW = 300 -- seconds of samples averaged for the top bar
 local STATUS_PERIOD  = 1   -- seconds between checks for a new minute
 
--- Background icon: a play triangle left of the clock, shown while a module
--- runs in the background. 16x16, 1 bit per pixel, rows
--- of two bytes, first pixel in the high bit (sprite_engine.sv). A set bit
--- draws palette index 1 + ICON_PALETTE, a clear bit is transparent; 9 makes
--- it index 10, GREEN.
-local ICON_X       = DL.icon_x
-local ICON_Y       = DL.icon_y
-local ICON_W       = 16
-local ICON_PALETTE = 9
-local ICON_PLAY    = '\x00\x00\x18\x00\x1E\x00\x1F\x00\x1F\xC0\x1F\xF0' ..
-                     '\x1F\xF8\x1F\xFE\x1F\xFE\x1F\xF8\x1F\xF0\x1F\xC0' ..
-                     '\x1F\x00\x1E\x00\x18\x00\x00\x00'
-
--- Recording: a red dot in the background icon's place, while the module on
--- screen or in the background says so (_M.rec). Palette offset 2: RED.
-local REC_PALETTE  = 2
-local ICON_REC     = '\x00\x00\x00\x00\x00\x00\x07\xE0\x0F\xF0\x1F\xF8' ..
-                     '\x1F\xF8\x1F\xF8\x1F\xF8\x1F\xF8\x1F\xF8\x0F\xF0' ..
-                     '\x07\xE0\x00\x00\x00\x00\x00\x00'
-
--- Bluetooth icon: the rune, right of the background icon, always shown. Same
--- bitmap format as ICON_PLAY. Palette offsets: 13 draws index 14, SKYBLUE,
--- while a host is connected; 1 draws index 2, GREY, while none is.
-local BT_X          = DL.bt_x
-local BT_ON_PALETTE = 13
-local BT_OFF_PALETTE = 1
-local ICON_BT       = '\x00\x00\x01\x80\x01\xC0\x01\xB0\x19\x98\x0D\xB0' ..
-                      '\x07\xC0\x03\x80\x07\xC0\x0D\xB0\x19\x98\x01\xB0' ..
-                      '\x01\xC0\x01\x80\x00\x00\x00\x00'
-
 -- The link is checked, not only taken from the firmware: is_connected()
 -- stays true while a phone whose app has died or frozen still holds the
 -- link. The phone asks for STATUS every minute; with no word from it for
--- LINK_QUIET the rune turns ORANGE (palette offset 6, index 7). While a
--- keyboard remote drives the glasses (HANDS_OFF [2]) a keyboard takes the
--- rune's place, SKYBLUE.
+-- LINK_QUIET the rune turns ORANGE. While a keyboard remote drives the
+-- glasses (HANDS_OFF [2]) a keyboard takes the rune's place.
 local LINK_QUIET     = 150   -- seconds
-local BT_QUIET_PALETTE = 6
-local ICON_KEYS     = '\x00\x00\x00\x00\x00\x00\x00\x00\x7F\xFE\x40\x02' ..
-                      '\x55\x52\x40\x02\x4A\xAA\x40\x02\x4F\xF2\x40\x02' ..
-                      '\x7F\xFE\x00\x00\x00\x00\x00\x00'
+
+-- The top bar's icons, the same on every pair of glasses: 16x16, 1 bit
+-- per pixel, rows of two bytes, first pixel in the high bit (Frame's
+-- sprite_engine.sv; Halo's bitmap() takes the same). A set bit draws
+-- palette index 1 + the offset, a clear bit is transparent. Each is
+-- { offset, bits }.
+local ICON_PLAY = '\x00\x00\x18\x00\x1E\x00\x1F\x00\x1F\xC0\x1F\xF0' ..
+                  '\x1F\xF8\x1F\xFE\x1F\xFE\x1F\xF8\x1F\xF0\x1F\xC0' ..
+                  '\x1F\x00\x1E\x00\x18\x00\x00\x00'
+local ICON_REC  = '\x00\x00\x00\x00\x00\x00\x07\xE0\x0F\xF0\x1F\xF8' ..
+                  '\x1F\xF8\x1F\xF8\x1F\xF8\x1F\xF8\x1F\xF8\x0F\xF0' ..
+                  '\x07\xE0\x00\x00\x00\x00\x00\x00'
+local ICON_BT   = '\x00\x00\x01\x80\x01\xC0\x01\xB0\x19\x98\x0D\xB0' ..
+                  '\x07\xC0\x03\x80\x07\xC0\x0D\xB0\x19\x98\x01\xB0' ..
+                  '\x01\xC0\x01\x80\x00\x00\x00\x00'
+local ICON_KEYS = '\x00\x00\x00\x00\x00\x00\x00\x00\x7F\xFE\x40\x02' ..
+                  '\x55\x52\x40\x02\x4A\xAA\x40\x02\x4F\xF2\x40\x02' ..
+                  '\x7F\xFE\x00\x00\x00\x00\x00\x00'
+local ICONS = {
+  -- a module runs in the background: a play triangle, offset 9: GREEN
+  play  = { 9, ICON_PLAY },
+  -- recording, in its place: a red dot, offset 2: RED
+  rec   = { 2, ICON_REC },
+  -- the link: the Bluetooth rune, SKYBLUE (13) with the phone there,
+  -- ORANGE (6) when it has gone quiet, GREY (1) with none; a keyboard,
+  -- SKYBLUE, while a keyboard remote drives
+  on    = { 13, ICON_BT },
+  quiet = { 6, ICON_BT },
+  off   = { 1, ICON_BT },
+  keys  = { 13, ICON_KEYS },
+}
 
 -- HANDS_OFF is a lease: the phone sends it again every 15 s for as long as
 -- it holds, and past HANDS_OFF_LEASE without it the wearer's gestures come
 -- back -- a phone gone quiet never leaves the glasses deaf.
 local HANDS_OFF_LEASE = 40   -- seconds
-
--- The framebuffer is 640x400 but the wearer does not see all of it. Measured
--- by probing: y=340 is visible, y=370 is not, so the bottom is clipped.
--- Centring must use these numbers, not 640x400, or it lands low.
-local SCREEN_W       = DL.screen_w
-local VISIBLE_BOTTOM = DL.visible_bottom
-
--- The built-in font is NOT monospaced, so positioning each piece of text by
--- a single character width never lines up: 'okulo' is narrower than five
--- average glyphs. Measured width of '<' specifically is 22px; the firmware
--- handles every other advance itself, as long as a whole string is drawn in
--- one call. CHAR_W below is only a rough average, used for centring.
-local BRACKET_W = DL.bracket_w
-local CHAR_W    = DL.char_w
-local CHAR_H    = DL.char_h
 
 -- Parsers. MENU_SET carries plain text; HIDE/SHOW carry nothing and the mere
 -- presence of the item is the signal.
@@ -570,10 +542,9 @@ local function send(code, value)
   pcall(frame.bluetooth.send, string.char(code, value))
 end
 
--- show() flips Frame's back buffer and waits until the next one is free;
--- on Halo, which draws at once, it does nothing. blank() empties the
--- screen. Both are in glaz_display.lua.
-local show, blank = display.show, display.blank
+-- show() puts what was drawn on the screen (Frame flips its back buffer);
+-- blank() empties the screen. Both are the part's.
+local show, blank = D.show, D.blank
 
 -- The micro-OLED keeps drawing power even with a blank frame on it, and the
 -- firmware only powers it down by itself around frame.sleep(), which this app
@@ -585,7 +556,7 @@ local display_on = true
 local function set_display(on)
   if on == display_on then return end
   display_on = on
-  pcall(frame.display.power_save, not on)
+  pcall(D.power, on)
 end
 
 -- Wall clock. frame.time.utc() is NOT set to real time here: it counts from
@@ -653,23 +624,21 @@ local function status_text()
          link_state() .. ' ' .. tostring(recording())
 end
 
--- 'Glaz > Settings > Brightness'. When it is too wide for right_x, the
--- leading crumbs give way to '..': the end of the path is what matters. The
--- width is only estimated -- the font is proportional, see CHAR_W.
-local function draw_crumbs(parts, right_x)
-  local fit = display.halo and display.fit(CRUMB_Y, DL.small)
-              or (right_x - LEFT_X) // CHAR_W
+-- 'Glaz > Settings > Brightness', cut to n characters: the leading
+-- crumbs give way to '..', since the end of the path is what matters.
+local function crumbs_text(parts, n)
   local text = table.concat(parts, CRUMB_SEP)
   local first = 1
-  while ulen(text) > fit and first < #parts do
+  while ulen(text) > n and first < #parts do
     first = first + 1
     text = '..' .. CRUMB_SEP .. table.concat(parts, CRUMB_SEP, first)
   end
-  draw(text, LEFT_X, CRUMB_Y, 'SKYBLUE', DL.small)
+  return text
 end
 
 -- The whole top bar. last: an extra crumb (the running module's name).
 -- crumbs: shown instead of the menu path (a notification's app name).
+-- What it says is decided here; the part draws it (D.top_bar).
 local function draw_top_bar(last, crumbs)
   local parts = crumbs or {}
   if not crumbs then
@@ -677,39 +646,15 @@ local function draw_top_bar(last, crumbs)
   end
   if last then parts[#parts + 1] = last end
 
-  -- the icon, guarded: a bad bitmap call must not take the screen down
-  local rec = recording()
-  if rec then
-    pcall(frame.display.bitmap, ICON_X, ICON_Y, ICON_W, 2, REC_PALETTE,
-          ICON_REC)
-  elseif bg then
-    pcall(frame.display.bitmap, ICON_X, ICON_Y, ICON_W, 2, ICON_PALETTE,
-          ICON_PLAY)
-  end
-  local ls = link_state()
-  if ls == 'keys' then
-    pcall(frame.display.bitmap, BT_X, ICON_Y, ICON_W, 2, BT_ON_PALETTE,
-          ICON_KEYS)
-  else
-    pcall(frame.display.bitmap, BT_X, ICON_Y, ICON_W, 2,
-          ls == 'on' and BT_ON_PALETTE or ls == 'quiet' and
-          BT_QUIET_PALETTE or BT_OFF_PALETTE, ICON_BT)
-  end
-  draw_crumbs(parts, ((bg or rec) and ICON_X or BT_X) - CHAR_W // 2)
-
   local level = battery_level()
-  if display.halo then
-    -- one line near the top edge, centred: the clock and the battery
-    draw(clock_text() .. (level and '  ' .. level .. '%' or ''), 0,
-         DL.status_y, (level and level <= BATTERY_LOW) and 'RED' or 'GREY',
-         DL.small)
-    return
-  end
-  frame.display.text(clock_text(), TIME_X, CRUMB_Y, { color = 'GREY' })
-  if level then
-    frame.display.text(level .. '%', BATTERY_X, CRUMB_Y,
-                       { color = (level <= BATTERY_LOW) and 'RED' or 'GREY' })
-  end
+  D.top_bar({
+    path  = function(n) return crumbs_text(parts, n) end,
+    icon  = recording() and ICONS.rec or bg and ICONS.play or nil,
+    link  = ICONS[link_state()],
+    clock = clock_text(),
+    level = level,            -- percent, or nil before the first sample
+    low   = level ~= nil and level <= BATTERY_LOW,
+  })
 end
 
 -- A module's error, as its screen shows it: printed too, for the phone's
@@ -725,8 +670,8 @@ local function err_text(e)
 end
 
 local function render()
-  -- Halo keeps what was drawn: each screen starts from a cleared panel
-  display.begin()
+  -- a screen starts here (Halo clears the panel, which keeps what was drawn)
+  D.begin()
   -- A notification covers everything; what was under it carries on and is
   -- drawn again when it goes.
   if notice then
@@ -841,7 +786,8 @@ local function release_hardware()
   pcall(frame.microphone.stop)
 end
 
--- A photo for the phone's remote: glaz_photo.lua, loaded for it alone.
+-- A photo for the phone's remote: glaz_photo, loaded for it alone; Frame's
+-- only (app/glaz_photo.frame.lua), so elsewhere it does not load.
 local function take_photo(size, quality)
   local ok, shoot = try_require('glaz_photo')
   if ok then
@@ -852,7 +798,7 @@ end
 -- Going to deep sleep, the glasses say so: a dark screen alone looks the
 -- same as a hang or a flat battery. Every way to sleep -- Sleep, three
 -- taps, the idle timeout -- passes through here: the eye closes for a
--- second (glaz_blink.lua, loaded for it alone). Should it fail to load or
+-- second (glaz_blink, Frame's only: app/glaz_blink.frame.lua). Should it fail to load or
 -- draw -- short of memory, an old upload without it -- a line of text
 -- takes its place for that second, so sleep is never silent. The host's
 -- break signal still gets through.
@@ -1169,25 +1115,9 @@ frame.imu.tap_callback(function(flags)
   tap_remote = false
 end)
 
--- '<glaz>' centred, with the brackets in a second colour. Two
--- overlapping draws, not three adjacent ones. The whole string goes down in
--- the bracket colour first, so the firmware computes every advance; then the
--- word alone is drawn over it in the text colour, offset by the width of
--- '<'. This needs exactly one measured number; placing three separate pieces
--- needs two offsets, and with a proportional font neither can be derived
--- from a character count. Halo centres each line in a font of one width,
--- so the word lands inside its brackets by itself.
-local function draw_splash_text()
-  local full = '<' .. SPLASH_TEXT .. '>'
-  local x = (SCREEN_W - #full * CHAR_W) // 2
-  local y = (VISIBLE_BOTTOM - CHAR_H) // 2
-  draw(full, x, y, SPLASH_BRACKETS)
-  draw(SPLASH_TEXT, x + BRACKET_W, y, SPLASH_COLOR)
-end
-
 local function draw_splash()
   set_display(true)
-  draw_splash_text()
+  D.splash(SPLASH_TEXT, SPLASH_COLOR, SPLASH_BRACKETS)
   show()
 end
 

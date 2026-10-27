@@ -2,7 +2,7 @@
  * Compiles one Lua file to bytecode the glasses load, written by the very
  * Lua the firmware runs. Of the debug information only the names of local
  * variables go -- the most of it. Line numbers stay, with the file's name,
- * so an error on the glasses says where: 'frame_app.lua:1234: attempt to
+ * so an error on the glasses says where: 'glaz.lua:1234: attempt to
  * call a nil value (field 'x')', the line in the repository, since what is
  * compiled is the repository's file. This is built
  * from the firmware's own libraries/lua (tool/compile_lua.sh). Lua 5.4
@@ -13,7 +13,7 @@
  *
  *   luac_frame in.lua out.luac [name]
  *
- * name: what errors call the file, frame_app.lua or modules/recorder.lua;
+ * name: what errors call the file, glaz.lua or modules/recorder.lua;
  * in.lua by default.
  *
  * Prints the FNV-1a hash of in.lua, in hex: the app compares it with the

@@ -7,7 +7,7 @@
 --   double tap        -- preview: back to the list; list: back to the menu
 --
 -- The list is read once, when the module opens. Three lines of output are
--- all a module gets (frame_app.lua TEXT_ROWS), so the list shows a window of
+-- all a module gets (glaz.lua TEXT_ROWS), so the list shows a window of
 -- three files around the cursor, and a preview shows the name and size and
 -- then the first lines of the file.
 --

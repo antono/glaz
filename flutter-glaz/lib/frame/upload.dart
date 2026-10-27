@@ -5,6 +5,8 @@ import 'package:frame_ble/frame_ble.dart';
 
 import '../services/glaz_log.dart';
 import 'lua_min.dart';
+import 'model.dart';
+import 'parts.dart';
 import 'update_screen.dart';
 
 /// Putting the app on the glasses, the way ../../host_test.py does it:
@@ -13,7 +15,7 @@ import 'update_screen.dart';
 /// ../../docs/FRAME.md ("Deploy as main.lua") for why each step is there.
 ///
 /// The Lua comes from the app's assets (assets/lua/), which link to the
-/// repository's frame_app.lua, app/ and modules/.
+/// repository's glaz.lua, app/ and modules/.
 
 /// One file for the glasses: its name there, its text, and its bytecode
 /// when the app was built with it (tool/compile_lua.sh) and it still
@@ -52,38 +54,52 @@ Future<Map<String, int>> _compiled(AssetBundle bundle) async {
   }
 }
 
-/// Everything to upload, in order: libraries, the app's parts, modules, the
-/// app, main.lua last -- a half-finished upload then leaves no main.lua to
-/// boot into. [installed] says which modules to send (by file name, no
-/// .lua); frame_app.lua leaves the others out of its menu. No sprites: the
-/// phone draws the eye itself while it uploads (update_screen.dart), and
-/// one kept on the glasses took memory the app needs.
+/// Everything to upload to [model], in order: libraries, the app's parts,
+/// modules, the app, main.lua last -- a half-finished upload then leaves no
+/// main.lua to boot into. [installed] says which modules to send (by file
+/// name, no .lua); glaz.lua leaves the others out of its menu. No sprites:
+/// the phone draws the eye itself while it uploads (update_screen.dart),
+/// and one kept on the glasses took memory the app needs.
+///
+/// Of each file's parts (docs/DEVICES.md) only [model]'s go up, and a
+/// module only when it has one (parts.dart). main.lua is glaz_boot's part
+/// for [model]: it knows the glasses before anything is loaded.
 ///
 /// Each file carries its bytecode from assets/luac/ when that was compiled
-/// from this very text. The glasses no longer have the memory to compile
-/// main.lua themselves. The text is minified (lua_min.dart), for what goes
-/// up as source: half the time, and the memory main.lua needs to start.
+/// from this very text and [model] loads bytecode (Frame's; Halo takes
+/// text only). The glasses no longer have the memory to compile main.lua
+/// themselves. The text is minified (lua_min.dart), for what goes up as
+/// source: half the time, and the memory main.lua needs to start.
 Future<List<LuaFile>> luaFiles(
   AssetBundle bundle,
-  bool Function(String module) installed,
-) async {
+  bool Function(String module) installed, {
+  GlassesModel model = GlassesModel.frame,
+}) async {
   final manifest = await AssetManifest.loadFromAssetBundle(bundle);
   final assets = manifest.listAssets().where((a) => a.endsWith('.lua'));
   final compiled = await _compiled(bundle);
+  final modules = modulesFor(assets, model);
 
   String base(String path) => path.split('/').last;
-  String module(String path) => base(path).replaceAll('.lua', '');
 
   Future<LuaFile> file(String path, [String? name]) async {
     final bytes = (await bundle.load(path)).buffer.asUint8List();
     final text = String.fromCharCodes(bytes);
     Uint8List? code;
-    if (compiled[path] case final hash? when hash == fnv1a(bytes)) {
-      try {
-        code = (await bundle.load(luacAsset(path))).buffer.asUint8List();
-      } catch (_) {} // listed, but not in this build: source it is
+    if (model.loadsBytecode) {
+      if (compiled[path] case final hash? when hash == fnv1a(bytes)) {
+        try {
+          code = (await bundle.load(luacAsset(path))).buffer.asUint8List();
+        } catch (_) {} // listed, but not in this build: source it is
+      }
     }
     return (name ?? base(path), minifyLua(text), code);
+  }
+
+  // a file the same everywhere, or [model]'s part
+  bool mine(String path) {
+    final part = partFor(base(path));
+    return part == null || part == model;
   }
 
   Future<List<LuaFile>> under(String dir, [bool Function(String)? keep]) async {
@@ -91,27 +107,33 @@ Future<List<LuaFile>> luaFiles(
       ..sort();
     return [
       for (final p in paths)
-        if (keep == null || keep(module(p))) await file(p),
+        if (mine(p) && (keep == null || keep(stemOf(base(p))))) await file(p),
     ];
   }
 
   return [
     ...await under('lib'),
-    // parts of frame_app.lua in files of their own (glaz_host.lua...); the
-    // loader goes up as main.lua, last
-    ...(await under('app')).where((f) => f.$1 != _boot),
-    ...await under('modules', installed),
+    // parts of glaz.lua in files of their own (glaz_host.lua...); the
+    // loader's part goes up as main.lua, last
+    ...(await under('app'))
+        .where((f) => partFor(f.$1) == null || stemOf(f.$1) != _boot),
+    ...await under('modules', (m) => installed(m) && modules.contains(m)),
     // the app itself, loaded by main.lua: the firmware's require() cannot
-    // be trusted with a file its size (app/glaz_boot.lua)
-    await file('assets/lua/frame_app.lua', appFile),
-    await file('assets/lua/app/$_boot', 'main.lua'),
+    // be trusted with a file its size (app/glaz_boot.frame.lua)
+    await file(
+      'assets/lua/glaz.${model.name}.lua',
+      '$appName.${model.name}.lua',
+    ),
+    await file('assets/lua/glaz.lua', appFile),
+    await file('assets/lua/app/$_boot.${model.name}.lua', 'main.lua'),
   ];
 }
 
-/// What frame_app.lua is called on the glasses; main.lua, which loads it,
-/// is app/glaz_boot.lua.
-const appFile = 'glaz_app.lua';
-const _boot = 'glaz_boot.lua';
+/// What glaz.lua is called on the glasses, and its parts after it
+/// (glaz_app.frame.lua); main.lua, which loads it, is glaz_boot's part.
+const appName = 'glaz_app';
+const appFile = '$appName.lua';
+const _boot = 'glaz_boot';
 
 /// Compiles a file on the glasses, in place, to bytecode without debug
 /// information. Uploaded for the duration of an upload and run from the

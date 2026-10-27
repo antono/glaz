@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../frame/dfu.dart';
 import '../frame/firmware.dart';
 import '../frame/link.dart';
+import '../frame/model.dart';
 import '../frame/upload.dart';
 import '../services/services.dart';
 
@@ -191,9 +192,11 @@ class _FirmwareScreenState extends State<FirmwareScreen> {
   Future<void> _install(FrameLink link, FirmwarePackage package) async {
     setState(() => _armed = null);
     // the update wipes the glasses' files; the app goes back on after it
+    // (Nordic DFU: Frame's)
     final app = await luaFiles(
       rootBundle,
       Services.instance.settings.installed,
+      model: GlassesModel.frame,
     );
     await link.runTask(
       'Firmware',

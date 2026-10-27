@@ -27,17 +27,23 @@ The glasses run Lua; a laptop talks to them over Bluetooth using Python.
   app, paired in glaz, which Android wakes when the Flipper comes near.
 - [`docs/FLIPPER.md`](docs/FLIPPER.md) — a Flipper Zero's screen on the
   glasses: the Flipper's RPC over Bluetooth, and how the phone passes it on.
-- [`docs/HALO.md`](docs/HALO.md) — Brilliant Labs Halo: found by the same
-  scan, told apart by its name (`lib/frame/model.dart`), not supported yet;
-  how it differs from Frame.
+- [`docs/HALO.md`](docs/HALO.md) — Brilliant Labs Halo: hardware,
+  Bluetooth, its Lua next to Frame's, firmware and recovery; told apart by
+  its name (`lib/frame/model.dart`); what of glaz runs on it.
+- [`docs/DEVICES.md`](docs/DEVICES.md) — more than one kind of glasses:
+  `name.lua` and its parts `name.frame.lua`, `name.halo.lua`; what goes to
+  which glasses, and what the phone lists.
 
 ## Layout
 
-- `frame_app.lua` — app that runs on the glasses (uploaded as `main.lua`)
-- `app/` — parts of `frame_app.lua` in files of their own (services, file
-  browsing, photo), and `glaz_boot.lua`, uploaded as `main.lua`: it loads
-  the app (`glaz_app.lua` on the glasses) in pieces; see docs/FRAME.md
-- `modules/` — one Lua file per menu item
+- `glaz.lua` — app that runs on the glasses (`glaz_app.lua` there), and
+  its parts `glaz.frame.lua`, `glaz.halo.lua`: the screen (docs/DEVICES.md)
+- `app/` — parts of `glaz.lua` in files of their own (services, file
+  browsing, photo), and `glaz_boot.lua`, which loads the app and restarts
+  it; its part for the glasses (`glaz_boot.frame.lua`) is `main.lua` there.
+  See docs/FRAME.md
+- `modules/` — one Lua file per menu item, and its part for each pair of
+  glasses it runs on (`reader.frame.lua`)
 - `host_test.py` — reference host: uploads everything, then listens
 - `utils/` — diagnostics, run individually
 - `check.sh` — static checks, no device needed
@@ -122,14 +128,18 @@ python3 -m venv .venv
 - Frame-side Lua must be **ASCII only** — non-ASCII bytes break upload.
 - Frame runs **Lua 5.4**; check with 5.4, not older versions.
 - Run `./check.sh` after changing any `.lua` file.
-- Adding a menu item: add a file in `modules/` and list it in the `MENU` tree
-  in `frame_app.lua`. See `docs/PROTOCOL.md`.
+- Adding a menu item: add a file in `modules/`, its part for each pair of
+  glasses it runs on (`name.frame.lua`, empty `return {}` if it has
+  nothing of its own), and list it in the `MENU` tree in `glaz.lua`. See
+  `docs/PROTOCOL.md` and `docs/DEVICES.md`.
+- What differs between Frame and Halo goes in the parts, never in a check
+  of which glasses these are (docs/DEVICES.md); `check.sh` holds to it.
 - Every commit that changes an app bumps its version in the same commit,
   by [SemVer](https://semver.org): major for a breaking change (the other
   side or saved data no longer works with it), minor for a feature, patch
   for a fix. Docs, tests and tooling alone bump nothing. While a version
   is `0.x`, a breaking change bumps the minor.
-  - Glasses (`frame_app.lua`, `app/`, `modules/`, `sprites/`): `VERSION` in
+  - Glasses (`glaz.lua`, `app/`, `modules/`, `sprites/`): `VERSION` in
     `modules/about.lua`, shown in Info > About.
   - Phone (`flutter-glaz/`): `version` in `flutter-glaz/pubspec.yaml` and
     `appVersion` in `lib/screens/about_screen.dart` (a test keeps them

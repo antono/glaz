@@ -3,7 +3,7 @@
 
 The real host may be anything (Flutter, etc.) -- all menu logic lives on the
 glasses, and the menu items are Lua modules in modules/. This script uploads
-them and then just listens. See frame_app.lua and docs/PROTOCOL.md.
+them and then just listens. See glaz.lua and docs/PROTOCOL.md.
 """
 import asyncio
 import os
@@ -48,7 +48,7 @@ EVENTS = {
 
 MODULES_DIR = Path(__file__).parent / "modules"
 SPRITES_DIR = Path(__file__).parent / "sprites"
-# Parts of frame_app.lua in files of their own (glaz_host.lua and the
+# Parts of glaz.lua in files of their own (glaz_host.lua and the
 # rest): main.lua in one piece no longer fits the glasses' memory to compile.
 APP_DIR = Path(__file__).parent / "app"
 
@@ -75,14 +75,30 @@ def for_glasses(text: str) -> str:
                    if " " <= ch <= "~" or "\u00a1" <= ch <= "\u00ff"
                    or "\u0400" <= ch <= "\u045f")
 
-# Deploy as main.lua so the menu is autonomous: the firmware auto-runs main.lua
-# on power-on and after a reset, so the app survives disconnecting the host.
-# Anything under another name (the default frame_app.lua) has to be require()d
-# by a host every time, and stop_frame_app()'s reset signal leaves it stopped.
+# Deployed as the phone does it (lib/frame/upload.dart): glaz.lua as
+# glaz_app.lua, and main.lua is glaz_boot's part for Frame, which loads it.
+# The firmware auto-runs main.lua on power-on and after a reset, so the app
+# survives disconnecting the host.
 #
 # This is safe to re-upload over: FrameMsg.connect() sends break/reset/break,
 # and that last break exists precisely to interrupt an auto-starting main.lua.
-FRAME_APP_NAME = os.environ.get("FRAME_APP_NAME", "main")
+#
+# Only Frame's parts go up (docs/DEVICES.md): name.lua is the same on all
+# glasses, name.frame.lua is its part for Frame, and a module without one
+# is not Frame's. This host speaks to Frame only (frame_msg).
+DEVICE = "frame"
+APP_NAME = "glaz_app"
+
+
+def device_of(path: Path) -> str | None:
+    """The glasses a part is for (reader.frame.lua -> 'frame'), or None."""
+    parts = path.name.split(".")
+    return parts[-2] if len(parts) >= 3 and parts[-2] in ("frame", "halo") else None
+
+
+def ours(path: Path) -> bool:
+    """A file for every pair of glasses, or Frame's part."""
+    return device_of(path) in (None, DEVICE)
 
 
 async def wait_for_repl(frame, attempts=6):
@@ -219,13 +235,19 @@ async def main():
     # 'camera' is the frame_msg capture library, used by modules/photo.lua
     await frame.upload_stdlua_libs(lib_names=["data", "camera"])
 
-    # One module per menu item. frame_app.lua requires them by bare name,
-    # so each must land at /<name>.lua on the device.
+    # One module per menu item. glaz.lua requires them by bare name,
+    # so each must land at /<name>.lua on the device; glaz_boot's part
+    # goes up as main.lua, last.
     for path in sorted(APP_DIR.glob("*.lua")):
+        if not ours(path) or path.name.startswith("glaz_boot."):
+            continue
         await frame.upload_file(str(path), path.name)
         print(f"  app part: {path.name}")
 
+    modules = {p.name.split(".")[0] for p in MODULES_DIR.glob(f"*.{DEVICE}.lua")}
     for path in sorted(MODULES_DIR.glob("*.lua")):
+        if not ours(path) or path.name.split(".")[0] not in modules:
+            continue
         await frame.upload_file(str(path), path.name)
         print(f"  module: {path.name}")
 
@@ -234,13 +256,17 @@ async def main():
         await frame.upload_file(str(path), path.name)
         print(f"  sprite: {path.name}")
 
+    root = Path(__file__).parent
+    await frame.upload_file(str(root / f"glaz.{DEVICE}.lua"),
+                            f"{APP_NAME}.{DEVICE}.lua")
+    await frame.upload_file(str(root / "glaz.lua"), f"{APP_NAME}.lua")
     await frame.upload_frame_app(
-        local_filename="frame_app.lua",
-        frame_filename=f"{FRAME_APP_NAME}.lua",
+        local_filename=str(APP_DIR / f"glaz_boot.{DEVICE}.lua"),
+        frame_filename="main.lua",
     )
     frame.attach_print_response_handler()
-    await start_app(frame, FRAME_APP_NAME)
-    print(f"Frame app started (deployed as {FRAME_APP_NAME}.lua).")
+    await start_app(frame, "main")
+    print("Frame app started (main.lua loads glaz_app.lua).")
 
     def on_event(payload: bytes):
         code, index = payload[0], payload[1]

@@ -100,7 +100,7 @@ local function widen(s)
   return (string.gsub(s, '.', WIDE))
 end
 
--- Called by frame_app.lua under the top bar, the screen otherwise clear.
+-- Called by glaz.lua under the top bar, the screen otherwise clear.
 -- One bitmap a row, four pixel rows high; a blank row draws nothing.
 function _M.draw()
   local bitmap = frame.display.bitmap

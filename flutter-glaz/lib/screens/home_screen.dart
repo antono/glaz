@@ -530,7 +530,7 @@ class _StatusDot extends StatelessWidget {
 class _GesturesCard extends StatelessWidget {
   const _GesturesCard();
 
-  // As frame_app.lua handles them (its header comment, "Taps")
+  // As glaz.lua handles them (its header comment, "Taps")
   static const _gestures = [
     (Icons.looks_one_outlined, '1 tap', 'select, or bring back the last app'),
     (

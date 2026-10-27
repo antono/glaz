@@ -108,7 +108,11 @@ class AppCheck extends ChangeNotifier {
   /// Glasses tab does; then looks again.
   Future<void> upload() async {
     if (!link.model.supported) return;
-    final files = await luaFiles(rootBundle, settings.installed);
+    final files = await luaFiles(
+      rootBundle,
+      settings.installed,
+      model: link.model,
+    );
     await link.runTask(
       'Upload',
       (device, report) => uploadApp(device, files, report),

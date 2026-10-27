@@ -23,7 +23,7 @@
 -- its own, named by when it started (docs/PROTOCOL.md, "Photos").
 --
 -- In the background the module is ticked once per BG_TICK_PERIOD (1 s in
--- frame_app.lua), so shots land on whole seconds there.
+-- glaz.lua), so shots land on whole seconds there.
 local camera = require('camera.min')
 
 local _M = {}
@@ -65,7 +65,7 @@ local function status()
   return 'next in ' .. wait .. 's, tap = stop'
 end
 
--- Three lines; frame_app.lua draws one per '\n'.
+-- Three lines; glaz.lua draws one per '\n'.
 local function screen()
   return scale() .. '\n' .. status() .. '\n' ..
          string.format('sent %d  failed %d', sent, failed)
@@ -127,7 +127,7 @@ function _M.on_tap()
     for i, v in ipairs(INTERVALS) do
       if v == want then idx = i end
     end
-    -- from the clock, not a counter: frame_app.lua drops this module when
+    -- from the clock, not a counter: glaz.lua drops this module when
     -- it stops, and a counter would start at 1 again and run into the
     -- previous series on the phone
     series = math.floor(frame.time.utc()) % 255 + 1

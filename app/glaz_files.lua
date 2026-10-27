@@ -1,17 +1,17 @@
 -- The phone browsing the files on the glasses (FILES_GET, FILE_GET): part
--- of frame_app.lua, in a file of its own, loaded for a request and dropped
+-- of glaz.lua, in a file of its own, loaded for a request and dropped
 -- after. ASCII only, see docs/PROTOCOL.md, "Files".
 --
 -- Called with list (true for FILES_GET, false for FILE_GET), the request
 -- -- [id] then the path -- and the host services table from glaz_host.lua.
 -- The first byte of an answer says how it went: '+' or '-' and why.
 
--- Must match frame_app.lua and docs/PROTOCOL.md.
+-- Must match glaz.lua and docs/PROTOCOL.md.
 local FILES     = 0x1D    -- [0x1D, id, more, bytes...] a folder listing
 local FILE_DATA = 0x1E    -- [0x1E, id, more, bytes...] a file's contents
 
 -- A file is read and sent a line at a time, never held whole --
--- frame_app.lua alone is over 50 KB -- but the main loop waits while it
+-- glaz.lua alone is over 50 KB -- but the main loop waits while it
 -- goes, so it stops here.
 local FILE_MAX  = 64 * 1024
 

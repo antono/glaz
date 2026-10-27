@@ -5,11 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:glaz/glasses_menu.dart';
 
 /// The phone's description of the menu must match the glasses' own MENU
-/// tree in ../frame_app.lua and the labels in ../modules/*.lua.
+/// tree in ../glaz.lua and the labels in ../modules/*.lua.
 void main() {
-  final lua = File('../frame_app.lua').readAsStringSync();
+  final lua = File('../glaz.lua').readAsStringSync();
 
-  test('sections and items match frame_app.lua', () {
+  test('sections and items match glaz.lua', () {
     final tree = RegExp(
       r'local MENU = \{(.*?)\n\}',
       dotAll: true,

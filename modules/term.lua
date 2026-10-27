@@ -57,7 +57,7 @@ local function send(...)
   end
 end
 
--- Called by frame_app.lua with the screen clear. A row a call: mono sends
+-- Called by glaz.lua with the screen clear. A row a call: mono sends
 -- a sprite for each color in it, not one a cell.
 function _M.draw()
   if not frame.display.mono then return end

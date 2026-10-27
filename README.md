@@ -256,8 +256,10 @@ rebuild.
   remote, such as a Flipper Zero.
 - [docs/FLIPPER.md](docs/FLIPPER.md): a Flipper Zero's screen on the
   glasses.
-- [docs/HALO.md](docs/HALO.md): Brilliant Labs Halo: how the phone app
-  tells it from Frame, and what differs.
+- [docs/HALO.md](docs/HALO.md): Brilliant Labs Halo: its hardware,
+  Bluetooth and Lua next to Frame's, and what of glaz runs on it.
+- [docs/DEVICES.md](docs/DEVICES.md): more than one kind of glasses: each
+  file's parts for Frame and Halo, and what goes to which.
 - [flutter-glaz/README.md](flutter-glaz/README.md): the phone app.
 - [AGENTS.md](AGENTS.md): the rules for contributing (also used by coding
   agents).
