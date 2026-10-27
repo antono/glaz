@@ -16,7 +16,13 @@ void main() {
     final files = await luaFiles(rootBundle, (m) => m != 'weather');
     final names = files.map((f) => f.$1).toList();
     expect(names.take(2), ['camera.min.lua', 'data.min.lua']);
-    expect(names, containsAll(['photo.lua', 'photo.frame.lua']));
+    expect(names, contains('photo.lua'));
+    // an empty part stays behind: every file takes a block on Frame
+    expect(names, isNot(contains('photo.frame.lua')));
+    expect(
+      names,
+      containsAll(['glaz_blink.frame.lua', 'glaz_photo.frame.lua']),
+    );
     expect(names, isNot(contains('logo.lua'))); // no sprites: the phone draws
     expect(names, isNot(contains('weather.lua'))); // switched off
     expect(names, isNot(contains('weather.frame.lua')));
@@ -58,8 +64,10 @@ void main() {
       'main.lua',
     ]);
     expect(files.last.$2, contains(RegExp(r"device\s*=\s*'halo'")));
-    // a module with a Halo part goes up; one without does not
-    expect(names, containsAll(['about.lua', 'about.halo.lua']));
+    // a module with a Halo part goes up -- the empty part itself not --
+    // and one without does not
+    expect(names, contains('about.lua'));
+    expect(names, isNot(contains('about.halo.lua')));
     expect(names, isNot(contains('reader.lua')));
     // Frame-only parts of the app stay off
     expect(names, isNot(contains('glaz_blink.frame.lua')));
@@ -67,6 +75,20 @@ void main() {
     for (final (name, _, code) in files) {
       expect(code, isNull, reason: name);
     }
+  });
+
+  test('an empty part is told from one with something in it', () {
+    expect(emptyPart(('a.frame.lua', '-- nothing\nreturn {}\n', null)), isTrue);
+    expect(emptyPart(('a.frame.lua', 'return{}', null)), isTrue);
+    expect(emptyPart(('a.frame.lua', 'return { x = 1 }', null)), isFalse);
+    // not a part: kept whatever it holds
+    expect(emptyPart(('a.lua', 'return {}', null)), isFalse);
+  });
+
+  test('files take whole blocks, the tiniest none', () {
+    expect(blocksFor([('a.lua', 'x', null)]), 0);
+    expect(blocksFor([('a.lua', 'x' * 33, null)]), fileBlock);
+    expect(blocksFor([('a.lua', 'x' * 4097, null)]), 2 * fileBlock);
   });
 
   test('Frame needs the app as bytecode; Halo takes text', () {
@@ -185,8 +207,20 @@ void main() {
         n++;
       }
       checks += "glaz_check('missing', 0)\n";
+      // room: 4096 free, and f0 (kept, being the same) does not count, but
+      // a stale Lua file of 5000 bytes is two blocks freed; not Lua stays
+      checks += "glaz_room(4096)\n";
       File('${dir.path}/run.lua').writeAsStringSync('''
 frame = { file = {} }
+function frame.file.space() return { free = 4096 } end
+function frame.file.listdir()
+  return {
+    { name = 'f0', size = 10, type = 1 },
+    { name = 'stale.lua', size = 5000, type = 1 },
+    { name = 'settings.txt', size = 10, type = 1 },
+    { name = 'photos', size = 0, type = 2 },
+  }
+end
 function frame.file.open(name)
   local f = assert(io.open(name, 'rb'))
   return {
@@ -215,6 +249,7 @@ $checks''');
         'glaz_check ready',
         for (var i = 0; i < n; i++) ...['same f$i', 'diff f$i'],
         'diff missing',
+        'room ${4096 + 2 * 4096}',
       ]);
     }, skip: hasLua ? false : 'no lua 5.4 on PATH');
   });

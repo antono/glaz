@@ -108,6 +108,11 @@ battery, Bluetooth, text through the app) have an empty Halo part already:
 About, Battery, Bluetooth, Firmware, Uptime, Stopwatch, Weather,
 Notifications (Settings).
 
+An empty part stays on the phone: Upload does not send it, and
+`require` does without it. On Frame every file takes at least a 4 KB block,
+and with the glaz firmware the file system holds about 44 of them
+(docs/FRAME.md); twenty empty parts would take half of what is left.
+
 ### What check.sh holds to
 
 - A part's suffix names glasses there are.

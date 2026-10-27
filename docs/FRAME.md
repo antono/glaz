@@ -283,6 +283,17 @@ Everything below follows from that.
     watchdog is fed from Lua on every call, so a hang inside one C call
     is the likeliest. `mono` now sends a sprite a color, not a cell
     (`attrs`); call `show()` after every screen.
+13. **The file system is small, and a file takes at least 4 KB.** It is
+    the flash left after the firmware, up to the bootloader (`flash.c`):
+    about 276 KB (68 blocks of 4 KB) with an official firmware, about
+    180 KB (44 blocks) with ours, which carries more fonts. littlefs gives
+    every file at least one block, but for the tiniest (32 bytes or less).
+    A full set of glaz's files with every app switched on takes about 50
+    blocks, so on our firmware some apps have to be off. Upload counts the
+    blocks it needs against `frame.file.space()` before it clears anything
+    (`_room` in `upload.dart`), and stops with the old app in place when
+    they do not fit. Once an upload ran out halfway, with "error writing
+    to file", and left the glasses with no app.
 
 The working recipe used both workarounds: find Frame by address with a long
 scan, and pair on connect. Both are monkey-patches around frame_ble 1.1.1, which

@@ -62,8 +62,11 @@ Future<Map<String, int>> _compiled(AssetBundle bundle) async {
 /// and one kept on the glasses took memory the app needs.
 ///
 /// Of each file's parts (docs/DEVICES.md) only [model]'s go up, and a
-/// module only when it has one (parts.dart). main.lua is glaz_boot's part
-/// for [model]: it knows the glasses before anything is loaded.
+/// module only when it has one (parts.dart). A part with nothing in it
+/// (`return {}`) does not go up: it only says the module runs there, which
+/// the phone knows already, and on Frame every file takes a 4 KB block of a
+/// file system of about 44 ([emptyPart]). main.lua is glaz_boot's part for
+/// [model]: it knows the glasses before anything is loaded.
 ///
 /// Each file carries its bytecode from assets/luac/ when that was compiled
 /// from this very text and [model] loads bytecode (Frame's; Halo takes
@@ -109,7 +112,7 @@ Future<List<LuaFile>> luaFiles(
     return [
       for (final p in paths)
         if (mine(p) && (keep == null || keep(stemOf(base(p))))) await file(p),
-    ];
+    ].where((f) => !emptyPart(f)).toList();
   }
 
   return [
@@ -128,6 +131,18 @@ Future<List<LuaFile>> luaFiles(
     await file('assets/lua/glaz.lua', appFile),
     await file('assets/lua/app/$_boot.${model.name}.lua', 'main.lua'),
   ];
+}
+
+/// Whether [f] is a part with nothing in it: `return {}`, or no code at
+/// all. require() does without it (app/glaz_boot.lua).
+bool emptyPart(LuaFile f) {
+  if (partFor(f.$1) == null) return false;
+  final code = f.$2
+      .split('\n')
+      .where((l) => !l.trimLeft().startsWith('--'))
+      .join()
+      .replaceAll(RegExp(r'\s'), '');
+  return code.isEmpty || code == 'return{}';
 }
 
 /// What glaz.lua is called on the glasses, and its parts after it
@@ -213,6 +228,20 @@ function glaz_check(name, want)
   else
     print('diff ' .. name)
   end
+end
+-- room for an upload: free space, and what clearing the Lua files not in
+-- glaz_keep frees, each in whole blocks of b bytes; -1 when the firmware
+-- cannot tell (frame.file.space is the glaz firmware's)
+function glaz_room(b)
+  local s = frame.file.space and frame.file.space()
+  if not s then print('room -1') return end
+  local f = s.free
+  for _, e in ipairs(frame.file.listdir('/')) do
+    if e.type ~= 2 and e.name:match('%.lua$') and not glaz_keep[e.name] then
+      f = f + (e.size + b - 1) // b * b
+    end
+  end
+  print('room ' .. f)
 end
 print('glaz_check ready')
 ''';
@@ -363,11 +392,57 @@ Future<void> uploadApp(
   // modules of two dozen are not.
   report('Checking what changed');
   await picture.draw('Checking...', progress: 0);
-  final same = await _unchanged(device, repl, files);
+  Set<String> same;
+  try {
+    same = await _unchanged(device, repl, files);
+  } on Exception catch (e) {
+    // Full to the last block: not even the check's helper can be written,
+    // so nothing could be cleared to make room. Left so by an upload that
+    // ran out halfway, which also took main.lua: every Lua file goes, and
+    // everything goes up again. Not Lua (settings.txt, say) stays.
+    if (!'$e'.contains('error writing to file')) rethrow;
+    glazLog(
+      LogKind.task,
+      'Upload: the glasses are full; clearing every Lua file',
+      problem: true,
+    );
+    report('Clearing the glasses: they are full');
+    await repl.lines(
+      "local n=0 for _,e in ipairs(frame.file.listdir('/')) do "
+          "if e.type~=2 and e.name:match('%.lua\$') "
+          "and pcall(frame.file.remove,e.name) then n=n+1 end end "
+          "print('cleared '..n)",
+      'cleared',
+      // a full file system takes its time to give up files
+      timeout: const Duration(seconds: 30),
+      match: (l) => l.startsWith('cleared '),
+    );
+    same = await _unchanged(device, repl, files);
+  }
   glazLog(
     LogKind.task,
     'Upload: ${same.length} of ${files.length} files unchanged',
   );
+
+  // Room for it, before anything goes: an upload that runs out of space
+  // halfway leaves the glasses with no app (main.lua is already aside).
+  // Free space now, and what clearing old files frees, against what goes
+  // up, each file in whole blocks. frame.file.space is the glaz firmware's;
+  // without it the upload goes ahead unchecked.
+  try {
+    await _room(repl, [
+      for (final f in files)
+        if (!same.contains(f.$1)) f,
+    ]);
+  } catch (_) {
+    // nothing cleared yet: the old app goes back, and starts
+    await repl.run(
+      "pcall(frame.file.rename,'$mainKept','main.lua') print('restored')",
+      'restored',
+    );
+    await device.sendResetSignal();
+    rethrow;
+  }
 
   // Lua files from earlier uploads -- modules switched off or gone, sprites
   // no longer drawn, files that changed -- go; those found the same stay.
@@ -429,6 +504,47 @@ Future<void> uploadApp(
   report('Starting the app', 1);
   await picture.draw('Starting...', progress: 1);
   await repl.start();
+}
+
+/// A file system block on Frame: a flash page (CODEPAGESIZE). littlefs
+/// gives every file at least one, but for the tiniest, kept in its
+/// directory's own.
+const fileBlock = 4096;
+
+/// Blocks to spare beyond the files: littlefs writes a directory anew
+/// elsewhere as it grows.
+const _spareBlocks = 1;
+
+/// The bytes [files] take on the glasses' file system, in whole blocks.
+int blocksFor(Iterable<LuaFile> files) => files.fold(0, (n, f) {
+  final size = uploadedBytes(f).length;
+  return n + (size <= 32 ? 0 : (size + fileBlock - 1) ~/ fileBlock * fileBlock);
+});
+
+/// Throws, before anything is cleared, when [writes] would not fit. Run
+/// after [_unchanged]: its helper has glaz_room(), and its glaz_keep says
+/// which files stay.
+Future<void> _room(Repl repl, List<LuaFile> writes) async {
+  // in glaz_check.lua: a line of Lua must fit one packet (MTU less 3)
+  final said = await repl.lines(
+    'glaz_room($fileBlock)',
+    '',
+    match: (l) => l.startsWith('room '),
+  );
+  final room = int.tryParse(said.lastOrNull?.substring(5) ?? '') ?? -1;
+  if (room < 0) return; // cannot tell: go ahead
+  final need = blocksFor(writes) + _spareBlocks * fileBlock;
+  glazLog(
+    LogKind.task,
+    'Upload: needs ${need ~/ 1024} KB, the glasses have ${room ~/ 1024} KB',
+  );
+  if (need > room) {
+    throw Exception(
+      'not enough room on the glasses: the upload needs ${need ~/ 1024} KB '
+      'and they have ${room ~/ 1024} KB. Switch some apps off in Menu, '
+      'or delete files on the glasses, and upload again',
+    );
+  }
 }
 
 /// The names of [files] the glasses already have as this upload would
