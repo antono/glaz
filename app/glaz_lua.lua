@@ -1,4 +1,4 @@
--- The phone's Lua console (LUA_EVAL): part of frame_app.lua, in a file of
+-- The phone's Lua console (LUA_EVAL): part of glaz.lua, in a file of
 -- its own, loaded for a request and dropped after. ASCII only, see
 -- docs/PROTOCOL.md, "Lua console".
 --
@@ -10,7 +10,7 @@
 -- print()s comes back too, before the values. The answer, LUA_RESULT, is
 -- '+' and the text, or '-' and the error.
 
--- Must match frame_app.lua and docs/PROTOCOL.md.
+-- Must match glaz.lua and docs/PROTOCOL.md.
 local LUA_RESULT = 0x09   -- [0x09, id, more, bytes...] the answer
 
 local MAX = 8 * 1024      -- an answer is cut here
@@ -55,6 +55,7 @@ local function run(code)
   end
   local r = table.pack(pcall(fn))
   print = print_
+  if not r[1] and glaz_break(r[2]) then error(r[2], 0) end
 
   if not r[1] then
     said[#said + 1] = tostring(r[2])

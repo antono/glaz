@@ -4,7 +4,7 @@
 --   double tap -- back; a recording goes on in the background
 --
 -- The phone's record button calls remote('on') or remote('off')
--- (MODULE_CALL), and frame_app.lua starts the module straight into the
+-- (MODULE_CALL), and glaz.lua starts the module straight into the
 -- background when it is not running. _M.rec is
 -- true while recording: the top bar shows a red dot for it.
 --

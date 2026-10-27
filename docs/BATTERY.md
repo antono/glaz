@@ -88,7 +88,7 @@ trend, or average several readings taken in a row.
 | `frame.bluetooth.is_connected` exists | yes; returns `true` while a host is attached |
 | `frame.imu` has no power control | its keys are only `tap_callback`, `direction`, `raw` |
 
-So the explicit power-down calls in `frame_app.lua` really work. None of them
+So the explicit power-down calls in `glaz.lua` really work. None of them
 fails silently inside its `pcall`.
 
 ---
@@ -99,7 +99,7 @@ Ranked by likely impact.
 
 ### 1. Deep sleep is disabled whenever a host is connected
 
-`frame_app.lua:602`: deep sleep (`frame.sleep()` with no argument, line 622)
+`glaz.lua:602`: deep sleep (`frame.sleep()` with no argument, line 622)
 is used only when `not frame.bluetooth.is_connected()`. The reason is
 deliberate: a host cannot reach an app parked in `frame.sleep()`.
 
@@ -121,7 +121,7 @@ runs:
 In this session the last host event before the investigation was
 `app START: 5`, which is Tilt. It was left running.
 
-**Fix (applied).** `APP_TIMEOUT = 60` s in `frame_app.lua`: an `app` module
+**Fix (applied).** `APP_TIMEOUT = 60` s in `glaz.lua`: an `app` module
 closes itself after a minute with no tap, and a single tap restarts the
 clock. Separately, the deep-sleep branch now closes any running module and the
 menu before `frame.sleep()`. Rule: going to sleep closes whatever is open.

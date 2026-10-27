@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../frame/link.dart';
+import '../frame/model.dart';
 import '../frame/pairing.dart';
 import '../frame/upload.dart';
 import '../services/app_check.dart';
@@ -396,6 +397,7 @@ class _GlassesAppCard extends StatelessWidget {
   Widget _build(BuildContext context, FrameLink link, GlassesApp app) {
     final text = Theme.of(context).textTheme;
     final ready = link.connected && !link.busy;
+    final halo = link.connected && link.model == GlassesModel.halo;
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -422,6 +424,15 @@ class _GlassesAppCard extends StatelessWidget {
               leading: const Icon(Icons.error_outline, color: FrameColors.red),
               title: const Text('Last attempt failed'),
               subtitle: Text(link.taskError!),
+            ),
+          if (halo)
+            const ListTile(
+              leading: Icon(Icons.info_outline, color: FrameColors.yellow),
+              title: Text('Halo support is new'),
+              subtitle: Text(
+                'Tried in the Halo emulator, not yet on a Halo: the menu and '
+                'a few apps (docs/HALO.md)',
+              ),
             ),
           if (ready && app == GlassesApp.missing)
             const ListTile(
@@ -459,6 +470,8 @@ class _GlassesAppCard extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const GlassesFilesScreen()),
             ),
           ),
+          // open for Halo too: it lists only the firmware for the glasses
+          // at hand, none yet for Halo (firmware_screen.dart)
           ListTile(
             leading: const Icon(Icons.memory, color: FrameColors.skyBlue),
             title: const Text('Firmware'),
@@ -516,7 +529,7 @@ class _StatusDot extends StatelessWidget {
 class _GesturesCard extends StatelessWidget {
   const _GesturesCard();
 
-  // As frame_app.lua handles them (its header comment, "Taps")
+  // As glaz.lua handles them (its header comment, "Taps")
   static const _gestures = [
     (Icons.looks_one_outlined, '1 tap', 'select, or bring back the last app'),
     (

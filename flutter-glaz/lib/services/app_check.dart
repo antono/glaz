@@ -105,10 +105,14 @@ class AppCheck extends ChangeNotifier {
   /// Uploads main.lua and the apps switched on in Menu, as Upload on the
   /// Glasses tab does; then looks again.
   Future<void> upload() async {
-    final files = await luaFiles(rootBundle, settings.installed);
-    await link.runTask(
-      'Upload',
-      (device, report) => uploadApp(device, files, report),
+    final files = await luaFiles(
+      rootBundle,
+      settings.installed,
+      model: link.model,
     );
+    await link.runTask('Upload', (device, report) async {
+      needBytecode(files, link.model);
+      await uploadApp(device, files, report, model: link.model);
+    });
   }
 }

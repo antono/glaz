@@ -1,49 +1,32 @@
--- main.lua on the glasses: loads the app, glaz_app.lua (frame_app.lua in
--- the repository). ASCII only.
+-- glaz_boot: loads the app, glaz_app.lua (glaz.lua in the
+-- repository), and starts it again after an error. ASCII only.
 --
--- It replaces require(). The firmware's reads a file a byte at a time into
--- one buffer it grows by a byte each time (lua_file_require in file.c),
--- with no Lua running meanwhile: the watchdog, fed only by Lua's hook,
--- resets the glasses after 6 s without it. Bytecode of 19 KB took seconds
--- -- longer the more broken up the heap -- and sometimes past 6 s: the
--- glasses dropped the link on start, saying nothing. A failed realloc
--- there is not checked either. See docs/FRAME.md.
---
--- This one reads 512 bytes a read() and gives them to load() as they come:
--- no buffer the size of the file, and every piece is a Lua call, which
--- feeds the watchdog. read() stops at a line break and drops it; the size
--- listdir() gives tells a dropped one from the end of the file.
-local open, listdir = frame.file.open, frame.file.listdir
-local PIECE = 512   -- the most one read() gives (LUAL_BUFFERSIZE)
-local sizes = nil   -- file name -> bytes; files do not change while it runs
+-- Started by main.lua, which is this file's part for the glasses at hand
+-- (glaz_boot.frame.lua, glaz_boot.halo.lua) and hands it in as D: how a
+-- file is loaded there, its file modes, its suffix. See docs/DEVICES.md.
+local _, D = ...
 
-local function size(file)
-  if not sizes then
-    sizes = {}
-    for _, e in ipairs(listdir('/')) do sizes[e.name] = e.size end
+-- require(), for the app and its modules. A name's part for these glasses
+-- (name.frame.lua on Frame) is loaded first and handed to name.lua, which
+-- takes it as `local D = select(2, ...)`. A name with a part and no
+-- name.lua is one only these glasses have: the part is the module. The
+-- phone uploads only this glasses' parts, so nothing here asks which
+-- glasses these are.
+local function run(file, name, part)
+  local fn, err = D.load(file)
+  if not fn then
+    if err then error("exiting module '" .. name .. "': " .. err, 3) end
+    return false
   end
-  return sizes[file]
+  return true, fn(name, part)
 end
 
 function require(name)
-  local file = name .. '.lua'
-  local left = size(file)
-  if not left then error('cannot open file: ' .. file, 2) end
-  local f = open(file, 'read')
-  local fn, err = load(function()
-    if left <= 0 then return nil end
-    local s = f:read()
-    if s == nil then left = 0 return nil end
-    left = left - #s
-    if #s < PIECE and left > 0 then   -- a line break was dropped
-      left = left - 1
-      s = s .. '\n'
-    end
-    return s
-  end, '=' .. file)
-  f:close()
-  if not fn then error("exiting module '" .. name .. "': " .. err, 2) end
-  return fn(name)
+  local _, part = run(name .. '.' .. D.device .. '.lua', name)
+  local found, mod = run(name .. '.lua', name, part)
+  if found then return mod end
+  if part ~= nil then return part end
+  error('cannot open file: ' .. name .. '.lua', 2)
 end
 
 -- Restart. An error the app does not catch would end it, the link still
@@ -59,6 +42,12 @@ local CRASH_FILE = 'crash.txt'
 local RESTARTS, WITHIN = 3, 60
 local crashes = {}   -- utc() of each restart within WITHIN
 
+-- Whether an error is the host's break, as these glasses raise it
+-- (D.BREAK): for every pcall in the app that must let it through.
+function glaz_break(e)
+  return string.find(tostring(e), D.BREAK, 1, true) ~= nil
+end
+
 local before = {}
 for k in pairs(_G) do before[k] = true end
 
@@ -66,7 +55,7 @@ while true do
   local ok, err = pcall(require, 'glaz_app')
   if ok then break end
   err = tostring(err)
-  if string.find(err, 'break signal', 1, true) then error(err, 0) end
+  if glaz_break(err) then error(err, 0) end
 
   for k in pairs(_G) do
     if not before[k] then _G[k] = nil end
@@ -77,7 +66,7 @@ while true do
 
   local now = frame.time.utc()
   pcall(function()
-    local f = open(CRASH_FILE, 'write')
+    local f = frame.file.open(CRASH_FILE, 'write')
     f:write(string.format('%d %s', math.floor(now), err))
     f:close()
   end)
@@ -89,7 +78,6 @@ while true do
   crashes[#crashes + 1] = now
   print('glaz app error, restarting: ' .. err)
 
-  frame.display.text('restarted', 50, 65)
-  frame.display.show()
+  pcall(D.restarted)
   frame.sleep(1)
 end

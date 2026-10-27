@@ -7,7 +7,7 @@
 --   MAC ...                  -- this device's address
 --
 -- The firmware exposes is_connected, address, max_length, send and
--- receive_callback (docs/PLATFORM.md); the rest is frame_app.lua's own
+-- receive_callback (docs/PLATFORM.md); the rest is glaz.lua's own
 -- count, glaz_link, kept by its loop. heard is how long ago the phone last
 -- sent anything: it asks for STATUS every minute, so a minute and more
 -- with the link up means its app is gone or stuck.

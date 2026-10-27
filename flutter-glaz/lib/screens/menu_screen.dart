@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../frame/model.dart';
 import '../glasses_menu.dart';
 import '../services/services.dart';
 import '../theme.dart';
@@ -12,7 +13,29 @@ class MenuScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final services = Services.instance;
+    // the glasses connected, or those of last time (link.dart)
+    return ListenableBuilder(
+      listenable: services.link,
+      builder: (context, _) => _build(context, services.link.model),
+    );
+  }
+
+  /// Only the apps [model] has a part for (docs/DEVICES.md): the others
+  /// are not uploaded to it, so they are not in its menu either.
+  Widget _build(BuildContext context, GlassesModel model) {
     final text = Theme.of(context).textTheme;
+    final parts = Services.instance.parts;
+    final sections = [
+      for (final section in glassesMenu)
+        (
+          section,
+          [
+            for (final m in section.modules)
+              if (parts.has(m.id, model)) m,
+          ],
+        ),
+    ].where((s) => s.$2.isNotEmpty).toList();
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
@@ -21,21 +44,21 @@ class MenuScreen extends StatelessWidget {
           child: Text(
             'This is the menu the glasses show. It lives on the glasses; '
             'the phone describes it, and Upload (Glasses tab) sends the apps '
-            'switched on here. Tap one marked with sliders for its settings.',
+            'switched on here. Tap one marked with sliders for its settings.'
+            '${model == GlassesModel.frame ? '' : ' Only the apps that run '
+                      'on ${model.label} are listed.'}',
             style: text.bodyMedium?.copyWith(color: FrameColors.grey),
           ),
         ),
-        for (final section in glassesMenu) ...[
+        for (final (section, modules) in sections) ...[
           Card(
             clipBehavior: Clip.antiAlias,
             child: ExpansionTile(
-              initiallyExpanded: section == glassesMenu.first,
+              initiallyExpanded: section == sections.first.$1,
               leading: Icon(section.icon, color: FrameColors.skyBlue),
               title: Text(section.label, style: text.titleMedium),
-              subtitle: Text('${section.modules.length} items'),
-              children: [
-                for (final module in section.modules) _ModuleTile(module),
-              ],
+              subtitle: Text('${modules.length} items'),
+              children: [for (final module in modules) _ModuleTile(module)],
             ),
           ),
           const SizedBox(height: 12),

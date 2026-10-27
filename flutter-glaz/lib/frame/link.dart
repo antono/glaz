@@ -7,6 +7,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:frame_ble/frame_ble.dart';
 
 import '../services/glaz_log.dart';
+import 'model.dart';
 import 'pairing.dart';
 import 'protocol.dart';
 
@@ -167,6 +168,16 @@ class FrameLink extends ChangeNotifier {
   /// The glasses' name as last seen: a connect straight to [knownId] gets
   /// none from Android, which only knows it from a scan or the pairing.
   String? knownName;
+
+  /// Frame or Halo: from what their Lua service holds once connected, else
+  /// from [name]; glasses that say neither are taken for Frame, as every
+  /// pair was before Halo (model.dart). Kept after the link goes: the
+  /// glasses of last time.
+  GlassesModel get model =>
+      _gattModel ?? GlassesModel.fromName(name) ?? GlassesModel.frame;
+
+  /// From the connected glasses' characteristics; null until connected.
+  GlassesModel? _gattModel;
 
   /// Called with what to keep across restarts: the glasses' id, and
   /// whether the link is wanted.
@@ -583,12 +594,13 @@ class FrameLink extends ChangeNotifier {
     _data?.cancel();
     _device = device;
     _nameOf(device.device);
+    _modelOf(device.device);
     _acks = true;
     final now = DateTime.now();
     final down = downSince;
     glazLog(
       LogKind.link,
-      'up: mtu ${device.device.mtuNow}, attempt $attempt'
+      'up: ${model.label}, mtu ${device.device.mtuNow}, attempt $attempt'
       '${down == null ? '' : ', down ${_span(now.difference(down))}'}'
       ', link $connects, drops $drops',
     );
@@ -654,6 +666,26 @@ class FrameLink extends ChangeNotifier {
     });
     // during a task the app is stopped; runTask greets it when done
     if (!busy) _greet();
+  }
+
+  /// The model, from the Lua service frame_ble has just discovered. The
+  /// name only hinted at it; when the two disagree, the glasses win, and
+  /// the log says so.
+  void _modelOf(BluetoothDevice dev) {
+    final gatt = GlassesModel.fromGatt([
+      for (final s in dev.servicesList)
+        for (final c in s.characteristics) c.characteristicUuid.str128,
+    ]);
+    if (gatt == null) return;
+    final named = GlassesModel.fromName(name);
+    if (named != null && named != gatt) {
+      glazLog(
+        LogKind.link,
+        'named ${named.label}, but the glasses are ${gatt.label}',
+        problem: true,
+      );
+    }
+    _gattModel = gatt;
   }
 
   /// The glasses' name: from the scan, else Android's for the device,

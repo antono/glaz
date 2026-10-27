@@ -4,7 +4,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glaz/frame/link.dart';
+import 'package:glaz/frame/model.dart';
+import 'package:glaz/frame/parts.dart';
 import 'package:glaz/frame/upload.dart';
+import 'package:glaz/glasses_menu.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -14,20 +17,122 @@ void main() {
     final names = files.map((f) => f.$1).toList();
     expect(names.take(2), ['camera.min.lua', 'data.min.lua']);
     expect(names, contains('photo.lua'));
+    // an empty part stays behind: every file takes a block on Frame
+    expect(names, isNot(contains('photo.frame.lua')));
+    expect(
+      names,
+      containsAll(['glaz_blink.frame.lua', 'glaz_photo.frame.lua']),
+    );
     expect(names, isNot(contains('logo.lua'))); // no sprites: the phone draws
     expect(names, isNot(contains('weather.lua'))); // switched off
-    // the app, then main.lua, which loads it
-    expect(names.sublist(names.length - 2), [appFile, 'main.lua']);
-    expect(files.last.$2, contains("pcall(require, 'glaz_app')"));
-    expect(names, isNot(contains('glaz_boot.lua')));
+    expect(names, isNot(contains('weather.frame.lua')));
+    // the app and its part, then main.lua: glaz_boot's part, which loads
+    // glaz_boot.lua, which loads the app
+    expect(names.sublist(names.length - 3), [
+      'glaz_app.frame.lua',
+      appFile,
+      'main.lua',
+    ]);
+    expect(files.last.$2, contains(RegExp(r"device\s*=\s*'frame'")));
+    expect(names, contains('glaz_boot.lua'));
+    final boot = files.firstWhere((f) => f.$1 == 'glaz_boot.lua').$2;
+    expect(boot, contains("pcall(require, 'glaz_app')"));
     final app = files[files.length - 2].$2;
     expect(app, contains('function app_loop()'));
     // minified: no comment lines left
     expect(app, isNot(contains('-- Startup banner')));
+    // Frame's parts only
+    expect(names.where((n) => n.contains('.halo.')), isEmpty);
+    expect(names, isNot(contains('glaz_boot.frame.lua'))); // it is main.lua
     // Frame-side Lua must be ASCII (AGENTS.md)
     for (final (name, text, _) in files) {
       expect(text.codeUnits.every((c) => c < 128), isTrue, reason: name);
     }
+  });
+
+  test('Halo gets its own parts, its modules only, and source', () async {
+    final files = await luaFiles(
+      rootBundle,
+      (_) => true,
+      model: GlassesModel.halo,
+    );
+    final names = files.map((f) => f.$1).toList();
+    expect(names.where((n) => n.contains('.frame.')), isEmpty);
+    expect(names.sublist(names.length - 3), [
+      'glaz_app.halo.lua',
+      appFile,
+      'main.lua',
+    ]);
+    expect(files.last.$2, contains(RegExp(r"device\s*=\s*'halo'")));
+    // a module with a Halo part goes up -- the empty part itself not --
+    // and one without does not
+    expect(names, contains('about.lua'));
+    expect(names, isNot(contains('about.halo.lua')));
+    expect(names, isNot(contains('reader.lua')));
+    // Frame-only parts of the app stay off
+    expect(names, isNot(contains('glaz_blink.frame.lua')));
+    // Halo's require() takes text only: no bytecode
+    for (final (name, _, code) in files) {
+      expect(code, isNull, reason: name);
+    }
+  });
+
+  test('an empty part is told from one with something in it', () {
+    expect(emptyPart(('a.frame.lua', '-- nothing\nreturn {}\n', null)), isTrue);
+    expect(emptyPart(('a.frame.lua', 'return{}', null)), isTrue);
+    expect(emptyPart(('a.frame.lua', 'return { x = 1 }', null)), isFalse);
+    // not a part: kept whatever it holds
+    expect(emptyPart(('a.lua', 'return {}', null)), isFalse);
+  });
+
+  test('files take whole blocks, the tiniest none', () {
+    expect(blocksFor([('a.lua', 'x', null)]), 0);
+    expect(blocksFor([('a.lua', 'x' * 33, null)]), fileBlock);
+    expect(blocksFor([('a.lua', 'x' * 4097, null)]), 2 * fileBlock);
+  });
+
+  test('Frame needs the app as bytecode; Halo takes text', () {
+    final code = Uint8List.fromList([1]);
+    final text = [(appFile, 'x', null), ('m.lua', 'y', null)];
+    expect(
+      () => needBytecode(text, GlassesModel.frame),
+      throwsA(predicate((e) => '$e'.contains('tool/compile_lua.sh'))),
+    );
+    // a smaller file may be text, the app may not
+    needBytecode([
+      (appFile, 'x', code),
+      ('m.lua', 'y', null),
+    ], GlassesModel.frame);
+    needBytecode(text, GlassesModel.halo);
+  });
+
+  test('a part is told by its suffix', () {
+    expect(partFor('reader.frame.lua'), GlassesModel.frame);
+    expect(partFor('about.halo.lua'), GlassesModel.halo);
+    expect(partFor('reader.lua'), isNull);
+    expect(partFor('data.min.lua'), isNull);
+    expect(stemOf('reader.frame.lua'), 'reader');
+    expect(stemOf('data.min.lua'), 'data.min');
+    expect(
+      modulesFor([
+        'assets/lua/modules/about.lua',
+        'assets/lua/modules/about.frame.lua',
+        'assets/lua/modules/about.halo.lua',
+        'assets/lua/modules/reader.lua',
+        'assets/lua/modules/reader.frame.lua',
+        'assets/lua/app/glaz_boot.halo.lua',
+      ], GlassesModel.halo),
+      {'about'},
+    );
+  });
+
+  test('every app in the menu is on Frame', () async {
+    final parts = await GlassesParts.load(rootBundle);
+    for (final m in glassesMenu.expand((s) => s.modules)) {
+      expect(parts.has(m.id, GlassesModel.frame), isTrue, reason: m.id);
+    }
+    expect(parts.has('about', GlassesModel.halo), isTrue);
+    expect(parts.has('reader', GlassesModel.halo), isFalse);
   });
 
   test(
@@ -50,7 +155,7 @@ void main() {
       luacAsset('assets/lua/modules/photo.lua'),
       'assets/luac/modules.photo.luac',
     );
-    expect(luacAsset('assets/lua/frame_app.lua'), 'assets/luac/frame_app.luac');
+    expect(luacAsset('assets/lua/glaz.lua'), 'assets/luac/glaz.luac');
     expect(
       luacAsset('assets/lua/lib/data.min.lua'),
       'assets/luac/lib.data.min.luac',
@@ -83,8 +188,6 @@ void main() {
       expect(uploadedBytes(('x.lua', 'a\r\nb', null)), 'a\nb'.codeUnits);
       final code = Uint8List.fromList([1, 2]);
       expect(uploadedBytes(('x.lua', 'a', code)), code);
-      expect(checkable(('x.lua', 'a', code)), isTrue);
-      expect(checkable(('x.lua', 'return 1', null)), isFalse);
     });
 
     // checkHelper itself, on Lua 5.4, with frame.file as the firmware's
@@ -104,8 +207,20 @@ void main() {
         n++;
       }
       checks += "glaz_check('missing', 0)\n";
+      // room: 4096 free, and f0 (kept, being the same) does not count, but
+      // a stale Lua file of 5000 bytes is two blocks freed; not Lua stays
+      checks += "glaz_room(4096)\n";
       File('${dir.path}/run.lua').writeAsStringSync('''
 frame = { file = {} }
+function frame.file.space() return { free = 4096 } end
+function frame.file.listdir()
+  return {
+    { name = 'f0', size = 10, type = 1 },
+    { name = 'stale.lua', size = 5000, type = 1 },
+    { name = 'settings.txt', size = 10, type = 1 },
+    { name = 'photos', size = 0, type = 2 },
+  }
+end
 function frame.file.open(name)
   local f = assert(io.open(name, 'rb'))
   return {
@@ -134,6 +249,7 @@ $checks''');
         'glaz_check ready',
         for (var i = 0; i < n; i++) ...['same f$i', 'diff f$i'],
         'diff missing',
+        'room ${4096 + 2 * 4096}',
       ]);
     }, skip: hasLua ? false : 'no lua 5.4 on PATH');
   });

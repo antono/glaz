@@ -1,4 +1,4 @@
--- A photo for the phone's remote (PHOTO_TAKE): part of frame_app.lua, in a
+-- A photo for the phone's remote (PHOTO_TAKE): part of glaz.lua, in a
 -- file of its own, loaded for a photo and dropped after. ASCII only, see
 -- docs/PROTOCOL.md, "Remote".
 --

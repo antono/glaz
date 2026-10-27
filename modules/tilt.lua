@@ -4,7 +4,7 @@
 -- with a double tap (back) or left alone for APP_TIMEOUT (a single tap
 -- keeps it alive), unlike an 'info' module that shows one value and
 -- auto-closes. Useful for retuning navigation -- PITCH_THRESHOLD and
--- DEADZONE in frame_app.lua come from these numbers. Note that resting
+-- DEADZONE in glaz.lua come from these numbers. Note that resting
 -- pitch is around -35, not 0, and heading is always 0.0 on v25.080.0838.
 local _M = {}
 

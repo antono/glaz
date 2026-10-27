@@ -3,10 +3,10 @@
 --
 --   tilt right / left -- the next / previous setting
 --   single tap        -- change it: the next value, kept at once
---   double tap        -- back to the menu (handled by frame_app.lua)
+--   double tap        -- back to the menu (handled by glaz.lua)
 --
 -- Picked here, on the glasses, and kept in prefs.txt (_M.host.set_pref):
--- frame_app.lua reads them for every notification that comes. Off, a
+-- glaz.lua reads them for every notification that comes. Off, a
 -- notification does not cover the screen; the phone still keeps it, for
 -- Apps > Notifications.
 local _M = {}
