@@ -95,7 +95,7 @@ local asked = nil         -- utc() when TUNER 1 went out; nil when not
 local heard = false       -- the phone has answered since
 local mic = 0             -- 0 the phone's, 1 the glasses'
 local streaming = false   -- the glasses' microphone is on
-local size, per_second = 0, 0
+local size = 0            -- bytes a packet of sound
 
 local function send(packet)
   for _ = 1, 20 do
@@ -112,7 +112,7 @@ end
 -- The glasses' microphone to the phone, as Recorder sends it: at most two
 -- seconds' worth a call, a garbage collector step a packet.
 local function drain()
-  local most = per_second * 2
+  local most = RATE * BITS // 4    -- two seconds' worth
   local done = 0
   while done < most do
     local ok, s = pcall(frame.microphone.read, size)
@@ -122,23 +122,6 @@ local function drain()
     s = nil
     collectgarbage('step')
   end
-end
-
-local function mic_on()
-  size = frame.bluetooth.max_length() - 1
-  if size % 2 == 1 then size = size - 1 end
-  per_second = RATE * BITS // 8
-  pcall(frame.microphone.stop)   -- left running by someone else
-  if not pcall(frame.microphone.start, { sample_rate = RATE,
-                                         bit_depth = BITS }) then
-    status = 'no microphone'
-    return
-  end
-  if not send(string.char(REC_START, BITS, RATE // 1000, FOR_TUNER)) then
-    pcall(frame.microphone.stop)
-    return
-  end
-  streaming = true
 end
 
 local function mic_off()
@@ -153,7 +136,19 @@ local function listen()
   asked, heard = frame.time.utc(), false
   mic = _M.host.setting('mic', 'phone') == 'glasses' and 1 or 0
   send(string.char(TUNER, 1, mic))
-  if mic == 1 and not streaming then mic_on() end
+  if mic ~= 1 or streaming then return end
+  -- the glasses' microphone, streamed: packets of whole 16-bit samples
+  size = frame.bluetooth.max_length() - 1
+  size = size - size % 2
+  pcall(frame.microphone.stop)   -- left running by someone else
+  if not pcall(frame.microphone.start, { sample_rate = RATE,
+                                         bit_depth = BITS }) then
+    status = 'no microphone'
+  elseif send(string.char(REC_START, BITS, RATE // 1000, FOR_TUNER)) then
+    streaming = true
+  else
+    pcall(frame.microphone.stop)
+  end
 end
 
 local function quit_listening()
@@ -162,50 +157,49 @@ local function quit_listening()
   asked, heard = nil, false
 end
 
-local function choose(i)
-  chosen = INSTRUMENTS[i]
-  pitch, live, heard_at, status = nil, false, nil, ''
+-- Text in a palette colour by name, and a 1-bit bitmap in palette offset
+-- pal: the two kinds of drawing here, each in one place.
+local function put(text, x, y, colour)
+  frame.display.text(text, x, y, { color = colour })
 end
 
--- The open string nearest to the note, and how far off it is in cents.
-local function nearest(p)
-  local best
-  for _, n in ipairs(chosen.notes) do
-    if not best or math.abs(p - n) < math.abs(p - best) then best = n end
-  end
-  return best, math.floor((p - best) * 100 + 0.5)
-end
-
-local function colour_of(cents)
-  local a = math.abs(cents)
-  if a <= 5 then return GREEN, 'GREEN' end
-  if a <= 20 then return YELLOW, 'YELLOW' end
-  return RED, 'RED'
+local function blit(x, y, w, pal, data)
+  frame.display.bitmap(x, y, w, 2, pal, data)
 end
 
 local function draw_list()
   local first = math.max(1, math.min(cursor - LIST_ROWS // 2,
                                      #INSTRUMENTS - LIST_ROWS + 1))
-  for row = 0, LIST_ROWS - 1 do
-    local i = first + row
+  for i = first, math.min(first + LIST_ROWS - 1, #INSTRUMENTS) do
     local it = INSTRUMENTS[i]
-    if not it then break end
-    local y = LIST_Y + row * ROW_H
-    local on = i == cursor
-    frame.display.text((on and '> ' or '  ') .. it.name, LEFT_X, y,
-                       { color = on and 'YELLOW' or 'WHITE' })
+    local y = LIST_Y + (i - first) * ROW_H
     local names = {}
     for k, n in ipairs(it.notes) do names[k] = NAMES[n % 12 + 1] end
-    frame.display.text(table.concat(names, ' '), TUNING_X, y,
-                       { color = 'GREY' })
+    put((i == cursor and '> ' or '  ') .. it.name, LEFT_X, y,
+        i == cursor and 'YELLOW' or 'WHITE')
+    put(table.concat(names, ' '), TUNING_X, y, 'GREY')
   end
 end
 
 local function draw_tuning()
+  -- the open string nearest to the note, and how far off it is in cents
   local target, cents
-  if pitch then target, cents = nearest(pitch) end
+  if pitch then
+    for _, n in ipairs(chosen.notes) do
+      if not target or math.abs(pitch - n) < math.abs(pitch - target) then
+        target = n
+      end
+    end
+    cents = math.floor((pitch - target) * 100 + 0.5)
+  end
+  -- green within 5 cents, yellow within 20, red beyond; grey: not heard
   local palette, colour = GREY, 'GREY'
-  if pitch and live then palette, colour = colour_of(cents) end
+  if pitch and live then
+    local a = math.abs(cents)
+    if a <= 5 then palette, colour = GREEN, 'GREEN'
+    elseif a <= 20 then palette, colour = YELLOW, 'YELLOW'
+    else palette, colour = RED, 'RED' end
+  end
 
   -- the strings, the one nearest the note lit
   local notes = chosen.notes
@@ -213,50 +207,36 @@ local function draw_tuning()
   for k, n in ipairs(notes) do
     local cx = STRINGS_X + (k - 1) * slot + slot // 2
     local lit = live and n == target
-    frame.display.text(name_of(n), cx - 22, LABEL_Y,
-                       { color = lit and colour or 'WHITE' })
-    frame.display.bitmap(cx - 4, LINE_Y, 8, 2, lit and palette or GREY, LINE)
+    put(name_of(n), cx - 22, LABEL_Y, lit and colour or 'WHITE')
+    blit(cx - 4, LINE_Y, 8, lit and palette or GREY, LINE)
   end
 
-  -- the scale: -50 .. +50 cents from that string
+  -- the scale: -50 .. +50 cents from that string, the centre tick taller
   local mid = SCALE_X + SCALE_W // 2
-  frame.display.bitmap(SCALE_X, SCALE_Y, SCALE_W, 2, GREY, RULE)
+  blit(SCALE_X, SCALE_Y, SCALE_W, GREY, RULE)
   for k = -5, 5 do
-    local x = mid + math.floor(k * 10 * CENTS_PX) - 4
-    if k == 0 then
-      frame.display.bitmap(x, SCALE_Y - TICK_H * 2, 8, 2, GREY, CENTRE)
-    else
-      frame.display.bitmap(x, SCALE_Y - TICK_H, 8, 2, GREY, TICK)
+    local tick = k == 0 and CENTRE or TICK
+    blit(mid + math.floor(k * 10 * CENTS_PX) - 4, SCALE_Y - #tick, 8, GREY,
+         tick)
+  end
+
+  local hint = 'play a string'
+  if pitch then
+    local c = math.max(-50, math.min(50, cents))
+    blit(mid + math.floor(c * CENTS_PX) - 4, SCALE_Y - NEEDLE_H, 8, palette,
+         NEEDLE)
+    -- the note as heard, then how far from the string
+    put(name_of(math.floor(pitch + 0.5)), LEFT_X, NOTE_Y,
+        live and 'WHITE' or 'GREY')
+    put(string.format('%+d c', cents), 200, NOTE_Y, colour)
+    put(string.format('%.1f Hz', hz), 380, NOTE_Y, 'GREY')
+    if live then
+      hint = cents < -5 and 'tune up' or cents > 5 and 'tune down'
+             or 'in tune'
     end
   end
-
-  if not pitch then
-    frame.display.text(status ~= '' and status or 'play a string', LEFT_X,
-                       HINT_Y, { color = status ~= '' and 'YELLOW' or 'GREY' })
-    return
-  end
-
-  local c = math.max(-50, math.min(50, cents))
-  frame.display.bitmap(mid + math.floor(c * CENTS_PX) - 4,
-                       SCALE_Y - NEEDLE_H, 8, 2, palette, NEEDLE)
-
-  -- the note as heard, then how far from the string
-  local heard_note = math.floor(pitch + 0.5)
-  frame.display.text(name_of(heard_note), LEFT_X, NOTE_Y,
-                     { color = live and 'WHITE' or 'GREY' })
-  frame.display.text(string.format('%+d c', cents), 200, NOTE_Y,
-                     { color = colour })
-  frame.display.text(string.format('%.1f Hz', hz), 380, NOTE_Y,
-                     { color = 'GREY' })
-
-  local hint
-  if status ~= '' then hint = status
-  elseif not live then hint = 'play a string'
-  elseif cents < -5 then hint = 'tune up'
-  elseif cents > 5 then hint = 'tune down'
-  else hint = 'in tune' end
-  frame.display.text(hint, LEFT_X, HINT_Y,
-                     { color = status ~= '' and 'YELLOW' or colour })
+  if status ~= '' then hint, colour = status, 'YELLOW' end
+  put(hint, LEFT_X, HINT_Y, colour)
 end
 
 function _M.draw()
@@ -277,7 +257,8 @@ end
 
 function _M.on_tap()
   if chosen then return end
-  choose(cursor)
+  chosen = INSTRUMENTS[cursor]
+  pitch, live, heard_at, status = nil, false, nil, ''
   _M.host.set_pref('instrument', cursor)
   listen()
   return 'tune ' .. cursor
