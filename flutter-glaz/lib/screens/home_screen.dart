@@ -395,7 +395,8 @@ class _GlassesAppCard extends StatelessWidget {
 
   Widget _build(BuildContext context, FrameLink link, GlassesApp app) {
     final text = Theme.of(context).textTheme;
-    final ready = link.connected && !link.busy;
+    final ready = link.connected && !link.busy && link.model.supported;
+    final unsupported = link.connected && !link.model.supported;
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -422,6 +423,18 @@ class _GlassesAppCard extends StatelessWidget {
               leading: const Icon(Icons.error_outline, color: FrameColors.red),
               title: const Text('Last attempt failed'),
               subtitle: Text(link.taskError!),
+            ),
+          if (unsupported)
+            ListTile(
+              leading: const Icon(
+                Icons.info_outline,
+                color: FrameColors.yellow,
+              ),
+              title: Text('${link.model.label} is not supported yet'),
+              subtitle: const Text(
+                'glaz finds these glasses, but its app runs on Frame only '
+                'for now (docs/HALO.md)',
+              ),
             ),
           if (ready && app == GlassesApp.missing)
             const ListTile(
@@ -460,6 +473,7 @@ class _GlassesAppCard extends StatelessWidget {
             ),
           ),
           ListTile(
+            enabled: !unsupported,
             leading: const Icon(Icons.memory, color: FrameColors.skyBlue),
             title: const Text('Firmware'),
             subtitle: Text(link.firmware ?? 'Install another version'),
