@@ -442,6 +442,7 @@ Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 | `0x07` | photo chunk | `[0x07, jpeg bytes...]` | part of a photo (Camera module) |
 | `0x08` | photo end | `[0x08]` | last chunk; the photo is complete |
 | `0x1F` | `REC_START` | `[0x1F, bits, rate / 1000, for]` | Recorder starts a recording — see [Recorder](#recorder); `for` = `1`: the Assistant listening, see [Assistant](#assistant); `2`: Translate listening, see [Translate](#translate); `3`: the Tuner listening, see [Tuner](#tuner). Any `for` but `0` (or none) is not a recording |
+| `0x02` | `SCALE_GET` | `[0x02, n]` | Scales wants scale `n` (0-based); the phone answers with `MODULE_CALL` `scales` -- see [SCALES.md](SCALES.md) |
 | `0x03` | `TUNER` | `[0x03, 1, mic]` / `[0x03, 0]` | Tuner: listen, with the phone's microphone (`mic` 0) or the glasses' (1); stop -- see [Tuner](#tuner) |
 | `0x04` | `ASSIST` | `[0x04, op, id (2)]` | Assistant lists the chats (`1`), goes on with chat `id` (`2`) or starts a new one (`3`) -- see [Assistant](#assistant) |
 | `0x10` | `REC_DROP` | `[0x10]` | Assistant was left mid-question (a double tap): forget it, ask nothing, drop an answer on its way — see [Assistant](#assistant) |

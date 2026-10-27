@@ -76,6 +76,17 @@ fret 0 has a nut after its first column.
 | -- | Down / Up | the next / previous scale; on the list, the next instrument |
 | single tap | OK | the next scale; on the list, take the instrument |
 
+The scales live on the phone (`flutter-glaz/lib/services/scales.dart`);
+the glasses hold only the one on screen, for their memory's sake: 14 of
+them in the module ran it out of memory ("not enough memory"). The module
+asks for scale `n` with `SCALE_GET` `[0x02, n]` and the phone answers with
+`MODULE_CALL` `scales`:
+`g<n> <count> <name>|<short>|<notes>|<flavour>|<base short>|<base notes>`,
+a hex digit a note, semitones above the root (`g2 14
+dorian|dorian|023579a|9|m pent|0357a`); the base is empty for a
+pentatonic, which is drawn alone. Without the phone there is the minor
+pentatonic only, built in.
+
 The scales, in Up / Down order: minor pentatonic, blues, Dorian,
 Phrygian, natural minor (Aeolian), harmonic minor, melodic minor,
 Locrian, major pentatonic, major blues, major (Ionian), Mixolydian,

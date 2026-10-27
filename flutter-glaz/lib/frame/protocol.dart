@@ -57,6 +57,10 @@ const noticesGet = 0x0E;
 /// 3, 4 reserved (phone microphone, photo)
 const translate = 0x0F;
 
+/// modules/scales.lua: [n] scale n wanted, answered with MODULE_CALL
+/// 'scales' (services/scales.dart)
+const scaleGet = 0x02;
+
 /// modules/tuner.lua: [1, mic] a tuning on screen, listen (mic 0 the
 /// phone's, 1 the glasses'), [0] stop
 const tuner = 0x03;
@@ -135,6 +139,7 @@ const codeNames = {
   noticesGet: 'NOTICES_GET',
   translate: 'TRANSLATE',
   tuner: 'TUNER',
+  scaleGet: 'SCALE_GET',
   photoChunk: 'photo chunk',
   photoEnd: 'photo end',
   audioChunk: 'audio chunk',

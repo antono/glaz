@@ -6,7 +6,7 @@
 -- It opens on the instruments: tilt to one, tap to take it. Then:
 --
 --   tilt right / left -- the next box up / down the neck
---   single tap        -- the next scale (MODES)
+--   single tap        -- the next scale
 --   double tap        -- back to the instruments; there, to the menu
 --
 -- A Flipper or a keyboard does the same through the phone (docs/REMOTE.md):
@@ -18,6 +18,15 @@
 -- or, for a major scale, the major one. Colours: the root red, the scale's
 -- own note -- the one that makes it what it is, Dorian's raised 6th --
 -- green, the rest white. Frame only for now.
+--
+-- The scales live on the phone (flutter-glaz/lib/services/scales.dart):
+-- the glasses keep only the one on screen, for their memory's sake. They
+-- ask for scale n (0-based) with SCALE_GET [0x02, n]; the phone answers
+-- with remote(arg) (MODULE_CALL 'scales'):
+--   'g<n> <count> <name>|<short>|<notes>|<flavour>|<base short>|<base notes>'
+-- notes a hex digit each, semitones above the root; flavour one digit or
+-- none; the base empty for a pentatonic, which is shown alone. Without a
+-- phone the minor pentatonic, built in, is all there is.
 local _M = {}
 
 _M.label = 'Scales'
@@ -29,46 +38,12 @@ _M.quiet = true           -- draw() is the screen; tick() text is not shown
 local KEYS = { C = 0, ['C#'] = 1, D = 2, Eb = 3, E = 4, F = 5, ['F#'] = 6,
                G = 7, Ab = 8, A = 9, Bb = 10, B = 11 }
 
--- Scales as semitones above the root; flavour is the scale's own note,
--- drawn green. A major one (major) is shown against the major pentatonic,
--- the rest against the minor one; the boxes are the pentatonic's.
+local SCALE_GET = 0x02
+
+-- Semitones above the root; flavour the scale's own note, drawn green;
+-- base the pentatonic it is shown against, whose boxes it takes.
 local MINOR_PENT = { name = 'minor pent', short = 'm pent',
                      notes = { 0, 3, 5, 7, 10 } }
-local MAJOR_PENT = { name = 'major pent', short = 'M pent',
-                     notes = { 0, 2, 4, 7, 9 }, major = true }
-local MODES = {
-  MINOR_PENT,
-  { name = 'blues',       short = 'blues',  notes = { 0, 3, 5, 6, 7, 10 },
-    flavour = 6 },
-  { name = 'dorian',      short = 'dorian', notes = { 0, 2, 3, 5, 7, 9, 10 },
-    flavour = 9 },
-  { name = 'phrygian',    short = 'phryg',  notes = { 0, 1, 3, 5, 7, 8, 10 },
-    flavour = 1 },
-  { name = 'minor',       short = 'minor',  notes = { 0, 2, 3, 5, 7, 8, 10 },
-    flavour = 8 },                                       -- Aeolian
-  { name = 'harm minor',  short = 'harm',   notes = { 0, 2, 3, 5, 7, 8, 11 },
-    flavour = 11 },
-  { name = 'mel minor',   short = 'melod',  notes = { 0, 2, 3, 5, 7, 9, 11 },
-    flavour = 11 },
-  { name = 'locrian',     short = 'locr',   notes = { 0, 1, 3, 5, 6, 8, 10 },
-    flavour = 6 },
-  MAJOR_PENT,
-  { name = 'major blues', short = 'Mblues', notes = { 0, 2, 3, 4, 7, 9 },
-    flavour = 3, major = true },
-  { name = 'major',       short = 'major',  notes = { 0, 2, 4, 5, 7, 9, 11 },
-    flavour = 11, major = true },                        -- Ionian
-  { name = 'mixolydian',  short = 'mixo',   notes = { 0, 2, 4, 5, 7, 9, 10 },
-    flavour = 10, major = true },
-  { name = 'lydian',      short = 'lydian', notes = { 0, 2, 4, 6, 7, 9, 11 },
-    flavour = 6, major = true },
-  { name = 'phryg dom',   short = 'ph dom', notes = { 0, 1, 4, 5, 7, 8, 10 },
-    flavour = 4, major = true },
-}
-
--- The pentatonic a scale is shown against, and whose boxes it takes
-local function base_of(m)
-  return m.major and MAJOR_PENT or MINOR_PENT
-end
 
 -- Instruments: open strings as semitones above C, drawn from the first
 -- (the highest) on top. Boxes start on the string ref (the lowest unless
@@ -131,7 +106,9 @@ local DOTS = {}           -- dot size -> circle
 
 local key, dual = 9, true
 local inst, picked = 1, false  -- the instrument; false: choosing it
-local mode, box = 1, 1
+local scale = MINOR_PENT   -- the one on screen
+local n, count = 0, nil    -- its number, of count; nil: the phone not heard
+local box = 1
 local last_input = 0
 
 -- The boxes: one starting on each note of the pentatonic on the reference
@@ -140,7 +117,7 @@ local last_input = 0
 local function box_start(n)
   local it = INSTRUMENTS[inst]
   local root = (key - it.strings[it.ref or #it.strings]) % 12
-  local s = root + base_of(MODES[mode]).notes[n]
+  local s = root + (scale.base or scale).notes[n]
   if s + FRETS - 1 > it.last and s >= 12 then s = s - 12 end
   return s
 end
@@ -206,13 +183,13 @@ end
 
 function _M.draw()
   if not picked then return draw_instruments() end
-  local m = MODES[mode]
+  local m = scale
   local start = box_start(box)
   local text = frame.display.text
   text(NAMES[key + 1] .. ' ' .. m.name, LEFT_X, TITLE_Y, { color = 'WHITE' })
   text('fr ' .. start, FRET_X, TITLE_Y, { color = 'GREY' })
-  local base = base_of(m)
-  if dual and m ~= base then
+  local base = m.base
+  if dual and base then
     for i, s in ipairs({ base, m }) do
       local b = DUAL[i]
       text(s.short, LEFT_X, b.y + LABEL_Y, { color = 'GREY' })
@@ -223,9 +200,25 @@ function _M.draw()
   end
 end
 
+local function m_name() return scale.name end
+
+-- A hex digit a note: '0357a' -> { 0, 3, 5, 7, 10 }
+local function semis(h)
+  local t = {}
+  for c in h:gmatch('%x') do t[#t + 1] = tonumber(c, 16) end
+  return t
+end
+
+-- The scale dir away from this one, from the phone; the first if it has
+-- not said how many there are
+local function ask(dir)
+  local want = count and (n + dir) % count or 0
+  pcall(frame.bluetooth.send, string.char(SCALE_GET, want))
+end
+
 -- What is on screen: any change redraws it
 local function state()
-  return table.concat({ key, inst, tostring(picked), mode, box,
+  return table.concat({ key, inst, tostring(picked), m_name(), box,
                         tostring(dual) }, ' ')
 end
 
@@ -242,7 +235,7 @@ end
 
 function _M.on_roll(dir)
   if picked then
-    box = (box - 1 + dir) % #MINOR_PENT.notes + 1
+    box = (box - 1 + dir) % #(scale.base or scale).notes + 1
   else
     inst = (inst - 1 + dir) % #INSTRUMENTS + 1
   end
@@ -252,9 +245,10 @@ end
 
 function _M.on_tap()
   if picked then
-    mode = mode % #MODES + 1
+    ask(1)
   else
     picked, box = true, 1
+    ask(0)   -- the scale on screen, fresh: the phone may have it newer
   end
   last_input = frame.time.utc()
   return state()
@@ -264,7 +258,21 @@ end
 -- instrument, the cursor, as a tilt
 function _M.on_up_down(dir)
   if not picked then return _M.on_roll(dir) end
-  mode = (mode - 1 + dir) % #MODES + 1
+  ask(dir)
+  last_input = frame.time.utc()
+  return state()
+end
+
+-- The phone's answer: the scale asked for, as above
+function _M.remote(arg)
+  local i, c, name, short, notes, flav, bshort, bnotes =
+    arg:match('^g(%d+) (%d+) ([^|]*)|([^|]*)|(%x*)|(%x?)|([^|]*)|(%x*)$')
+  if not i then return end
+  n, count = tonumber(i), tonumber(c)
+  scale = { name = name, short = short, notes = semis(notes),
+            flavour = flav ~= '' and tonumber(flav, 16) or nil,
+            base = bnotes ~= '' and { short = bshort, notes = semis(bnotes) }
+                   or nil }
   last_input = frame.time.utc()
   return state()
 end

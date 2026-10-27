@@ -23,6 +23,7 @@ import 'notifications.dart';
 import 'photo_dir.dart';
 import 'photos.dart';
 import 'reader.dart';
+import 'scales.dart';
 import 'recordings.dart';
 import 'speech.dart';
 import 'term.dart';
@@ -55,6 +56,7 @@ class Services {
     this.appCheck,
     this.tuner,
     this.parts,
+    this.scales,
   ) : hold = LinkHold(link, settings, flipperRemote);
 
   final Settings settings;
@@ -81,6 +83,7 @@ class Services {
   final GeminiService gemini;
   final AppCheck appCheck;
   final TunerService tuner;
+  final ScalesService scales;
 
   /// Which apps each pair of glasses has (docs/DEVICES.md).
   final GlassesParts parts;
@@ -144,6 +147,7 @@ class Services {
       AppCheck(link, s),
       TunerService(link, s),
       await GlassesParts.load(rootBundle),
+      ScalesService(link),
     );
     await services.reader.load();
     await services.assistant.load();
@@ -154,6 +158,7 @@ class Services {
     services.flipperRemote.attach();
     services.term.attach();
     services.tuner.attach();
+    services.scales.attach();
     services.keys.terminal = services.term;
     link.onConnected.add(() async {
       if (s.serviceOn('clock')) await link.sendClock();
