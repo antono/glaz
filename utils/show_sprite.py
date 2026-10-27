@@ -8,7 +8,7 @@ drawing helper, then draws it centred and leaves it on screen.
     .venv/bin/python utils/show_sprite.py flipper 3
 
 Arguments: sprite name (a file in sprites/, without .lua) and scale.
-The drawing is the same as the splash in frame_app.lua: 16-colour
+The drawing is the same as the splash in glaz.lua: 16-colour
 frame.display.bitmap, one call per art row.
 """
 import asyncio

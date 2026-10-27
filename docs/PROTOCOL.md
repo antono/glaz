@@ -16,7 +16,7 @@ rewriting anything that already works.
 
 ## Division of responsibility
 
-| | Glasses (`frame_app.lua`) | Host (anything) |
+| | Glasses (`glaz.lua`) | Host (anything) |
 | --- | --- | --- |
 | Item list | stores | sends once |
 | Cursor, scrolling | **yes** | no |
@@ -47,6 +47,13 @@ return _M
 ```
 
 A launched module owns the whole display — the menu gets out of the way.
+
+Next to it, a module has a part for each pair of glasses it runs on:
+`battery.frame.lua`, `battery.halo.lua`. What differs between the glasses
+goes there, and the module gets it as `local D = select(2, ...)`. A module
+with nothing of its own on some glasses has an empty part there
+(`return {}`). One without a part for some glasses is neither uploaded to
+them nor listed in the phone's Menu tab for them. See docs/DEVICES.md.
 
 There are two kinds, chosen with `_M.mode`:
 
@@ -180,7 +187,7 @@ return _M
 ```
 
 Adding an item means adding one file and listing its name in the `MENU` tree
-at the top of `frame_app.lua`:
+at the top of `glaz.lua`:
 
 ```lua
 local MENU = {
@@ -195,7 +202,7 @@ A string is a module; a table is a submenu — its `label`, then its entries,
 which can be submenus again. The order is the display order. Modules are
 numbered in tree order (`photo` = 1, `timeseries` = 2, ...); that number is the
 `index` in `APP_START` / `APP_STOP`. The host uploads every
-`modules/*.lua` to the device root, because `frame_app.lua` requires them by
+`modules/*.lua` to the device root, because `glaz.lua` requires them by
 bare name.
 
 Two failures are contained deliberately:
@@ -230,7 +237,7 @@ Each tap count means one thing everywhere:
 | **3** | sleep — deep sleep, from any state |
 
 However they get there -- three taps, Sleep, the idle timeout -- the glasses
-show the eye closing for a second before deep sleep (`app/glaz_blink.lua`,
+show the eye closing for a second before deep sleep (`app/glaz_blink.frame.lua`,
 made by `flutter-glaz/tool/logo.py blink`), or `sleeping...` if that file
 cannot be loaded: a dark screen alone looks the same as a hang.
 
@@ -527,7 +534,7 @@ phone always reaches them.
 
 ### Internet
 
-A module asks through `_M.host`, which `frame_app.lua` gives every module
+A module asks through `_M.host`, which `glaz.lua` gives every module
 when it loads it:
 
 ```lua
@@ -678,7 +685,7 @@ one already in the library).
 
 **From the phone.** The Remote tab's record button sends `MODULE_CALL`
 (`0x2D`) with `recorder\non` or `recorder\noff`. `MODULE_CALL` is generic:
-`frame_app.lua` knows no module by name, it finds the one named and calls
+`glaz.lua` knows no module by name, it finds the one named and calls
 its `remote(arg)` where it is: on screen, in the background, or -- not
 running -- started straight into the background, so the screen stays as it
 was (another background module is stopped for it: there is only one). A
@@ -822,7 +829,7 @@ mode goes over the wire.
 | double tap | leave | back to the chooser: end the sound, close the session | back to the chooser: the camera off, close the session |
 
 **Photo.** A tap takes a photo as the phone's remote does
-(`app/glaz_photo.lua`, loaded for it alone): 720 px, quality HIGH, 1.5 s
+(`app/glaz_photo.frame.lua`, loaded for it alone): 720 px, quality HIGH, 1.5 s
 of auto exposure, the loop waiting meanwhile. Its `PHOTO_FROM` is
 `[0x1A, 255]`: Photos does not keep it, Translate reads it. The phone
 finds the blocks of text on it (ML Kit text recognition), tells their
@@ -837,7 +844,7 @@ The camera stays on while Photo is open and goes off when Translate
 closes.
 
 **Screen.** Four rows of the log and a status row under them, not five
-rows: the top bar is `frame_app.lua`'s, so the module has nowhere else
+rows: the top bar is `glaz.lua`'s, so the module has nowhere else
 for where it is and whether it listens. The status reads `12/137
 listening`: the last line on screen of all there are, then `listening`,
 `paused` or the phone's status text; `^` after it when not following,
@@ -930,7 +937,7 @@ messages of one code and waits for each packet's ack.
 **Nothing unasked.** The phone sends Translate nothing unless the glasses
 have its session open: from op 1 or 2 until op 0 or a disconnect. A
 push already queued when op 0 comes still goes out; Translate is a
-sleeping module, so `frame_app.lua` drops a `MODULE_CALL` to it once it
+sleeping module, so `glaz.lua` drops a `MODULE_CALL` to it once it
 has stopped, and the background module runs on. `start()` sends nothing
 and ignores `info.arg`; the module asks only on the wearer's gestures and from
 `tick()`.
@@ -1207,7 +1214,7 @@ Internet address.
 ### Files
 
 The phone can look at the files on the glasses while their app runs (Glaz >
-Glasses > Files) -- the REPL is blocked then, so `frame_app.lua` answers:
+Glasses > Files) -- the REPL is blocked then, so `glaz.lua` answers:
 
 - `FILES_GET` (`0x29`), `[id]` and a path, `''` for the root, is answered
   with `FILES` (`0x1D`): one line per entry, `d\tname` for a folder,
@@ -1225,14 +1232,14 @@ last, and start with `+`, or with `-` and the error (no such file, say).
 
 The firmware reads files a line at a time and drops the `\n`; the glasses
 send each line with a `\n` after it, as they read it, never holding the
-whole file -- `frame_app.lua` alone is over 50 KB. The main loop waits while
+whole file -- `glaz.lua` alone is over 50 KB. The main loop waits while
 a file goes out, so a file stops at `FILE_MAX` (64 KB) with a
 `... cut at 65536 bytes` line. Viewing only: nothing is written or removed.
 
 ### Lua console
 
 The phone can run Lua on the glasses while their app runs (Glaz > More >
-Lua console) -- the REPL is blocked then, so `frame_app.lua` runs it, in
+Lua console) -- the REPL is blocked then, so `glaz.lua` runs it, in
 `app/glaz_lua.lua`, loaded for the request:
 
 - `LUA_EVAL` (`0x30`), `[id]` and the Lua, is answered with `LUA_RESULT`
@@ -1413,7 +1420,7 @@ characters with `utf8.len`, not bytes.
 
 ### Codes the glasses do not know
 
-`frame_app.lua` drops a message with a code it has no parser for. Without
+`glaz.lua` drops a message with a code it has no parser for. Without
 that, `data.lua` prints `Error: No parser for flag` and keeps the message,
 so the print repeats on every pass of the main loop and each one goes out
 over Bluetooth -- a phone newer than the app on the glasses flooded the link
@@ -1477,7 +1484,7 @@ natural place to put "back" / "forward" through nested menus.
 the next step is allowed. Without it a single tilt would scroll the whole list
 in a fraction of a second.
 
-Tuning lives at the top of `frame_app.lua`:
+Tuning lives at the top of `glaz.lua`:
 
 ```lua
 local PITCH_THRESHOLD = 12   -- degrees to scroll one step
@@ -1592,8 +1599,12 @@ What it does, in the order any host should:
 
 1. `connect()`
 2. `upload_stdlua_libs(['data'])` — the transport, onto the glasses
-3. `upload_file(m, m.name)` for every `modules/*.lua` — the menu items
-4. `upload_frame_app('frame_app.lua')` — the application itself
+3. `upload_file(m, m.name)` for `app/*.lua` and the `modules/*.lua` that
+   are Frame's, with their Frame parts (docs/DEVICES.md) — the app's parts
+   and the menu items
+4. `glaz.lua` and `glaz.frame.lua` as `glaz_app.lua` and
+   `glaz_app.frame.lua`, then `upload_frame_app()` of
+   `app/glaz_boot.frame.lua` as `main.lua` — the application itself
 5. `start_frame_app()` — waits for the line `Frame app is running`
 6. `register_data_response_handler(..., [0x11, 0x12, 0x13, 0x14], handler)`
 7. `send_message(0x23, ...)` — the wall clock for the top bar
@@ -1607,7 +1618,7 @@ them by bare name.
 
 ### Deploy as `main.lua`, or it will not survive
 
-The app is uploaded as **`main.lua`**, not the SDK's default `frame_app.lua`.
+The app is uploaded as **`main.lua`**, not the SDK's default `glaz.lua`.
 This is what makes the glasses autonomous: the firmware auto-runs `main.lua` on
 power-on and after a reset. Anything under another name has to be `require()`d
 by a host on every connection, and `stop_frame_app()`'s reset signal leaves it

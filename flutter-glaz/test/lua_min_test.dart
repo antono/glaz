@@ -40,7 +40,7 @@ comment ]] local x = 137
     }
     final dir = Directory.systemTemp.createTempSync('glaz_min');
     final files = [
-      File('assets/lua/frame_app.lua'),
+      File('assets/lua/glaz.lua'),
       for (final d in ['app', 'modules', 'lib'])
         ...Directory('assets/lua/$d')
             .listSync()

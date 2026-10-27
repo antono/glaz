@@ -1,9 +1,16 @@
 import 'package:flutter/services.dart';
 
-/// A firmware package the app can install: a Nordic DFU zip from
-/// assets/firmware/ (tool/fetch_firmware.sh puts them there).
+import 'model.dart';
+
+/// A firmware package the app can install, from assets/firmware/
+/// (tool/fetch_firmware.sh puts them there), named for the glasses it is
+/// for: `frame-firmware-<version>.zip`, a Nordic DFU zip. Halo's would be
+/// `halo-firmware-<version>`; the app has none yet (docs/HALO.md).
 class FirmwarePackage {
-  FirmwarePackage(this.asset, this.version);
+  FirmwarePackage(this.asset, this.version, [this.model = GlassesModel.frame]);
+
+  /// The glasses it is for; never offered to others.
+  final GlassesModel model;
 
   /// e.g. assets/firmware/frame-firmware-v25.278.1113.zip
   final String asset;
@@ -29,17 +36,29 @@ class FirmwarePackage {
       (await bundle.load(asset)).buffer.asUint8List();
 }
 
-final _name = RegExp(r'^assets/firmware/frame-firmware-(v[^/]+)\.zip$');
+final _name = RegExp(r'^assets/firmware/(\w+)-firmware-(v[^/]+)\.(zip|bin)$');
 
-/// Newest first; custom builds and official ones sort together by date.
-Future<List<FirmwarePackage>> firmwarePackages(AssetBundle bundle) async {
+/// The packages for [model], newest first; custom builds and official ones
+/// sort together by date. One named for other glasses, or for none we
+/// know, is left out.
+Future<List<FirmwarePackage>> firmwarePackages(
+  AssetBundle bundle,
+  GlassesModel model,
+) async {
   final manifest = await AssetManifest.loadFromAssetBundle(bundle);
-  final list = [
-    for (final a in manifest.listAssets())
-      if (_name.firstMatch(a) case final m?) FirmwarePackage(a, m[1]!),
-  ];
+  final list = firmwareFor(manifest.listAssets(), model);
   list.sort(
     (a, b) => (b.built ?? DateTime(0)).compareTo(a.built ?? DateTime(0)),
   );
   return list;
 }
+
+/// The packages among [assets] that are for [model], in no order.
+List<FirmwarePackage> firmwareFor(
+  Iterable<String> assets,
+  GlassesModel model,
+) => [
+  for (final a in assets)
+    if (_name.firstMatch(a) case final m? when m[1] == model.name)
+      FirmwarePackage(a, m[2]!, model),
+];

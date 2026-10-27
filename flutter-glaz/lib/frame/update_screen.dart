@@ -135,3 +135,43 @@ class GlassesPicture {
     return t.length > 25 ? '${t.substring(0, 24)}~' : t;
   }
 }
+
+/// Halo's picture (docs/HALO.md): its round 256x256 panel has no room for
+/// the eye, takes colours as numbers and draws at once. The line, centred,
+/// and under it the progress in per cent or [GlassesPicture.draw]'s second
+/// line, in 8 px Dogica.
+class HaloPicture extends GlassesPicture {
+  HaloPicture(super.run);
+
+  /// Characters an 8 px line holds across the middle of the circle.
+  static const width = 28;
+
+  @override
+  Future<void> load() => run(
+    'frame.display.power_save(false) '
+        'function T(s,y) frame.display.set_font(0,8,1) '
+        'frame.display.text(s,129-#s*4,y,0xFFFFFF) end '
+        "print('p0')",
+    'p0',
+  );
+
+  @override
+  Future<void> draw(String line, {double? progress, String? second}) {
+    _line = line;
+    _second = second;
+    _progress = progress;
+    final under = progress != null
+        ? '${(progress.clamp(0.0, 1.0) * 100).round()}%'
+        : second ?? '';
+    return run(
+      "frame.display.clear() T('${_fit(line)}',116) "
+          "T('${_fit(under)}',132) print('pw')",
+      'pw',
+    );
+  }
+
+  static String _fit(String s) {
+    final t = s.replaceAll(RegExp(r"[^ -~]|['\\]"), '?');
+    return t.length > width ? '${t.substring(0, width - 1)}~' : t;
+  }
+}

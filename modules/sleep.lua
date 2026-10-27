@@ -2,7 +2,7 @@
 -- docs/PROTOCOL.md.
 --
 -- Deep sleep is normally automatic, but it never happens while a host is
--- connected or a module runs in the background (frame_app.lua). This forces
+-- connected or a module runs in the background (glaz.lua). This forces
 -- it: everything is closed, the background module included, and the device
 -- parks until a tap. Because that stops work the user may care about, the
 -- screen first says which background module will be stopped.
@@ -10,7 +10,7 @@
 --   single tap -- sleep
 --   double tap -- back, nothing happens
 --
--- frame_app.lua passes start() a table with the background module's label
+-- glaz.lua passes start() a table with the background module's label
 -- (or nil), and treats 'sleep' as on_tap()'s "done" value as a request for
 -- deep sleep.
 local _M = {}

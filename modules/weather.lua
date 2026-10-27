@@ -2,10 +2,10 @@
 -- see docs/PROTOCOL.md.
 --
 --   single tap -- fetch again
---   double tap -- back to the menu (handled by frame_app.lua)
+--   double tap -- back to the menu (handled by glaz.lua)
 --
 -- The example of a module using the Internet through the phone (_M.host, see
--- frame_app.lua). The phone answers only if this module is allowed the
+-- glaz.lua). The phone answers only if this module is allowed the
 -- Internet in Glaz > Menu; otherwise the status is 403.
 --
 -- wttr.in places the request by the phone's IP address, unless the phone

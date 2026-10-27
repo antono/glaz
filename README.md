@@ -11,6 +11,15 @@ An unofficial app for the
 with a companion app for your phone. It is not made or endorsed by Brilliant
 Labs.
 
+Initial support for
+[Brilliant Labs Halo](https://brilliant.xyz/products/halo) is implemented.
+The phone app finds Halo, tells it from Frame, and uploads to it the menu
+and the apps that run there. It has been tried in Brilliant Labs' Halo
+emulator, not yet on a Halo. See [docs/HALO.md](docs/HALO.md).
+
+**Support:** ask questions and report problems in the
+[support channel on Discord](https://discord.com/channels/963222352534048818/1561508870554259476).
+
 <!-- Photo: the Frame glasses -->
 <!-- ![Brilliant Labs Frame](docs/images/frame.jpg) -->
 
@@ -256,11 +265,19 @@ rebuild.
   remote, such as a Flipper Zero.
 - [docs/FLIPPER.md](docs/FLIPPER.md): a Flipper Zero's screen on the
   glasses.
-- [docs/HALO.md](docs/HALO.md): Brilliant Labs Halo: how the phone app
-  tells it from Frame, and what differs.
+- [docs/HALO.md](docs/HALO.md): Brilliant Labs Halo: its hardware,
+  Bluetooth and Lua next to Frame's, and what of glaz runs on it.
+- [docs/DEVICES.md](docs/DEVICES.md): more than one kind of glasses: each
+  file's parts for Frame and Halo, and what goes to which.
 - [flutter-glaz/README.md](flutter-glaz/README.md): the phone app.
 - [AGENTS.md](AGENTS.md): the rules for contributing (also used by coding
   agents).
+
+## Support
+
+Questions, problems and ideas: the
+[support channel on Discord](https://discord.com/channels/963222352534048818/1561508870554259476).
+Bugs can also go to [GitHub issues](https://github.com/antono/glaz/issues).
 
 ## License
 

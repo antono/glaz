@@ -51,7 +51,7 @@ class NotificationService extends ChangeNotifier {
   static const maxAnswer = 900;
 
   /// How wide a line of the list or of one opened may be, in px: the
-  /// screen from where the glasses draw a module's text (frame_app.lua,
+  /// screen from where the glasses draw a module's text (glaz.lua,
   /// LEFT_X) to its right edge, less a little.
   static const lineWidth = 560;
 

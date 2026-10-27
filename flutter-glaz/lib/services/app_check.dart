@@ -72,8 +72,6 @@ class AppCheck extends ChangeNotifier {
 
   Future<void> _check() async {
     _set(GlassesApp.unknown);
-    // Halo: no glaz app to look for yet, and none to offer (model.dart)
-    if (!link.model.supported) return;
     final connects = link.connects;
     // anything from the app will do; STATUS goes right after this
     final heard = await link.events.first
@@ -107,11 +105,14 @@ class AppCheck extends ChangeNotifier {
   /// Uploads main.lua and the apps switched on in Menu, as Upload on the
   /// Glasses tab does; then looks again.
   Future<void> upload() async {
-    if (!link.model.supported) return;
-    final files = await luaFiles(rootBundle, settings.installed);
-    await link.runTask(
-      'Upload',
-      (device, report) => uploadApp(device, files, report),
+    final files = await luaFiles(
+      rootBundle,
+      settings.installed,
+      model: link.model,
     );
+    await link.runTask('Upload', (device, report) async {
+      needBytecode(files, link.model);
+      await uploadApp(device, files, report, model: link.model);
+    });
   }
 }

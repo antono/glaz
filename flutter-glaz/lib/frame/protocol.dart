@@ -1,4 +1,4 @@
-// Message codes shared with ../frame_app.lua. See ../docs/PROTOCOL.md.
+// Message codes shared with ../glaz.lua. See ../docs/PROTOCOL.md.
 
 // Host -> Frame
 const menuSet = 0x20;

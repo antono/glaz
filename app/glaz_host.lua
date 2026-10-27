@@ -1,11 +1,11 @@
 -- Services the phone provides to the modules, and the settings it sends:
--- part of frame_app.lua (main.lua on the glasses), in a file of its own so
+-- part of glaz.lua (main.lua on the glasses), in a file of its own so
 -- it compiles on its own -- main.lua in one piece no longer fitted in the
 -- glasses' memory to compile. ASCII only, see docs/PROTOCOL.md.
 --
--- frame_app.lua requires it once at start and keeps what it returns.
+-- glaz.lua requires it once at start and keeps what it returns.
 
--- Must match frame_app.lua and docs/PROTOCOL.md.
+-- Must match glaz.lua and docs/PROTOCOL.md.
 local NET_REQUEST  = 0x19 -- [0x19, id, more, bytes...] a module's HTTP request
 local LOCATION_GET = 0x1C -- [0x1C, id, module...] a module asks where it is
 local NET_TIMEOUT  = 20   -- seconds before a request is given up on
@@ -53,11 +53,12 @@ local function save_prefs()
   for m, t in pairs(prefs) do
     for k, v in pairs(t) do lines[#lines + 1] = m .. '.' .. k .. '=' .. v end
   end
-  pcall(function()
+  local ok, e = pcall(function()
     local fh = frame.file.open(PREFS_FILE, 'write')
     fh:write(table.concat(lines, '\n'))
     fh:close()
   end)
+  if not ok and glaz_break(e) then error(e, 0) end
 end
 
 -- owner's pref key: default when unset, a number when default is one
@@ -85,11 +86,12 @@ end
 
 local function store_settings(text)
   settings = parse_settings(text)
-  pcall(function()
+  local ok, e = pcall(function()
     local fh = frame.file.open(SETTINGS_FILE, 'write')
     fh:write(text)
     fh:close()
   end)
+  if not ok and glaz_break(e) then error(e, 0) end
 end
 
 load_settings()

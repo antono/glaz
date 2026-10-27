@@ -6,7 +6,7 @@
 ///
 /// It matters for more than upload time. Frame's require() reads the whole
 /// file into memory before compiling it (lua_file_require in the firmware's
-/// file.c), so comments cost heap at the worst moment: frame_app.lua with
+/// file.c), so comments cost heap at the worst moment: glaz.lua with
 /// its comments ran the glasses out of memory on start. Strings, including
 /// long [[ ]] and [==[ ]==] ones, are copied untouched: '--:--' in a string
 /// is not a comment.

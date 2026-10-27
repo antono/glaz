@@ -4,12 +4,15 @@ import 'package:flutter/services.dart';
 import '../frame/dfu.dart';
 import '../frame/firmware.dart';
 import '../frame/link.dart';
+import '../frame/model.dart';
 import '../frame/upload.dart';
 import '../services/services.dart';
 
 /// Pick a firmware package and install it over Bluetooth. The packages are
 /// the DFU zips in assets/firmware/: the newest official releases and our
-/// own builds (tool/fetch_firmware.sh).
+/// own builds (tool/fetch_firmware.sh). Only those for the glasses at hand
+/// -- connected, or of last time -- are offered: Frame's never to a Halo,
+/// nor the other way round.
 class FirmwareScreen extends StatefulWidget {
   const FirmwareScreen({super.key});
 
@@ -18,9 +21,8 @@ class FirmwareScreen extends StatefulWidget {
 }
 
 class _FirmwareScreenState extends State<FirmwareScreen> {
-  late final Future<List<FirmwarePackage>> _packages = firmwarePackages(
-    rootBundle,
-  );
+  // by the glasses they are for, read once each
+  final _packages = <GlassesModel, Future<List<FirmwarePackage>>>{};
   FirmwarePackage? _armed; // the version whose Install is open
 
   @override
@@ -30,14 +32,17 @@ class _FirmwareScreenState extends State<FirmwareScreen> {
       appBar: AppBar(title: const Text('Firmware')),
       body: ListenableBuilder(
         listenable: link,
-        builder: (context, _) => FutureBuilder(
-          future: _packages,
-          builder: (context, snap) {
-            final packages = snap.data;
-            if (packages == null) return const SizedBox.shrink();
-            return _body(context, link, packages);
-          },
-        ),
+        builder: (context, _) {
+          final model = link.model;
+          return FutureBuilder(
+            future: _packages[model] ??= firmwarePackages(rootBundle, model),
+            builder: (context, snap) {
+              final packages = snap.data;
+              if (packages == null) return const SizedBox.shrink();
+              return _body(context, link, model, packages);
+            },
+          );
+        },
       ),
     );
   }
@@ -45,6 +50,7 @@ class _FirmwareScreenState extends State<FirmwareScreen> {
   Widget _body(
     BuildContext context,
     FrameLink link,
+    GlassesModel model,
     List<FirmwarePackage> packages,
   ) {
     final scheme = Theme.of(context).colorScheme;
@@ -89,21 +95,27 @@ class _FirmwareScreenState extends State<FirmwareScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(4, 24, 4, 8),
           child: Text(
-            'Available',
+            'Available for ${model.label}',
             style: text.titleSmall?.copyWith(color: scheme.primary),
           ),
         ),
         if (packages.isEmpty)
-          const Text('None. Run tool/fetch_firmware.sh and rebuild the app.'),
-        Card(
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            children: [
-              for (final p in packages)
-                _version(context, link, p, installed: p.version == installed),
-            ],
+          Text(
+            model == GlassesModel.frame
+                ? 'None. Run tool/fetch_firmware.sh and rebuild the app.'
+                : 'None: ${model.label} takes its updates over MCUmgr, '
+                      'which this app does not do yet (docs/HALO.md).',
+          )
+        else
+          Card(
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                for (final p in packages)
+                  _version(context, link, p, installed: p.version == installed),
+              ],
+            ),
           ),
-        ),
       ],
     );
   }
@@ -119,7 +131,8 @@ class _FirmwareScreenState extends State<FirmwareScreen> {
   }) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    final ready = link.connected && !link.busy;
+    // only onto the glasses it is for, connected
+    final ready = link.connected && !link.busy && link.model == p.model;
     final open = _armed == p && ready;
     final low = (link.battery ?? 100) < 30;
     void toggle() => setState(() => _armed = open ? null : p);
@@ -190,14 +203,20 @@ class _FirmwareScreenState extends State<FirmwareScreen> {
 
   Future<void> _install(FrameLink link, FirmwarePackage package) async {
     setState(() => _armed = null);
+    // Nordic DFU, Frame's; and never onto other glasses than its own
+    if (package.model != GlassesModel.frame || link.model != package.model) {
+      return;
+    }
     // the update wipes the glasses' files; the app goes back on after it
     final app = await luaFiles(
       rootBundle,
       Services.instance.settings.installed,
+      model: package.model,
     );
-    await link.runTask(
-      'Firmware',
-      (device, report) => installFirmware(link, device, package, app, report),
-    );
+    await link.runTask('Firmware', (device, report) async {
+      // before the update, not after it: the glasses would be left bare
+      needBytecode(app, package.model);
+      await installFirmware(link, device, package, app, report);
+    });
   }
 }

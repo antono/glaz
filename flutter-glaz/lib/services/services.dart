@@ -1,6 +1,9 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
+
 import '../frame/link.dart';
+import '../frame/parts.dart';
 import '../settings.dart';
 import '../term/hosts.dart';
 import 'agent_files.dart';
@@ -49,6 +52,7 @@ class Services {
     this.gemini,
     this.flipperRemote,
     this.appCheck,
+    this.parts,
   ) : hold = LinkHold(link, settings, flipperRemote);
 
   final Settings settings;
@@ -74,6 +78,9 @@ class Services {
   final TermService term;
   final GeminiService gemini;
   final AppCheck appCheck;
+
+  /// Which apps each pair of glasses has (docs/DEVICES.md).
+  final GlassesParts parts;
 
   static late Services instance;
 
@@ -132,6 +139,7 @@ class Services {
       GeminiService(link, s),
       FlipperRemote(link, s, lua),
       AppCheck(link, s),
+      await GlassesParts.load(rootBundle),
     );
     await services.reader.load();
     await services.assistant.load();

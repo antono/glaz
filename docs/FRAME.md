@@ -218,9 +218,10 @@ Everything below follows from that.
    only from Lua's hook, every call and 2000 instructions, and resets the
    glasses after 6 s (`watchdog.c`). The app's 19 KB of bytecode took 1 to
    3 s, longer the more broken up the heap, and sometimes past 6 s. So
-   `main.lua` on the glasses is a loader (`app/glaz_boot.lua`): it replaces
-   `require()` with one that reads 512 bytes at a time through
-   `frame.file` into `load()`, and loads the app, `glaz_app.lua`. Also:
+   `main.lua` on the glasses is a loader (`app/glaz_boot.frame.lua`, which
+   starts `app/glaz_boot.lua`): it replaces `require()` with one that reads
+   512 bytes at a time through `frame.file` into `load()`, and loads the
+   app, `glaz_app.lua`. Also:
    about 135 KB of heap is Lua's in all (measured: filled until 'not
    enough memory'); the app starts at about 89 KB.
 9. **BlueZ keeps the link after a script is killed.** Once bonded, the link
@@ -235,19 +236,19 @@ Everything below follows from that.
     - `require()` holds the whole source while compiling it: the firmware
       reads the file into one buffer, a byte at a time, and frees it only
       after `luaL_loadbuffer` (`lua_file_require` in `file.c`).
-      `frame_app.lua` is 60 KB, two thirds comments.
-    - Compiled code keeps debug information: `frame_app.lua` loaded is
+      `glaz.lua` is 60 KB, two thirds comments.
+    - Compiled code keeps debug information: `glaz.lua` loaded is
       66 KB, without it 19 KB.
     - All fifteen modules stayed loaded: 70 KB, more than the app.
 
     The Glaz app's Upload now minifies every file (comments and indentation
     out, line breaks kept: `flutter-glaz/lib/frame/lua_min.dart`), then has
     the glasses compile each one to bytecode without debug information while
-    their memory is free (`glaz_compile` in `upload.dart`); and
-    `frame_app.lua` loads a module only while it is on screen or in the
+    their memory is free (`glaz_compile` in `upload.dart`, since dropped:
+    see below); and `glaz.lua` loads a module only while it is on screen or in the
     background (`load_module`). Start went from 168 KB to 105 KB. Bytecode
     built with the app (`tool/luac_frame.c`) drops only local variables'
-    names: errors keep the file and line, `frame_app.lua:1234: ...`, about
+    names: errors keep the file and line, `glaz.lua:1234: ...`, about
     3 KB more for main. `host_test.py` still sends source as it is.
 
     Then main.lua itself grew past what the glasses could compile in one
@@ -257,12 +258,19 @@ Everything below follows from that.
     browsing, the remote's photo and the splash (loaded only when used).
     Compiled with debug information main.lua went from 71 KB to 57 KB.
 
+    In the end the glasses compile nothing. Every build of the phone app
+    carries bytecode for every file (`tool/compile_lua.sh`: apk, linux-app,
+    the Nix package, CI), and the app itself could no longer be compiled
+    there anyway. A file without bytecode -- edited since the build --
+    goes up as text, and glaz's `require()` loads it as text; the app
+    alone must be bytecode, and Upload stops before it starts when it is
+    not (`needBytecode` in `upload.dart`).
+
     Upload sends only what changed. The glasses hash each file they have
     (FNV-1a over what `read()` gives, `glaz_check` in `upload.dart`) and
     compare it with what the upload would write; files that match stay,
     main.lua included (moved aside as `glaz_prev.lua` while the upload
-    runs). Files sent as source to be compiled on the glasses always go:
-    only the glasses know what they compile to.
+    runs). Text is compared as text, bytecode as bytecode.
 12. **Many small `mono` sprites reboot the glasses.** Each
     `frame.display.text` glyph, `bitmap` or `mono` sprite is queued in the
     FPGA until `show()`. Measured with the first `mono` (a sprite a call),
@@ -275,6 +283,17 @@ Everything below follows from that.
     watchdog is fed from Lua on every call, so a hang inside one C call
     is the likeliest. `mono` now sends a sprite a color, not a cell
     (`attrs`); call `show()` after every screen.
+13. **The file system is small, and a file takes at least 4 KB.** It is
+    the flash left after the firmware, up to the bootloader (`flash.c`):
+    about 276 KB (68 blocks of 4 KB) with an official firmware, about
+    180 KB (44 blocks) with ours, which carries more fonts. littlefs gives
+    every file at least one block, but for the tiniest (32 bytes or less).
+    A full set of glaz's files with every app switched on takes about 50
+    blocks, so on our firmware some apps have to be off. Upload counts the
+    blocks it needs against `frame.file.space()` before it clears anything
+    (`_room` in `upload.dart`), and stops with the old app in place when
+    they do not fit. Once an upload ran out halfway, with "error writing
+    to file", and left the glasses with no app.
 
 The working recipe used both workarounds: find Frame by address with a long
 scan, and pair on connect. Both are monkey-patches around frame_ble 1.1.1, which
@@ -446,7 +465,7 @@ was never set — usable for timeouts.
 
 ## The menu app
 
-A working in-glasses menu lives in [`frame_app.lua`](../frame_app.lua), driven by
+A working in-glasses menu lives in [`glaz.lua`](../glaz.lua), driven by
 the reference host [`host_test.py`](../host_test.py). The wire protocol and the
 design rationale are in [`PROTOCOL.md`](PROTOCOL.md).
 
@@ -478,7 +497,7 @@ stays dark). An error in a tap or Bluetooth callback does the same: the
 firmware raises it again in whatever Lua was running, the app's main loop.
 
 So the loader, `app/glaz_boot.lua`, starts the app again. The main loop
-passes on every error but the break signal (`frame_app.lua`, the end of
+passes on every error but the break signal (`glaz.lua`, the end of
 `app_loop`); the loader then drops the globals the app set and its tap
 and Bluetooth callbacks, so the old app is freed before the new one
 loads, prints the error (the phone's Log, Glasses, has it), keeps it in
@@ -531,8 +550,12 @@ or `crash.txt`.
 ## Layout
 
 ```
-frame_app.lua      the application that runs on the glasses (uploaded as main.lua)
-modules/           one Lua file per menu item
+glaz.lua           the application that runs on the glasses (glaz_app.lua)
+glaz.frame.lua     its part for Frame: the screen (docs/DEVICES.md)
+glaz.halo.lua      its part for Halo
+app/               parts of glaz.lua in files of their own; glaz_boot's
+                   part for the glasses is main.lua there
+modules/           one Lua file per menu item, and its parts
 host_test.py       reference host: uploads everything, then listens
 check.sh           syntax, ASCII and unknown-global checks, no device needed
 docs/              FRAME.md, PLATFORM.md, PROTOCOL.md

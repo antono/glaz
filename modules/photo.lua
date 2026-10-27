@@ -2,7 +2,7 @@
 -- docs/PROTOCOL.md.
 --
 --   single tap -- take a photo
---   double tap -- back to the menu (handled by frame_app.lua)
+--   double tap -- back to the menu (handled by glaz.lua)
 --
 -- The glasses cannot show a JPEG (16-colour display, no decoder), so a photo
 -- only makes sense with a host: it is sent over Bluetooth in chunks with the
@@ -26,7 +26,7 @@
 -- of the display's and below it, by how much depends a little on the
 -- distance. Where, the phone may set (aim_x, aim_y; Glaz > Menu > Camera).
 --
--- The camera is powered only while this module is open. frame_app.lua powers
+-- The camera is powered only while this module is open. glaz.lua powers
 -- it down again on every exit path (release_hardware), stop() included.
 local camera = require('camera.min')
 
@@ -75,7 +75,7 @@ local function aim()
   return x, y
 end
 
--- Called by frame_app.lua under the top bar, before the status text.
+-- Called by glaz.lua under the top bar, before the status text.
 function _M.draw()
   local bitmap = frame.display.bitmap
   local x, y = aim()
