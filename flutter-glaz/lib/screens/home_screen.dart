@@ -472,8 +472,9 @@ class _GlassesAppCard extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const GlassesFilesScreen()),
             ),
           ),
+          // open for Halo too: it lists only the firmware for the glasses
+          // at hand, none yet for Halo (firmware_screen.dart)
           ListTile(
-            enabled: !unsupported,
             leading: const Icon(Icons.memory, color: FrameColors.skyBlue),
             title: const Text('Firmware'),
             subtitle: Text(link.firmware ?? 'Install another version'),

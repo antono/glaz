@@ -19,8 +19,8 @@ import 'update_screen.dart';
 
 /// One file for the glasses: its name there, its text, and its bytecode
 /// when the app was built with it (tool/compile_lua.sh) and it still
-/// matches the text. Without bytecode the text goes up and the glasses
-/// compile it.
+/// matches the text. Without bytecode the text goes up, and require()
+/// loads it as text on the glasses.
 typedef LuaFile = (String name, String text, Uint8List? code);
 
 /// The FNV-1a hash tool/luac_frame.c prints for a source file.
@@ -67,9 +67,10 @@ Future<Map<String, int>> _compiled(AssetBundle bundle) async {
 ///
 /// Each file carries its bytecode from assets/luac/ when that was compiled
 /// from this very text and [model] loads bytecode (Frame's; Halo takes
-/// text only). The glasses no longer have the memory to compile main.lua
-/// themselves. The text is minified (lua_min.dart), for what goes up as
-/// source: half the time, and the memory main.lua needs to start.
+/// text only). The glasses do not compile anything: Frame has not the
+/// memory for the app ([needBytecode]). The text is minified
+/// (lua_min.dart), for what goes up as source: half the time, and less
+/// to load.
 Future<List<LuaFile>> luaFiles(
   AssetBundle bundle,
   bool Function(String module) installed, {
@@ -135,35 +136,21 @@ const appName = 'glaz_app';
 const appFile = '$appName.lua';
 const _boot = 'glaz_boot';
 
-/// Compiles a file on the glasses, in place, to bytecode without debug
-/// information. Uploaded for the duration of an upload and run from the
-/// bare REPL, with all the memory free; see [uploadApp].
-///
-/// It reads the file through load()'s reader a line at a time, so the
-/// source is never held whole; lines are under 512 bytes, the most one
-/// read() gives (lua_min.dart breaks longer ones).
-const compileHelper = r'''
-function glaz_compile(name, out)
-  local h = frame.file.open(name, 'read')
-  local f, err = load(function()
-    local l = h:read()
-    if l then return l .. '\n' end
-  end, '=' .. name)
-  h:close()
-  if not f then print('E ' .. err) return end
-  local b = string.dump(f, true)
-  f = nil
-  collectgarbage('collect')
-  local o = frame.file.open(out or name, 'write')
-  o:write(b)
-  o:close()
-  print('C ' .. #b)
-end
-print('glaz_compile ready')
-''';
-
-/// What main.lua is uploaded as, before it is compiled into main.lua.
-const mainSource = 'glaz_main.lua';
+/// Stops an upload to [model] that would not start: Frame cannot load the
+/// app from text -- compiling it takes more memory than the glasses have
+/// (docs/FRAME.md) -- so it needs the app's bytecode, which every build
+/// makes (tool/compile_lua.sh; apk, linux-app, the Nix package, CI). The
+/// smaller files may go up as text: changed since the build, say.
+void needBytecode(List<LuaFile> files, GlassesModel model) {
+  if (!model.loadsBytecode) return;
+  final app = files.where((f) => f.$1 == appFile).firstOrNull;
+  if (app != null && app.$3 == null) {
+    throw Exception(
+      '$appFile has no bytecode, and ${model.label} cannot compile it: '
+      'build the app with tool/compile_lua.sh (apk and linux-app do)',
+    );
+  }
+}
 
 /// Where main.lua is put out of the way while an upload runs: a reset with
 /// a main.lua would start it. Moved back when it is still the right one.
@@ -198,15 +185,11 @@ int frameFileHash(List<int> bytes) {
 List<int> uploadedBytes(LuaFile f) =>
     f.$3 ?? f.$2.replaceAll('\r\n', '\n').codeUnits;
 
-/// Whether the glasses keep [f] as uploaded. Not what goes up as source
-/// to be compiled there: what that compiles to is only known there.
-bool checkable(LuaFile f) => f.$3 != null;
-
 /// Says whether a file on the glasses is already what an upload would
 /// write: glaz_check(name, hash) prints 'same NAME' or 'diff NAME', and
 /// files that are the same go in glaz_keep, for Clearing old files to
 /// leave. See [frameFileHash] for the hash. Uploaded for the duration of
-/// an upload, like [compileHelper]. A read() that never ends -- the
+/// an upload. A read() that never ends -- the
 /// firmware's at the end of a file is not quite sure -- gives up and says
 /// diff after 4000 pieces.
 const checkHelper = r'''
@@ -304,10 +287,10 @@ class Repl {
   /// require() the app and wait for the line it prints once running.
   /// Starts main.lua with a reset: the firmware then require()s it as it
   /// does at power-on, on a fresh Lua with the heap in one piece. Not
-  /// require('main') here, in the Lua that has just compiled two dozen
-  /// files: the firmware reads the file with a realloc() per byte, and in
-  /// that broken-up heap one failed and the glasses rebooted (seen right
-  /// after Upload; the same main.lua started fine on the reboot).
+  /// require('main') here, in the Lua that has just written two dozen
+  /// files: in a broken-up heap the firmware's require() failed a
+  /// realloc() and the glasses rebooted (seen when the upload still
+  /// compiled files there; the same main.lua started fine on the reboot).
   ///
   /// When it does not come up, the error says what the glasses printed
   /// instead -- 'not enough memory', say.
@@ -407,9 +390,8 @@ Future<void> uploadApp(
     'Upload: ${cleared.isEmpty ? 'cleared' : cleared.last}',
   );
 
-  // Bytecode built with the app goes up as it is. main.lua bytecode goes
-  // last, after any compiling below: a reset with a main.lua on the glasses
-  // would start it.
+  // Bytecode goes up as it is, text as text; main.lua last, so a
+  // half-finished upload leaves none to start.
   int size(LuaFile f) => f.$3?.length ?? f.$2.length;
   final main = files.firstWhere((f) => f.$1 == 'main.lua');
   final order = [
@@ -417,89 +399,31 @@ Future<void> uploadApp(
       if (f != main && !same.contains(f.$1)) f,
     if (!same.contains('main.lua')) main,
   ];
+  final source = [
+    for (final f in order)
+      if (f.$3 == null) f.$1,
+  ];
+  if (source.isNotEmpty) {
+    glazLog(LogKind.task, 'Upload: as text, no bytecode: ${source.join(' ')}');
+  }
   final total = order.fold<int>(0, (n, f) => n + size(f));
   var done = 0;
-  for (var i = 0; i < order.length; i++) {
-    final (target, text, code) = order[i];
-    // main.lua as source goes up under another name, for the same reason
-    final name = target == 'main.lua' && code == null ? mainSource : target;
+  for (final f in order) {
+    final (name, text, code) = f;
     report('Uploading $name', done / total);
     await picture.draw('Uploading: $name', progress: done / total);
     if (code == null) {
       await device.uploadScript(name, text);
-    } else if (target != 'main.lua') {
+    } else {
       await uploadBytes(device, name, code, meanwhile: picture.tick);
     }
-    done += size(order[i]);
-  }
-
-  // What went up as source -- built without tool/compile_lua.sh, or since
-  // changed -- is compiled on the glasses, while their memory is free: at
-  // start they then load bytecode without debug information -- about a
-  // third of the compiled source in memory, and no compiler and no
-  // whole-file buffer (FRAME.md, "require() holds the whole source").
-  //
-  // main.lua goes first, on a freshly reset Lua with the heap in one piece:
-  // compiling it and dumping the result peaks around 80 KB (measured on a
-  // laptop), and after seventeen smaller files the heap was too broken up
-  // for it -- the dump ran out of memory. The small files follow. Today
-  // main.lua is too big for even that, so it needs its bytecode.
-  final toCompile = [
-    for (final (name, _, code) in files)
-      if (code == null) name,
-  ]..sort((a, b) => a == 'main.lua' ? -1 : (b == 'main.lua' ? 1 : 0));
-  if (toCompile.isNotEmpty) {
-    glazLog(
-      LogKind.task,
-      'Upload: compiling on the glasses: ${toCompile.join(' ')}',
-    );
-    await device.uploadScript('glaz_compile.lua', compileHelper);
-    report('Resetting the glasses');
-    await device.sendResetSignal();
-    await repl.ready();
-    await repl.run("require('glaz_compile')", 'glaz_compile ready');
-    await picture.load();
-  }
-  for (var i = 0; i < toCompile.length; i++) {
-    final name = toCompile[i];
-    report('Compiling $name', i / toCompile.length);
-    await picture.draw('Compiling: $name', progress: i / toCompile.length);
-    // pcall: any error -- out of memory in string.dump, say -- comes back
-    // as 'E ...', and 'compiled' always follows, so nothing waits it out
-    final source = name == 'main.lua' ? mainSource : name;
-    final said = await repl.lines(
-      "collectgarbage('collect') "
-          "local ok,e=pcall(glaz_compile,'$source','$name') "
-          "if not ok then print('E '..tostring(e)) end print('compiled')",
-      'compiled',
-      timeout: const Duration(seconds: 30),
-    );
-    final error = said.where((l) => l.startsWith('E ')).firstOrNull;
-    if (error != null || !said.any((l) => l.startsWith('C '))) {
-      final why = error?.substring(2) ?? said.join(' / ');
-      throw Exception(
-        why.contains('memory')
-            ? 'compiling $name on the glasses ran out of memory: $why'
-            : 'compiling $name on the glasses: $why',
-      );
-    }
-  }
-  if (toCompile.isNotEmpty) {
-    await repl.run(
-      "pcall(frame.file.remove,'glaz_compile.lua') "
-          "pcall(frame.file.remove,'$mainSource') print('removed')",
-      'removed',
-    );
+    done += size(f);
   }
   if (same.contains('main.lua')) {
     await repl.run(
       "pcall(frame.file.rename,'$mainKept','main.lua') print('restored')",
       'restored',
     );
-  } else if (main.$3 case final code?) {
-    report('Uploading main.lua', done / total);
-    await picture.draw('Uploading: main.lua', progress: done / total);
-    await uploadBytes(device, 'main.lua', code, meanwhile: picture.tick);
   }
 
   report('Starting the app', 1);
@@ -518,7 +442,7 @@ Future<Set<String>> _unchanged(
   await device.uploadScript('glaz_check.lua', checkHelper);
   await repl.run("require('glaz_check')", 'glaz_check ready');
   final same = <String>{};
-  for (final f in files.where(checkable)) {
+  for (final f in files) {
     final name = f.$1 == 'main.lua' ? mainKept : f.$1;
     final want = frameFileHash(uploadedBytes(f));
     final said = await repl.lines(

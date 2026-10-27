@@ -69,6 +69,21 @@ void main() {
     }
   });
 
+  test('Frame needs the app as bytecode; Halo takes text', () {
+    final code = Uint8List.fromList([1]);
+    final text = [(appFile, 'x', null), ('m.lua', 'y', null)];
+    expect(
+      () => needBytecode(text, GlassesModel.frame),
+      throwsA(predicate((e) => '$e'.contains('tool/compile_lua.sh'))),
+    );
+    // a smaller file may be text, the app may not
+    needBytecode([
+      (appFile, 'x', code),
+      ('m.lua', 'y', null),
+    ], GlassesModel.frame);
+    needBytecode(text, GlassesModel.halo);
+  });
+
   test('a part is told by its suffix', () {
     expect(partFor('reader.frame.lua'), GlassesModel.frame);
     expect(partFor('about.halo.lua'), GlassesModel.halo);
@@ -151,8 +166,6 @@ void main() {
       expect(uploadedBytes(('x.lua', 'a\r\nb', null)), 'a\nb'.codeUnits);
       final code = Uint8List.fromList([1, 2]);
       expect(uploadedBytes(('x.lua', 'a', code)), code);
-      expect(checkable(('x.lua', 'a', code)), isTrue);
-      expect(checkable(('x.lua', 'return 1', null)), isFalse);
     });
 
     // checkHelper itself, on Lua 5.4, with frame.file as the firmware's

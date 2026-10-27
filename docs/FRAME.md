@@ -244,8 +244,8 @@ Everything below follows from that.
     The Glaz app's Upload now minifies every file (comments and indentation
     out, line breaks kept: `flutter-glaz/lib/frame/lua_min.dart`), then has
     the glasses compile each one to bytecode without debug information while
-    their memory is free (`glaz_compile` in `upload.dart`); and
-    `glaz.lua` loads a module only while it is on screen or in the
+    their memory is free (`glaz_compile` in `upload.dart`, since dropped:
+    see below); and `glaz.lua` loads a module only while it is on screen or in the
     background (`load_module`). Start went from 168 KB to 105 KB. Bytecode
     built with the app (`tool/luac_frame.c`) drops only local variables'
     names: errors keep the file and line, `glaz.lua:1234: ...`, about
@@ -258,12 +258,19 @@ Everything below follows from that.
     browsing, the remote's photo and the splash (loaded only when used).
     Compiled with debug information main.lua went from 71 KB to 57 KB.
 
+    In the end the glasses compile nothing. Every build of the phone app
+    carries bytecode for every file (`tool/compile_lua.sh`: apk, linux-app,
+    the Nix package, CI), and the app itself could no longer be compiled
+    there anyway. A file without bytecode -- edited since the build --
+    goes up as text, and glaz's `require()` loads it as text; the app
+    alone must be bytecode, and Upload stops before it starts when it is
+    not (`needBytecode` in `upload.dart`).
+
     Upload sends only what changed. The glasses hash each file they have
     (FNV-1a over what `read()` gives, `glaz_check` in `upload.dart`) and
     compare it with what the upload would write; files that match stay,
     main.lua included (moved aside as `glaz_prev.lua` while the upload
-    runs). Files sent as source to be compiled on the glasses always go:
-    only the glasses know what they compile to.
+    runs). Text is compared as text, bytecode as bytecode.
 12. **Many small `mono` sprites reboot the glasses.** Each
     `frame.display.text` glyph, `bitmap` or `mono` sprite is queued in the
     FPGA until `show()`. Measured with the first `mono` (a sprite a call),

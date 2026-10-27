@@ -135,7 +135,12 @@ Notifications (Settings).
 
   Another model's parts never go up, and the old files a past upload left
   are cleared as before. Bytecode goes to Frame only: Halo's require() loads
-  text.
+  text. The glasses compile nothing; a file without bytecode goes up as
+  text, but Frame needs the app itself as bytecode (`needBytecode`).
+- **Firmware.** The Firmware screen offers only the firmware for the
+  glasses at hand: `frame-firmware-*` to Frame, `halo-firmware-*` to Halo
+  (`firmwareFor` in `lib/frame/firmware.dart`), and installs nothing onto
+  other glasses than its own.
 - **`host_test.py`** uploads the same way, Frame's parts only.
 
 ## Adding glasses

@@ -113,9 +113,9 @@ class AppCheck extends ChangeNotifier {
       settings.installed,
       model: link.model,
     );
-    await link.runTask(
-      'Upload',
-      (device, report) => uploadApp(device, files, report),
-    );
+    await link.runTask('Upload', (device, report) async {
+      needBytecode(files, link.model);
+      await uploadApp(device, files, report);
+    });
   }
 }

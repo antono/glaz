@@ -15,8 +15,9 @@ Underneath, much is different:
 glaz is being built for Halo the way docs/DEVICES.md describes: each file
 gets a Halo part next to its Frame one. The app's menu, top bar and a few
 simple modules have one already. The phone does not upload to Halo yet. It
-finds Halo, names it, keeps Upload, Restart, Files and Firmware off, and
-lists in the Menu tab only the apps that run on Halo.
+finds Halo, names it, and keeps Upload, Restart and Files off. It lists in
+the Menu tab only the apps that run on Halo. It offers it no firmware,
+since Frame's is never offered to Halo and the app has none for Halo yet.
 
 Sources, cited below by these short names:
 
@@ -179,12 +180,15 @@ Not tried on a Halo yet, and not uploaded there by the phone yet.
 ## Next steps
 
 1. **Upload for Halo.**
-   - Source only: `luaFiles(..., model: GlassesModel.halo)` sends no
-     bytecode already, but `uploadApp` still compiles source on the glasses
-     (`glaz_compile`), which Halo must skip.
+   - Text only: `luaFiles(..., model: GlassesModel.halo)` sends no
+     bytecode, and Upload compiles nothing on the glasses.
    - Halo's REPL ring (1 KB) is smaller than Frame's line. A full one
      refuses the write.
    - Then turn on `supported` in `model.dart`.
+   - Its firmware: the Firmware screen offers each pair of glasses only its
+     own (`frame-firmware-*`, `halo-firmware-*` in assets/firmware/), and
+     has none for Halo yet. Halo updates over MCUmgr, which the app does not
+     do yet.
 2. **Measure on a Halo.**
    - The MTU Android gets.
    - Whether `bitmap()` draws Frame's icons as they are.
