@@ -53,11 +53,12 @@ local function save_prefs()
   for m, t in pairs(prefs) do
     for k, v in pairs(t) do lines[#lines + 1] = m .. '.' .. k .. '=' .. v end
   end
-  pcall(function()
+  local ok, e = pcall(function()
     local fh = frame.file.open(PREFS_FILE, 'write')
     fh:write(table.concat(lines, '\n'))
     fh:close()
   end)
+  if not ok and glaz_break(e) then error(e, 0) end
 end
 
 -- owner's pref key: default when unset, a number when default is one
@@ -85,11 +86,12 @@ end
 
 local function store_settings(text)
   settings = parse_settings(text)
-  pcall(function()
+  local ok, e = pcall(function()
     local fh = frame.file.open(SETTINGS_FILE, 'write')
     fh:write(text)
     fh:close()
   end)
+  if not ok and glaz_break(e) then error(e, 0) end
 end
 
 load_settings()

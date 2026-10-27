@@ -191,5 +191,27 @@ assert(RESULT.elsewhere == false)
 ''');
       expect(out, contains('ok'));
     });
+
+    // The host's break, as these glasses raise it: once on Halo, so the
+    // app's pcalls must hand it on, and glaz_boot must not take it for a
+    // crash and start the app again.
+    final brk = device == 'frame' ? 'break signal' : 'interrupted';
+    test('$device: a break stops the app, not restarts it', () async {
+      final out = await _run('''
+${_files({'main.lua': _read('../app/glaz_boot.$device.lua'), 'glaz_boot.lua': _read('../app/glaz_boot.lua'), 'glaz_app.lua': 'STARTS = (STARTS or 0) + 1\n'
+          'local ok, e = pcall(error, "glaz_app.lua:1: $brk", 0)\n'
+          'if not ok and glaz_break(e) then error(e, 0) end\n'
+          'error("kept the break")\n'})}
+local printed = {}
+print = function(s) printed[#printed + 1] = tostring(s) end
+local f = frame.file.open('main.lua', 'read')
+local ok, e = pcall(assert(load(f:read(1 << 20), '=main.lua')))
+assert(not ok and string.find(e, '$brk', 1, true), tostring(e))
+assert(STARTS == 1, 'restarted ' .. STARTS)
+assert(#printed == 0, printed[1])
+io.write('ok')
+''');
+      expect(out, contains('ok'));
+    });
   }
 }

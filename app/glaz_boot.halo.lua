@@ -12,6 +12,9 @@ local CHUNK = 4096   -- bytes a read(n) takes
 
 local D = {
   device = 'halo',           -- the suffix of this glasses' parts
+  -- the host's break: raised once, so a pcall that catches it must raise
+  -- it again (lua_runtime.c, halo_lua_runtime_interrupt)
+  BREAK = 'interrupted',
 }
 
 -- The file compiled, not run: nil when there is no such file, nil and the

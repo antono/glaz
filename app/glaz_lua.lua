@@ -55,6 +55,7 @@ local function run(code)
   end
   local r = table.pack(pcall(fn))
   print = print_
+  if not r[1] and glaz_break(r[2]) then error(r[2], 0) end
 
   if not r[1] then
     said[#said + 1] = tostring(r[2])

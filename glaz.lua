@@ -331,17 +331,21 @@ local function new_level(label)
   return { label = label, items = {}, sel = 1, top = 1 }
 end
 
--- pcall(require, ...) that lets the host's break signal through. Loading
--- guards each module so a broken one cannot take the menu down, but a guard
--- that catches everything also catches 'break signal': the host's break
--- landed during loading, was taken for a load error, and the app kept
--- running. Loading takes seconds, so that happened on most connects.
+-- pcall that lets the host's break through: for every call into code of
+-- the app's own or a module's. A guard that catches everything also
+-- catches the break: it landed while modules loaded, was taken for a load
+-- error, and the app kept running; loading takes seconds, so that happened
+-- on most connects. Halo's firmware raises the break once ('interrupted'),
+-- so one a pcall keeps is gone for good, and the phone could not stop the
+-- app. glaz_break() is glaz_boot's: it knows these glasses' break.
+local function try(f, ...)
+  local r = table.pack(pcall(f, ...))
+  if not r[1] and glaz_break(r[2]) then error(r[2], 0) end
+  return table.unpack(r, 1, r.n)
+end
+
 local function try_require(name)
-  local ok, mod = pcall(require, name)
-  if not ok and string.find(tostring(mod), 'break signal', 1, true) then
-    error(mod, 0)
-  end
-  return ok, mod
+  return try(require, name)
 end
 
 -- The modules on the glasses, by file name. The phone uploads only those
@@ -411,7 +415,7 @@ local function save_last(id)
   pcall(frame.file.remove, LAST_FILE)
   local name = id and names[id]
   if not name then return end
-  pcall(function()
+  try(function()
     local fh = frame.file.open(LAST_FILE, 'write')
     fh:write(name)
     fh:close()
@@ -420,7 +424,7 @@ end
 
 -- the id of the module saved by save_last(), or nil; the file goes either way
 local function take_last()
-  local ok, name = pcall(function()
+  local ok, name = try(function()
     local fh = frame.file.open(LAST_FILE, 'read')
     local text = fh:read()
     fh:close()
@@ -693,7 +697,7 @@ local function render()
     local mod = mods[running]
     if not (mod and mod.fullscreen) then draw_top_bar(run_name) end
     if mod and mod.draw then
-      local ok, e = pcall(mod.draw)
+      local ok, e = try(mod.draw)
       if not ok then
         draw(err_text(e), LEFT_X, TOP_Y, 'WHITE')
       end
@@ -783,7 +787,7 @@ end
 local function take_photo(size, quality)
   local ok, shoot = try_require('glaz_photo')
   if ok then
-    pcall(shoot, size, quality, not running and not bg, release_hardware)
+    try(shoot, size, quality, not running and not bg, release_hardware)
   end
 end
 
@@ -799,10 +803,7 @@ local function say_goodnight()
   blank()
   local ok, blink = try_require('glaz_blink')
   local err
-  if ok then ok, err = pcall(blink, show) end
-  if err and string.find(tostring(err), 'break signal', 1, true) then
-    error(err, 0)
-  end
+  if ok then ok, err = try(blink, show) end
   if not ok then
     blank()   -- whatever half a frame got drawn
     draw('sleeping...', LEFT_X, TOP_Y + ROW_H)
@@ -819,7 +820,7 @@ end
 local function wants_background(mod)
   if not mod then return false end
   if type(mod.background) == 'function' then
-    local ok, keep = pcall(mod.background)
+    local ok, keep = try(mod.background)
     return ok and keep == true
   end
   return mod.background == true
@@ -831,7 +832,7 @@ end
 -- running, because it may be using it.
 local function quit(id)
   local mod = mods[id]
-  if mod and mod.stop then pcall(mod.stop) end
+  if mod and mod.stop then try(mod.stop) end
   mods[id] = nil   -- stopped: let it go, it is loaded again when launched
   -- its unanswered requests would never be collected
   for rid, r in pairs(requests) do
@@ -966,7 +967,7 @@ local function run_module(id, arg)
   elseif mod.start then
     -- what the module may want to know about the rest of the app; today
     -- only which module runs in the background (Sleep warns about it)
-    local ok, e = pcall(mod.start, { background = bg and bg_name or nil,
+    local ok, e = try(mod.start, { background = bg and bg_name or nil,
                                      arg = arg })
     if not ok then err_text(e) end
   end
@@ -974,11 +975,11 @@ local function run_module(id, arg)
   -- an 'info' module produces its value once; an 'app' module is ticked
   if mod.mode == 'app' then
     if mod.tick then
-      local ok, text = pcall(mod.tick)
+      local ok, text = try(mod.tick)
       run_text = ok and tostring(text or '') or err_text(text)
     end
   else
-    local ok, text = pcall(mod.run)
+    local ok, text = try(mod.run)
     run_text = ok and tostring(text or '') or err_text(text)
   end
 
@@ -1012,7 +1013,7 @@ end
 -- on_back() means it was at its top, see the double tap.
 local function module_input(handler, ...)
   run_at = frame.time.utc()
-  local ok, text, done = pcall(handler, ...)
+  local ok, text, done = try(handler, ...)
   if not ok then
     run_text = err_text(text)
   elseif text ~= nil and text ~= false then
@@ -1055,12 +1056,12 @@ local function remote_call(name, arg)
       mods[id] = nil
       return
     end
-    if mod.start then pcall(mod.start, { background = bg and bg_name }) end
+    if mod.start then try(mod.start, { background = bg and bg_name }) end
     if bg then quit(bg) end
     bg, bg_name = id, mod.label
     send(APP_BACKGROUND, id)
   end
-  if mod.remote then pcall(mod.remote, arg) end
+  if mod.remote then try(mod.remote, arg) end
   if bg == id and not wants_background(mod) then quit(id) end
   if visible or running then render() end
 end
@@ -1332,7 +1333,7 @@ function app_loop()
             data.app_data[code] = nil
             local ok, serve = try_require('glaz_files')
             if ok and #block >= 1 then
-              pcall(serve, code == FILES_GET, block, host)
+              try(serve, code == FILES_GET, block, host)
             end
           end
         end
@@ -1344,7 +1345,7 @@ function app_loop()
           local block = data.app_data[LUA_EVAL]
           data.app_data[LUA_EVAL] = nil
           local ok, eval = try_require('glaz_lua')
-          if ok and #block >= 1 then pcall(eval, block, host) end
+          if ok and #block >= 1 then try(eval, block, host) end
         end
 
         -- The phone's remote (Glaz > Remote). It goes through the same
@@ -1586,7 +1587,7 @@ function app_loop()
           -- ticks it faster than APP_TICK_PERIOD (Reader: a word every 0.1 s
           -- at 600 wpm).
           if mod.busy then
-            local ok, busy = pcall(mod.busy)
+            local ok, busy = try(mod.busy)
             if ok and busy then run_at = now end
           end
           if now - run_at > APP_TIMEOUT then
@@ -1594,7 +1595,7 @@ function app_loop()
           elseif now >= next_app then
             next_app = now + (mod.period or APP_TICK_PERIOD)
             if mod.tick then
-              local ok, text, done = pcall(mod.tick)
+              local ok, text, done = try(mod.tick)
               local fresh = ok and tostring(text or '') or err_text(text)
               if ok and done then
                 stop_app(true, true)   -- finished on its own
@@ -1630,7 +1631,7 @@ function app_loop()
         next_bg = now + BG_TICK_PERIOD
         local mod = mods[bg]
         if mod and mod.tick then
-          local ok, _, done = pcall(mod.tick)
+          local ok, _, done = try(mod.tick)
           -- done, or no longer wanting the background (a recording the
           -- link cut short): it stops from there
           if ok and (done or not wants_background(mod)) then
@@ -1722,9 +1723,7 @@ function app_loop()
       pcall(stop_app, true, true)
       if bg then pcall(quit, bg) end
       blank()
-      if not string.find(tostring(err), 'break signal', 1, true) then
-        error(err, 0)
-      end
+      if not glaz_break(err) then error(err, 0) end
       print(err)
       break
     end

@@ -114,19 +114,23 @@ end
 -- Taps: the firmware counts them and says the gesture whole, 'single',
 -- 'double' or 'triple' (gesture; see tap_gesture in glaz.lua).
 local TAPS = { single = 1, double = 2, triple = 3 }
+local on_tap = nil   -- the callback, wired again after standby
 
 function D.taps(_, gesture)
-  frame.imu.tap_callback(function(kind)
+  on_tap = function(kind)
     local n = TAPS[kind]
     if n then gesture(n) end
-  end)
+  end
+  frame.imu.tap_callback(on_tap)
 end
 
 -- Sleep that a tap wakes from: standby() keeps Bluetooth and returns on a
 -- tap, the button or sound. sleep() would drop Bluetooth, and only the
--- button would wake the glasses.
+-- button would wake the glasses. The tap callback is set again after it:
+-- Santos (docs/HALO.md) found taps gone after waking from standby.
 function D.sleep()
   frame.standby()
+  if on_tap then pcall(frame.imu.tap_callback, on_tap) end
 end
 
 -- '<glaz>' centred, the brackets in a second colour: one width for every

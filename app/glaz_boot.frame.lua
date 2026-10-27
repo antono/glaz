@@ -31,6 +31,8 @@ end
 
 local D = {
   device = 'frame',          -- the suffix of this glasses' parts
+  -- the host's break: raised on every instruction until the chunk unwinds
+  BREAK = 'break signal',
 }
 
 -- The file compiled, not run: nil when there is no such file, nil and the

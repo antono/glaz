@@ -42,6 +42,12 @@ local CRASH_FILE = 'crash.txt'
 local RESTARTS, WITHIN = 3, 60
 local crashes = {}   -- utc() of each restart within WITHIN
 
+-- Whether an error is the host's break, as these glasses raise it
+-- (D.BREAK): for every pcall in the app that must let it through.
+function glaz_break(e)
+  return string.find(tostring(e), D.BREAK, 1, true) ~= nil
+end
+
 local before = {}
 for k in pairs(_G) do before[k] = true end
 
@@ -49,7 +55,7 @@ while true do
   local ok, err = pcall(require, 'glaz_app')
   if ok then break end
   err = tostring(err)
-  if string.find(err, 'break signal', 1, true) then error(err, 0) end
+  if glaz_break(err) then error(err, 0) end
 
   for k in pairs(_G) do
     if not before[k] then _G[k] = nil end
