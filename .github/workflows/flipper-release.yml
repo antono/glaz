@@ -1,0 +1,92 @@
+# A release of the Flipper app, flipper-glaz.
+#
+# Runs when flipper-glaz/Cargo.toml changes on main, and makes a release
+# only when its version is new: no flipper-v<version> tag may exist yet.
+# Run it by hand to release a version that has none, after a failed run say.
+#
+# The release carries flipper-glaz-<version>.fap, for Apps > Bluetooth on
+# the Flipper (qFlipper, Flipper Lab, or `storage send`). The official
+# app catalog takes no part: it builds C sources with ufbt, not Rust.
+#
+# It is never marked latest: that stays with the phone app's releases.
+name: flipper-release
+
+on:
+  push:
+    branches: [main]
+    paths: [flipper-glaz/Cargo.toml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: v
+        run: |
+          version=$(sed -n 's/^version *= *"\(.*\)"/\1/p' flipper-glaz/Cargo.toml | head -1)
+          if git tag -l "flipper-v$version" | grep -q .; then
+            echo "flipper-v$version is released already"
+            release=false
+          else
+            echo "releasing flipper-v$version"
+            release=true
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # rustup takes the nightly, the target and components from
+      # flipper-glaz/rust-toolchain.toml on the first cargo there.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            flipper-glaz/target
+          key: flipper-${{ hashFiles('flipper-glaz/Cargo.lock', 'flipper-glaz/rust-toolchain.toml') }}
+      - name: Build
+        working-directory: flipper-glaz
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          cargo build --release --locked
+          mkdir -p ../dist
+          cp target/thumbv7em-none-eabihf/release/flipper-glaz.fap "../dist/flipper-glaz-$VERSION.fap"
+          ls -l ../dist
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          prev=$(git tag -l 'flipper-v*' --sort=-v:refname | head -1)
+          {
+            echo "Flipper app $VERSION, for Flipper firmware 1.5 (API 88)."
+            echo
+            echo "Copy \`flipper-glaz-$VERSION.fap\` to \`/ext/apps/Bluetooth/\` on the"
+            echo "Flipper (qFlipper or Flipper Lab), then open Apps > Bluetooth > Glaz."
+            echo
+            echo "## Changes"
+            echo
+            git log --format='- %s (%h)' ${prev:+"$prev.."}HEAD -- flipper-glaz
+          } > notes.md
+          cat notes.md
+          gh release create "flipper-v$VERSION" "dist/flipper-glaz-$VERSION.fap" \
+            --target "$GITHUB_SHA" --title "flipper-glaz $VERSION" \
+            --notes-file notes.md --latest=false

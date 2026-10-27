@@ -68,6 +68,14 @@ fap-run        # copy and start it, the Flipper's log here
 `fap-install` and `fap-run` need `flipperzero-tools`; the first time they
 `cargo install` it into `.devenv/state`.
 
+## Release
+
+A new `version` in `Cargo.toml`, pushed to `main`, makes a GitHub release
+`flipper-v<version>` with `flipper-glaz-<version>.fap`
+(`.github/workflows/flipper-release.yml`). Commit `Cargo.lock` with the
+bump: CI builds with `--locked`. The official Flipper app catalog cannot
+take it: the catalog builds C sources with `ufbt`.
+
 ## Flipper API
 
 A Flipper runs an app only for its own major API version, and refuses
