@@ -69,7 +69,8 @@ local data = require('data.min')
 local MENU = {
   { label = 'Apps',     'assistant', 'translate', 'notifications', 'gemini',
                         'reader', 'photo', 'timeseries', 'recorder',
-                        'stopwatch', 'files', 'weather', 'flipper', 'term' },
+                        'stopwatch', 'files', 'weather', 'flipper', 'term',
+                        'scales' },
   { label = 'Sensors',  'battery', 'tilt', 'taptune' },
   { label = 'Settings', 'brightness', 'notifyset', 'sleep' },
   { label = 'Info',     'bluetooth', 'uptime', 'firmware', 'about' },

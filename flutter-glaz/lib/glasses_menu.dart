@@ -410,6 +410,34 @@ const glassesMenu = <MenuSection>[
           'on the phone types into it.',
       ownPage: true,
     ),
+    GlassesModule(
+      'scales',
+      'Scales',
+      ModuleKind.app,
+      Icons.music_note,
+      'Scales on the fretboard of a guitar, bass, banjo, ukulele or '
+          'balalaika: the minor pentatonic and a mode beside it. Tilt to '
+          'move up the neck, tap for the next mode.',
+      settings: [
+        ModuleSetting.choice(
+          'key',
+          'Key',
+          'A',
+          ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'],
+          help: 'The root, drawn red.',
+        ),
+        ModuleSetting.choice(
+          'view',
+          'View',
+          'dual',
+          ['dual', 'single'],
+          optionLabels: ['Two scales', 'One scale'],
+          help:
+              'Two: the pentatonic above the mode, to see what the mode '
+              'adds. One: the mode alone, bigger.',
+        ),
+      ],
+    ),
   ]),
   MenuSection('Sensors', Icons.sensors, [
     GlassesModule(
