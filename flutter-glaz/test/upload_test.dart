@@ -135,6 +135,17 @@ void main() {
     expect(parts.has('reader', GlassesModel.halo), isFalse);
   });
 
+  test('Upload sends what is switched on and runs there', () async {
+    final parts = await GlassesParts.load(rootBundle);
+    bool on(String m) => m != 'weather';
+    final frame = parts.sentTo(GlassesModel.frame, on);
+    expect(frame, containsAll(['reader', 'uptime']));
+    expect(frame, isNot(contains('weather')));
+    final halo = parts.sentTo(GlassesModel.halo, on);
+    expect(halo, contains('uptime'));
+    expect(halo, isNot(contains('reader')));
+  });
+
   test(
     'bytecode from tool/compile_lua.sh, when it matches the source',
     () async {

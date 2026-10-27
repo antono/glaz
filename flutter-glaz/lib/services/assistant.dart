@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../frame/glyphs.dart';
 import '../frame/link.dart';
+import '../frame/model.dart';
 import '../frame/protocol.dart';
 import '../glasses_menu.dart';
 import '../settings.dart';
@@ -111,12 +112,18 @@ String _ymd(DateTime t) =>
     '${t.day.toString().padLeft(2, '0')}';
 
 /// What the agent is told before the conversation: what the glasses are,
-/// how to answer, and what it can make them do.
-String systemPrompt(Settings settings) {
+/// how to answer, and what it can make them do -- the apps on [model]'s
+/// glasses now, as last uploaded (Settings.onGlasses).
+String systemPrompt(
+  Settings settings, {
+  GlassesModel model = GlassesModel.frame,
+}) {
   final apps = StringBuffer();
   for (final section in glassesMenu) {
     for (final m in section.modules) {
-      if (m.id == 'assistant' || !settings.installed(m.id)) continue;
+      if (m.id == 'assistant' || !settings.onGlasses(m.id, model.name)) {
+        continue;
+      }
       apps.write('- ${m.id} (${m.label}): ${m.summary}');
       for (final s in m.settings) {
         final value = settings.config(m.id, s.key) ?? s.initial;
@@ -709,7 +716,7 @@ class AssistantService extends ChangeNotifier {
     for (var round = 0; ; round++) {
       try {
         reply = await agent.ask([
-          AgentMessage('system', systemPrompt(settings)),
+          AgentMessage('system', systemPrompt(settings, model: link.model)),
           ...chat.history,
           ...talk,
         ]);
@@ -840,13 +847,13 @@ class AssistantService extends ChangeNotifier {
     return opened;
   }
 
-  /// An installed module, by file name or label.
+  /// A module on the glasses, by file name or label.
   GlassesModule? _module(String name) {
     final n = name.trim().toLowerCase();
     for (final s in glassesMenu) {
       for (final m in s.modules) {
         if ((m.id == n || m.label.toLowerCase() == n) &&
-            settings.installed(m.id)) {
+            settings.onGlasses(m.id, link.model.name)) {
           return m;
         }
       }

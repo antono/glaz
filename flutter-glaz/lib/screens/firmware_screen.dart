@@ -208,15 +208,15 @@ class _FirmwareScreenState extends State<FirmwareScreen> {
       return;
     }
     // the update wipes the glasses' files; the app goes back on after it
-    final app = await luaFiles(
-      rootBundle,
-      Services.instance.settings.installed,
-      model: package.model,
-    );
+    final services = Services.instance;
+    final installed = services.settings.installed;
+    final app = await luaFiles(rootBundle, installed, model: package.model);
+    final sent = services.parts.sentTo(package.model, installed);
     await link.runTask('Firmware', (device, report) async {
       // before the update, not after it: the glasses would be left bare
       needBytecode(app, package.model);
       await installFirmware(link, device, package, app, report);
+      services.settings.setUploaded(package.model.name, sent);
     });
   }
 }

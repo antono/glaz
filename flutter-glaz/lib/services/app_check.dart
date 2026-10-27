@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../frame/link.dart';
+import '../frame/parts.dart';
 import '../frame/upload.dart';
 import '../settings.dart';
 import 'glaz_log.dart';
@@ -105,14 +106,15 @@ class AppCheck extends ChangeNotifier {
   /// Uploads main.lua and the apps switched on in Menu, as Upload on the
   /// Glasses tab does; then looks again.
   Future<void> upload() async {
-    final files = await luaFiles(
-      rootBundle,
-      settings.installed,
-      model: link.model,
-    );
+    final model = link.model;
+    final files = await luaFiles(rootBundle, settings.installed, model: model);
+    final parts = await GlassesParts.load(rootBundle);
+    final sent = parts.sentTo(model, settings.installed);
     await link.runTask('Upload', (device, report) async {
-      needBytecode(files, link.model);
-      await uploadApp(device, files, report, model: link.model);
+      needBytecode(files, model);
+      await uploadApp(device, files, report, model: model);
+      // what the assistant may open (assistant.dart)
+      settings.setUploaded(model.name, sent);
     });
   }
 }

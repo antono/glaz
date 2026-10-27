@@ -19,6 +19,20 @@ class Settings extends ChangeNotifier {
   bool installed(String module) => _prefs.getBool('app.$module') ?? true;
   void setInstalled(String module, bool on) => _set('app.$module', on);
 
+  /// The modules the last finished Upload put on [model]'s glasses (its
+  /// name, as 'frame'); null before the first. Upload clears the others
+  /// away, so these, and not the switches flipped since, are on the
+  /// glasses.
+  Set<String>? uploaded(String model) =>
+      _prefs.getStringList('uploaded.$model')?.toSet();
+  void setUploaded(String model, Iterable<String> modules) =>
+      _set('uploaded.$model', modules.toList()..sort());
+
+  /// Whether [module] is on [model]'s glasses now: as last uploaded, or,
+  /// with no upload seen yet, as switched on.
+  bool onGlasses(String module, String model) =>
+      uploaded(model)?.contains(module) ?? installed(module);
+
   /// Whether a module may use the Internet through the phone. Off until the
   /// user says otherwise.
   bool netAllowed(String module) => _prefs.getBool('net.$module') ?? false;
@@ -117,6 +131,7 @@ class Settings extends ChangeNotifier {
   void _set(String key, Object value) {
     if (value is bool) _prefs.setBool(key, value);
     if (value is String) _prefs.setString(key, value);
+    if (value is List<String>) _prefs.setStringList(key, value);
     notifyListeners();
   }
 }

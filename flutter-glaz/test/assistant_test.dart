@@ -176,6 +176,35 @@ void main() {
       expect(last(moduleCall), 'assistant\nt:1\nQ|Сколько?');
     });
 
+    test('only the apps last uploaded are offered and opened', () async {
+      String prompt() => agent.asked.last.first.content;
+      agent.reply = '@open stopwatch';
+      // no upload seen yet: the switches in Menu
+      settings.setInstalled('reader', false);
+      await assistant.ask('?');
+      expect(prompt(), contains('- stopwatch ('));
+      expect(prompt(), isNot(contains('- reader (')));
+
+      // switched off after an upload: still on the glasses
+      settings.setUploaded(link.model.name, ['stopwatch', 'tuner']);
+      settings.setInstalled('stopwatch', false);
+      await assistant.ask('?');
+      expect(prompt(), contains('- stopwatch ('));
+      expect(last(appOpen), 'stopwatch');
+
+      // uploaded since, without it
+      settings.setUploaded(link.model.name, ['tuner', 'uptime']);
+      link.sent.clear();
+      await assistant.ask('?');
+      expect(prompt(), contains('- tuner ('));
+      expect(prompt(), isNot(contains('- stopwatch (')));
+      expect(prompt(), isNot(contains('- reader (')));
+      expect(
+        link.sent.where((s) => s.$1 == appOpen && s.$2 == 'stopwatch'),
+        isEmpty,
+      );
+    });
+
     test('heard in its own language, the recordings\' until picked', () {
       final t = FakeTranscriber();
       final a = AssistantService(link, settings, t, agent: (_) => agent);

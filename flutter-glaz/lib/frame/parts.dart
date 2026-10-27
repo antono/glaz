@@ -55,4 +55,11 @@ class GlassesParts {
   /// Whether [module] runs on [model]: it has a part for it.
   bool has(String module, GlassesModel model) =>
       _modules[model]?.contains(module) ?? false;
+
+  /// The modules Upload sends to [model]: those [installed] that run there
+  /// (luaFiles).
+  Set<String> sentTo(GlassesModel model, bool Function(String) installed) => {
+    for (final m in _modules[model] ?? const <String>{})
+      if (installed(m)) m,
+  };
 }
