@@ -64,10 +64,11 @@ void main() {
       'main.lua',
     ]);
     expect(files.last.$2, contains(RegExp(r"device\s*=\s*'halo'")));
-    // a module with a Halo part goes up -- the empty part itself not --
-    // and one without does not
-    expect(names, contains('about.lua'));
-    expect(names, isNot(contains('about.halo.lua')));
+    // a module with a Halo part goes up -- an empty part itself not, one
+    // with something in it too -- and one without does not
+    expect(names, contains('stopwatch.lua'));
+    expect(names, isNot(contains('stopwatch.halo.lua')));
+    expect(names, containsAll(['about.lua', 'about.halo.lua']));
     expect(names, isNot(contains('reader.lua')));
     // Frame-only parts of the app stay off
     expect(names, isNot(contains('glaz_blink.frame.lua')));
@@ -106,6 +107,19 @@ void main() {
     needBytecode(text, GlassesModel.halo);
   });
 
+  test('every app in ../apps is an asset folder in pubspec.yaml', () {
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    final apps = Directory('../apps')
+        .listSync()
+        .whereType<Directory>()
+        .where((d) => !d.path.split('/').last.startsWith('_')); // __pycache__
+    expect(apps, isNotEmpty);
+    for (final d in apps) {
+      final name = d.path.split('/').last;
+      expect(pubspec, contains('- assets/lua/apps/$name/\n'), reason: name);
+    }
+  });
+
   test('a part is told by its suffix', () {
     expect(partFor('reader.frame.lua'), GlassesModel.frame);
     expect(partFor('about.halo.lua'), GlassesModel.halo);
@@ -115,12 +129,12 @@ void main() {
     expect(stemOf('data.min.lua'), 'data.min');
     expect(
       modulesFor([
-        'assets/lua/modules/about.lua',
-        'assets/lua/modules/about.frame.lua',
-        'assets/lua/modules/about.halo.lua',
-        'assets/lua/modules/reader.lua',
-        'assets/lua/modules/reader.frame.lua',
-        'assets/lua/app/glaz_boot.halo.lua',
+        'assets/lua/apps/about/about.lua',
+        'assets/lua/apps/about/about.frame.lua',
+        'assets/lua/apps/about/about.halo.lua',
+        'assets/lua/apps/reader/reader.lua',
+        'assets/lua/apps/reader/reader.frame.lua',
+        'assets/lua/glaz/glaz_boot.halo.lua',
       ], GlassesModel.halo),
       {'about'},
     );
@@ -163,10 +177,13 @@ void main() {
 
   test('luacAsset and fnv1a match tool/compile_lua.sh', () {
     expect(
-      luacAsset('assets/lua/modules/photo.lua'),
-      'assets/luac/modules.photo.luac',
+      luacAsset('assets/lua/apps/photo/photo.lua'),
+      'assets/luac/apps.photo.photo.luac',
     );
-    expect(luacAsset('assets/lua/glaz.lua'), 'assets/luac/glaz.luac');
+    expect(
+      luacAsset('assets/lua/glaz/glaz.lua'),
+      'assets/luac/glaz.glaz.luac',
+    );
     expect(
       luacAsset('assets/lua/lib/data.min.lua'),
       'assets/luac/lib.data.min.luac',

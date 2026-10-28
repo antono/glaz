@@ -210,7 +210,7 @@ jobs:
           GLAZ: ${{ needs.firmware.outputs.glaz }}
           OFFICIAL: ${{ needs.firmware.outputs.official }}
         run: |
-          glasses=$(sed -n "s/^local VERSION *= *'\(.*\)'/\1/p" modules/about.lua)
+          glasses=$(sed -n "s/^local VERSION *= *'\(.*\)'/\1/p" apps/about/about.lua)
           cat > notes.md <<EOF
           Phone app $VERSION, glasses app $glasses (uploaded by the phone app).
 

@@ -56,18 +56,18 @@ Run anything with `.venv/bin/python <file>.py`.
 **Glasses connected to the phone?** Leave them there: the Glaz app's Lua
 console runs Lua inside the app on the glasses, and with *Open to a
 computer* on, a laptop reaches it over adb
-([`utils/phone_lua.py`](../utils/phone_lua.py), docs/PROTOCOL.md, "Lua
+([`scripts/phone_lua.py`](../scripts/phone_lua.py), docs/PROTOCOL.md, "Lua
 console"):
 
 ```bash
-python utils/phone_lua.py 'frame.file.space()'
+python scripts/phone_lua.py 'frame.file.space()'
 ```
 
 Straight over Bluetooth instead, with the phone off the glasses:
-[`utils/connect.py`](../utils/connect.py).
+[`scripts/connect.py`](../scripts/connect.py).
 
 ```bash
-.venv/bin/python utils/connect.py
+.venv/bin/python scripts/connect.py
 ```
 
 Minimal version:
@@ -162,12 +162,12 @@ nothing.
 Everything below follows from that.
 
 1. **No Python deps outside devenv.** There is no `.venv` in the repo, so
-   `python3 utils/connect.py` fails with `No module named 'frame_ble'`. Use
+   `python3 scripts/connect.py` fails with `No module named 'frame_ble'`. Use
    `devenv shell`, or a throwaway venv from the system `python3`:
    `python3 -m venv /tmp/venv && /tmp/venv/bin/pip install -r requirements.txt`.
    On NixOS that venv's pip wheels (numpy, pulled in by `frame-msg`) fail with
    `libstdc++.so.6` / `libz.so.1: cannot open shared object file`. Point them
-   at the nix libraries (`utils/connect.py` only needs `frame-ble` and works
+   at the nix libraries (`scripts/connect.py` only needs `frame-ble` and works
    without this):
 
    ```bash
@@ -192,7 +192,7 @@ Everything below follows from that.
    just dropped the stale cache entry — the glasses are *not* advertising.
 5. **`connect()` gives up after 10 s.** `FrameBle.connect()` scans 10 s for the
    Frame service UUID and raises `No matching Frame device found`. A sleeping
-   or low-battery Frame advertises rarely; run `utils/wait_for_frame.py` (scans
+   or low-battery Frame advertises rarely; run `scripts/wait_for_frame.py` (scans
    up to 180 s) first, then connect.
 
 6. **Pairing has to happen from the script, not from GNOME Settings.**
@@ -218,8 +218,8 @@ Everything below follows from that.
    only from Lua's hook, every call and 2000 instructions, and resets the
    glasses after 6 s (`watchdog.c`). The app's 19 KB of bytecode took 1 to
    3 s, longer the more broken up the heap, and sometimes past 6 s. So
-   `main.lua` on the glasses is a loader (`app/glaz_boot.frame.lua`, which
-   starts `app/glaz_boot.lua`): it replaces `require()` with one that reads
+   `main.lua` on the glasses is a loader (`glaz/glaz_boot.frame.lua`, which
+   starts `glaz/glaz_boot.lua`): it replaces `require()` with one that reads
    512 bytes at a time through `frame.file` into `load()`, and loads the
    app, `glaz_app.lua`. Also:
    about 135 KB of heap is Lua's in all (measured: filled until 'not
@@ -253,7 +253,8 @@ Everything below follows from that.
 
     Then main.lua itself grew past what the glasses could compile in one
     go, even first thing after a reset ("not enough memory" at "Compiling
-    main.lua"). Its larger, separable parts moved to `app/`: the services
+    main.lua"). Its larger, separable parts moved to files of their own
+    in `glaz/`: the services
     (`glaz_host.lua`, loaded at start but compiled on its own), and file
     browsing, the remote's photo and the splash (loaded only when used).
     Compiled with debug information main.lua went from 71 KB to 57 KB.
@@ -313,7 +314,7 @@ def init(self, *a, **k):
     k.setdefault("pair", True)
     _init(self, *a, **k)
 bleak.BleakClient.__init__ = init
-# ...then run host_test.py / utils/connect.py as usual
+# ...then run host_test.py / scripts/connect.py as usual
 ```
 
 If the glasses still do not show up with an RSSI: they are in deep sleep
@@ -465,12 +466,12 @@ was never set — usable for timeouts.
 
 ## The menu app
 
-A working in-glasses menu lives in [`glaz.lua`](../glaz.lua), driven by
-the reference host [`host_test.py`](../host_test.py). The wire protocol and the
+A working in-glasses menu lives in [`glaz.lua`](../glaz/glaz.lua), driven by
+the reference host [`host_test.py`](../scripts/host_test.py). The wire protocol and the
 design rationale are in [`PROTOCOL.md`](PROTOCOL.md).
 
 ```bash
-.venv/bin/python host_test.py
+.venv/bin/python scripts/host_test.py
 ```
 
 Tap the arm to summon the menu, tilt your head to scroll, tap to select. It
@@ -496,7 +497,7 @@ phone, and the firmware puts "Frame is paired" on screen (or the screen
 stays dark). An error in a tap or Bluetooth callback does the same: the
 firmware raises it again in whatever Lua was running, the app's main loop.
 
-So the loader, `app/glaz_boot.lua`, starts the app again. The main loop
+So the loader, `glaz/glaz_boot.lua`, starts the app again. The main loop
 passes on every error but the break signal (`glaz.lua`, the end of
 `app_loop`); the loader then drops the globals the app set and its tap
 and Bluetooth callbacks, so the old app is freed before the new one
@@ -550,16 +551,17 @@ or `crash.txt`.
 ## Layout
 
 ```
-glaz.lua           the application that runs on the glasses (glaz_app.lua)
-glaz.frame.lua     its part for Frame: the screen (docs/DEVICES.md)
-glaz.halo.lua      its part for Halo
-app/               parts of glaz.lua in files of their own; glaz_boot's
-                   part for the glasses is main.lua there
-modules/           one Lua file per menu item, and its parts
-host_test.py       reference host: uploads everything, then listens
-check.sh           syntax, ASCII and unknown-global checks, no device needed
+glaz/              the application that runs on the glasses
+  glaz.lua           the app itself (glaz_app.lua there)
+  glaz.frame.lua     its part for Frame: the screen (docs/DEVICES.md)
+  glaz.halo.lua      its part for Halo
+  glaz_*.lua         parts of glaz.lua in files of their own; glaz_boot's
+                     part for the glasses is main.lua there
+apps/              one directory per menu item: its Lua, its parts, README.md
 docs/              FRAME.md, PLATFORM.md, PROTOCOL.md
-utils/             diagnostics, run individually as needed
+scripts/           every script, run individually as needed
+  check.sh           syntax, ASCII and unknown-global checks, no device needed
+  host_test.py       reference host: uploads everything, then listens
   connect.py         smoke test: connect, report hardware, draw text
   wait_for_frame.py  keep scanning until the glasses start advertising
   calibrate.py       find the visible area of the display

@@ -10,7 +10,7 @@
 #   OFFICIAL=0 tool/fetch_firmware.sh                   # glaz/stable only
 #
 # Ours is taken only as built from the branch's current commit: the zip's
-# name is that commit's time, as ../utils/build_firmware.sh names it (the
+# name is that commit's time, as ../scripts/build_firmware.sh names it (the
 # root shell's `firmware`). Without it this fails, so an app is never built
 # with another branch's firmware, or an old one. Any other build of ours
 # left in assets/firmware/ is removed. FIRMWARE_FEATURE takes several

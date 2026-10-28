@@ -175,7 +175,7 @@ Each press comes to the phone as 3 bytes on the keys characteristic: a
 version, 1, the key (1 Up, 2 Down, 3 Left, 4 Right, 5 OK, 6 Back) and the
 press (1 short, 2 long, 3 repeat); the status goes the other way
 (flipper-glaz/README.md, "The link to the phone").
-`utils/flipper_keys.py` shows its presses on a computer.
+`scripts/flipper_keys.py` shows its presses on a computer.
 
 ### Over USB
 

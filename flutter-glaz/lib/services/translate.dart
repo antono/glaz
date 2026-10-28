@@ -87,7 +87,7 @@ List<String> get translateTo => [
     if (l.shown) l.value,
 ];
 
-/// What a line of the log is; [wire] its letter for modules/translate.lua.
+/// What a line of the log is; [wire] its letter for apps/translate/translate.lua.
 enum TrKind {
   translation('T'),
   source('S'),
@@ -131,7 +131,7 @@ class TranslateLog {
   final int maxLines;
   static const drop = 1000;
 
-  /// As gemini.dart's lineWidth: from where modules/translate.lua draws
+  /// As gemini.dart's lineWidth: from where apps/translate/translate.lua draws
   /// text to the screen's right edge, less a little.
   static const width = 530;
 
@@ -238,7 +238,7 @@ class TranslateLog {
     _bump();
   }
 
-  /// MODULE_CALL's argument for modules/translate.lua
+  /// MODULE_CALL's argument for apps/translate/translate.lua
   /// (docs/PROTOCOL.md, "Translate"): 'w:sess:from:total:f' and a line each
   /// from [from], at most [count] and [maxLines], as many as fit in
   /// [maxBytes]. [follow]: the last [count], for the glasses following
@@ -410,7 +410,7 @@ class _Pace {
   }
 }
 
-/// Translate's phone side (docs/PROTOCOL.md, "Translate"): modules/
+/// Translate's phone side (docs/PROTOCOL.md, "Translate"): apps/
 /// translate.lua streams what the glasses hear, the recognizer here writes
 /// down what the other speaker says, ML Kit translates each piece on the
 /// phone, and the glasses get the log a few lines at a time. A photo they

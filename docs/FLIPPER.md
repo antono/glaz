@@ -48,7 +48,7 @@ on every redraw       rows that changed     each drawn 4x as wide, 4x
            <---------- FLIPPER [2, seq] ---------- taken
 ```
 
-- `modules/flipper.lua` sends `FLIPPER` `[1]` from its first tick and `[0]`
+- `apps/flipper/flipper.lua` sends `FLIPPER` `[1]` from its first tick and `[0]`
   when it stops (`0x0B`, see [PROTOCOL.md](PROTOCOL.md)). Without an answer
   it asks again every 3 s: the phone was away, or the link came back.
 - The phone (`flutter-glaz/lib/services/flipper.dart`) connects to the

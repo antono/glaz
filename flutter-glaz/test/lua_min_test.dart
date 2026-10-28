@@ -40,10 +40,9 @@ comment ]] local x = 137
     }
     final dir = Directory.systemTemp.createTempSync('glaz_min');
     final files = [
-      File('assets/lua/glaz.lua'),
-      for (final d in ['app', 'modules', 'lib'])
+      for (final d in ['glaz', 'apps', 'lib'])
         ...Directory('assets/lua/$d')
-            .listSync()
+            .listSync(recursive: true)
             .whereType<File>()
             .where((f) => f.path.endsWith('.lua')),
     ];

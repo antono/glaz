@@ -1,8 +1,8 @@
 # glaz companion
 
 The phone side of glaz. The menu and the apps live on the glasses
-(`../glaz.lua`); this app is the host that talks to them over
-Bluetooth -- the role `../host_test.py` plays on a laptop today.
+(`../glaz/glaz.lua`); this app is the host that talks to them over
+Bluetooth -- the role `../scripts/host_test.py` plays on a laptop today.
 
 Tabs:
 
@@ -97,7 +97,7 @@ python tool/logo.py adaptive-preview bloodshot /tmp/icon.png
 
 ## Keeping in step with the glasses
 
-The Menu tab describes `../glaz.lua`'s `MENU` tree by hand
+The Menu tab describes `../glaz/glaz.lua`'s `MENU` tree by hand
 (`lib/glasses_menu.dart`). `flutter test` reads the Lua and fails when the
 sections, items or labels drift apart -- update the Dart list after adding a
 module.
@@ -110,7 +110,7 @@ transport the Python host uses. Connecting sends no break or reset, so
 and match `../docs/PROTOCOL.md`.
 
 Upload takes the Lua from `assets/lua/`, which links to the repository's
-`glaz.lua`, `modules/` and `sprites/`. Firmware offers the zips in
+`glaz/` and `apps/`. Firmware offers the zips in
 `assets/firmware/`, which are not committed:
 
 ```sh

@@ -25,7 +25,7 @@ Sources, cited below by these short names:
 
 - **FW:** [halo-firmware](https://github.com/brilliantlabsAR/halo-firmware)
   at 8415ce0 (firmware 0.8.22, 2026-10-26). `M:` stands for
-  `modules/halo/src/` in it.
+  `apps/halo/src/` in it.
 - **docs:** Brilliant's documentation (`lab-frame-docs/halo/`).
 - **[mkt]:** the product page,
   [brilliant.xyz](https://brilliant.xyz/products/halo).
@@ -176,7 +176,7 @@ glaz never asks which glasses it is on: the parts on them say so
 
 What has a Halo part (docs/DEVICES.md):
 
-- **`app/glaz_boot.halo.lua`**, Halo's `main.lua`. It loads files as text,
+- **`glaz/glaz_boot.halo.lua`**, Halo's `main.lua`. It loads files as text,
   under Halo's file names, and shows "restarted" on Halo's screen.
 - **`glaz.halo.lua`**, the app's display. It has five rows of 16 px text,
   30 px apart, around the middle where the circle is widest. Each line is
@@ -218,7 +218,7 @@ glaz's tests run every app on it, as on our emulator of Frame
 (docs/TESTING.md). In the root devenv shell:
 
 ```sh
-halo                              # pytest tests -k halo
+halo                              # pytest tests apps -k halo
 SHOTS=/tmp/shots halo             # and keep the screens as PNG
 ```
 

@@ -1,7 +1,7 @@
 import '../frame/link.dart';
 import '../frame/protocol.dart';
 
-/// A scale for the glasses' Scales (modules/scales.lua): [notes] in
+/// A scale for the glasses' Scales (apps/scales/scales.lua): [notes] in
 /// semitones above the root, [flavour] the note that makes it what it is,
 /// drawn green; [major] shows it against the major pentatonic, else the
 /// minor one.
@@ -85,7 +85,7 @@ const guitarScales = <GuitarScale>[
 
 String _hex(List<int> notes) => notes.map((n) => n.toRadixString(16)).join();
 
-/// Scale [n] as the glasses take it (modules/scales.lua, remote()):
+/// Scale [n] as the glasses take it (apps/scales/scales.lua, remote()):
 /// `g<n> <count> <name>|<short>|<notes>|<flavour>|<base short>|<base notes>`,
 /// a hex digit a note; the base empty for a pentatonic, shown alone. [n]
 /// past the end wraps round.

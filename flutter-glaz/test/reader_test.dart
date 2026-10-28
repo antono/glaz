@@ -11,7 +11,7 @@ import 'package:glaz/settings.dart';
 
 import 'assistant_test.dart' show SentLink;
 
-/// TEXT_GET as the glasses send it (modules/reader.lua).
+/// TEXT_GET as the glasses send it (apps/reader/reader.lua).
 List<int> request(int place, int from, int count, int wpm, int text) {
   final b = ByteData(13)
     ..setUint8(0, textGet)

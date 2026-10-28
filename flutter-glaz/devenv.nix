@@ -10,6 +10,8 @@
 #   flutter + Android SDK + JDK 17
 #                   building and running the app
 #   cc (stdenv)     tool/compile_lua.sh builds the firmware's own luac
+#   lua 5.4         flutter test: parts_test.dart and lua_min_test.dart run
+#                   the glasses' Lua
 #   git-secret      the app's signing key, android/*.secret
 #   gstreamer, libunwind, libsecret
 #                   Linux only: the app as a desktop app
@@ -34,6 +36,7 @@ in
   packages = [
     pkgs.git
     pkgs.git-secret
+    pkgs.lua5_4
   ]
   # The app as a Linux desktop app: audioplayers plays through GStreamer,
   # and its plugin will not configure without the headers. Flutter's

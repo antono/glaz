@@ -111,7 +111,7 @@ void main() {
     () async {
       final out = await _run('''
 $_frame
-local D = dofile('../glaz.frame.lua')
+local D = dofile('../glaz/glaz.frame.lua')
 assert(D.layout.row_h == 55 and D.layout.left_x == 60)
 D.text('> Camera', 60, 65, 'WHITE')
 assert(drawn[1][1] == '> Camera' and drawn[1][2] == 60 and drawn[1][3] == 65)
@@ -135,7 +135,7 @@ assert(drawn[#drawn][1] == '9%' and drawn[#drawn][4].color == 'RED')
   test('Halo: centred, cut to the circle, ASCII, colours as numbers', () async {
     final out = await _run('''
 $_halo
-local D = dofile('../glaz.halo.lua')
+local D = dofile('../glaz/glaz.halo.lua')
 -- the middle row is the widest; a line at the edge holds nothing
 assert(D.fit(122, 16) > D.fit(62, 16) and D.fit(250, 16) == 0)
 -- notifications wrap where the narrowest rows cut
@@ -167,8 +167,8 @@ assert(bitmaps[1][2] == 2 and bitmaps[2][2] == 6)
     test('$device: require() hands a file its part, and no other', () async {
       final out = await _run('''
 ${_files({
-        'main.lua': _read('../app/glaz_boot.$device.lua'),
-        'glaz_boot.lua': _read('../app/glaz_boot.lua'),
+        'main.lua': _read('../glaz/glaz_boot.$device.lua'),
+        'glaz_boot.lua': _read('../glaz/glaz_boot.lua'),
         'glaz_app.lua': 'local name, D = ...\n'
             'RESULT = { name = name, D = D, m = require("m"),\n'
             '  only = require("only"), plain = require("plain") }\n'
@@ -198,7 +198,7 @@ assert(RESULT.elsewhere == false)
     final brk = device == 'frame' ? 'break signal' : 'interrupted';
     test('$device: a break stops the app, not restarts it', () async {
       final out = await _run('''
-${_files({'main.lua': _read('../app/glaz_boot.$device.lua'), 'glaz_boot.lua': _read('../app/glaz_boot.lua'), 'glaz_app.lua': 'STARTS = (STARTS or 0) + 1\n'
+${_files({'main.lua': _read('../glaz/glaz_boot.$device.lua'), 'glaz_boot.lua': _read('../glaz/glaz_boot.lua'), 'glaz_app.lua': 'STARTS = (STARTS or 0) + 1\n'
           'local ok, e = pcall(error, "glaz_app.lua:1: $brk", 0)\n'
           'if not ok and glaz_break(e) then error(e, 0) end\n'
           'error("kept the break")\n'})}

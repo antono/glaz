@@ -17,7 +17,7 @@ The glasses run Lua; a laptop talks to them over Bluetooth using Python.
   states, input and design notes.
 - [`docs/RECOVERY.md`](docs/RECOVERY.md) — glasses that look dead: out of
   range, stuck apps, and stuck in `Frame Update` after a broken firmware
-  update (`utils/dfu.py` installs a firmware from a computer).
+  update (`scripts/dfu.py` installs a firmware from a computer).
 - [`docs/BATTERY.md`](docs/BATTERY.md) — battery drain measurements and
   where the power goes.
 - [`docs/HERMES.md`](docs/HERMES.md) — connecting the Assistant to Hermes
@@ -40,21 +40,22 @@ The glasses run Lua; a laptop talks to them over Bluetooth using Python.
 
 ## Layout
 
-- `glaz.lua` — app that runs on the glasses (`glaz_app.lua` there), and
-  its parts `glaz.frame.lua`, `glaz.halo.lua`: the screen (docs/DEVICES.md)
-- `app/` — parts of `glaz.lua` in files of their own (services, file
-  browsing, photo), and `glaz_boot.lua`, which loads the app and restarts
-  it; its part for the glasses (`glaz_boot.frame.lua`) is `main.lua` there.
-  See docs/FRAME.md
-- `modules/` — one Lua file per menu item, and its part for each pair of
-  glasses it runs on (`reader.frame.lua`)
-- `host_test.py` — reference host: uploads everything, then listens
-- `utils/` — diagnostics, run individually
-- `check.sh` — static checks, no device needed
+- `glaz/` — the app that runs on the glasses: `glaz.lua` (`glaz_app.lua`
+  there) and its parts `glaz.frame.lua`, `glaz.halo.lua`, the screen
+  (docs/DEVICES.md); parts of `glaz.lua` in files of their own (services,
+  file browsing, photo); and `glaz_boot.lua`, which loads the app and
+  restarts it; its part for the glasses (`glaz_boot.frame.lua`) is
+  `main.lua` there. See docs/FRAME.md
+- `apps/` — one directory per menu item, `apps/<name>/`: `<name>.lua`,
+  its part for each pair of glasses it runs on (`reader.frame.lua`), and a
+  `README.md` with screenshots (`screens/`) and how the app works
+- `scripts/` — every script, run individually: `check.sh` (static
+  checks, no device needed), `host_test.py` (reference host: uploads
+  everything, then listens), diagnostics
 - `tests/` — every app tested on emulated glasses: Frame in our emulator
   (`tests/frame_emulator/`), Halo in Brilliant Labs' (`tests` in the root
   shell; docs/TESTING.md)
-- `sprites/` — the eye as glasses pixel art, for `utils/show_sprite.py`;
+- `sprites/` — the eye as glasses pixel art, for `scripts/show_sprite.py`;
   not uploaded: the phone draws the eye itself during Upload
 - `flutter-glaz/` — the Flutter companion app (phone side)
 - `flipper-glaz/` — a Flipper Zero remote for the glasses, in Rust, with
@@ -72,10 +73,10 @@ and an Android SDK. Linux first, macOS works too.
 
 ```sh
 devenv shell             # in the repository root
-check                    # ./check.sh
-upload                   # python host_test.py
-python utils/connect.py
-python utils/phone_lua.py 'frame.battery_level()'   # through the phone
+check                    # scripts/check.sh
+upload                   # python scripts/host_test.py
+python scripts/connect.py
+python scripts/phone_lua.py 'frame.battery_level()'   # through the phone
 tests                    # every app on emulated Frame and Halo (pytest)
 screens -o docs/screens  # screenshots of every app, for the docs
 
@@ -85,7 +86,7 @@ apk                      # the phone app, Lua bytecode and firmware first
 ```
 
 To try Lua on the glasses while the phone holds them, use
-`utils/phone_lua.py` (the phone app's Lua console, open to a computer);
+`scripts/phone_lua.py` (the phone app's Lua console, open to a computer);
 see docs/FRAME.md, "Quick connect".
 
 ### Building the phone app
@@ -129,21 +130,25 @@ Without devenv, the host tools alone still work from a plain venv:
 ```sh
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python utils/connect.py
+.venv/bin/python scripts/connect.py
 ```
 
 ## Rules
 
 - Frame-side Lua must be **ASCII only** — non-ASCII bytes break upload.
 - Frame runs **Lua 5.4**; check with 5.4, not older versions.
-- Run `./check.sh` after changing any `.lua` file, and the tests
-  (`pytest tests`, docs/TESTING.md): CI runs both.
-- A new menu item gets its tests too: `tests/test_<name>.py`, on every
+- Run `scripts/check.sh` after changing any `.lua` file, and the tests
+  (`pytest tests apps`, docs/TESTING.md): CI runs both.
+- A new menu item gets its tests too: `apps/<name>/test_<name>.py`, on every
   pair of glasses it goes to.
-- Adding a menu item: add a file in `modules/`, its part for each pair of
-  glasses it runs on (`name.frame.lua`, empty `return {}` if it has
-  nothing of its own), and list it in the `MENU` tree in `glaz.lua`. See
-  `docs/PROTOCOL.md` and `docs/DEVICES.md`.
+- Adding a menu item: add a directory `apps/<name>/` with `name.lua`, its
+  part for each pair of glasses it runs on (`name.frame.lua`, empty
+  `return {}` if it has nothing of its own), and a `README.md`: what the
+  app is for, its screenshots (`scripts/screenshots.py --readme name`
+  makes `screens/<glasses>.png`) and how it works. List it in the `MENU`
+  tree in `glaz/glaz.lua` and as an asset folder in
+  `flutter-glaz/pubspec.yaml` (a test checks). See `docs/PROTOCOL.md` and
+  `docs/DEVICES.md`. A change to how an app works updates its README.
 - What differs between Frame and Halo goes in the parts, never in a check
   of which glasses these are (docs/DEVICES.md); `check.sh` holds to it.
 - Every commit that changes an app bumps its version in the same commit,
@@ -151,8 +156,8 @@ python3 -m venv .venv
   side or saved data no longer works with it), minor for a feature, patch
   for a fix. Docs, tests and tooling alone bump nothing. While a version
   is `0.x`, a breaking change bumps the minor.
-  - Glasses (`glaz.lua`, `app/`, `modules/`, `sprites/`): `VERSION` in
-    `modules/about.lua`, shown in Info > About.
+  - Glasses (`glaz/`, `apps/`, `sprites/`): `VERSION` in
+    `apps/about/about.lua`, shown in Info > About.
   - Phone (`flutter-glaz/`): `version` in `flutter-glaz/pubspec.yaml` and
     `appVersion` in `lib/screens/about_screen.dart` (a test keeps them
     equal); the `+N` build number goes up by one with every bump.

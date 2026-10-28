@@ -11,7 +11,7 @@ import 'package:glaz/settings.dart';
 
 import 'assistant_test.dart' show SentLink;
 
-/// GEM_GET as the glasses send it (modules/gemini.lua).
+/// GEM_GET as the glasses send it (apps/gemini/gemini.lua).
 List<int> request(int op, int page, int n, int top) {
   final b = ByteData(7)
     ..setUint8(0, geminiGet)

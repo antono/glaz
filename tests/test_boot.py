@@ -1,6 +1,6 @@
-"""The boot loader (app/glaz_boot.lua, its parts glaz_boot.frame.lua and
+"""The boot loader (glaz/glaz_boot.lua, its parts glaz_boot.frame.lua and
 glaz_boot.halo.lua, main.lua on the glasses) and the goodnight blink
-(app/glaz_blink.frame.lua) on each pair of glasses: files loaded in
+(glaz/glaz_blink.frame.lua) on each pair of glasses: files loaded in
 pieces, require() with the glasses' own parts, the app started again
 after a crash and left stopped when it keeps crashing, the host's break
 let through, and the eye closing before deep sleep.

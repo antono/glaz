@@ -5,9 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:glaz/glasses_menu.dart';
 
 /// The phone's description of the menu must match the glasses' own MENU
-/// tree in ../glaz.lua and the labels in ../modules/*.lua.
+/// tree in ../glaz/glaz.lua and the labels in ../apps/*/*.lua.
 void main() {
-  final lua = File('../glaz.lua').readAsStringSync();
+  final lua = File('../glaz/glaz.lua').readAsStringSync();
 
   test('sections and items match glaz.lua', () {
     final tree = RegExp(
@@ -33,9 +33,9 @@ void main() {
 
   test('labels match the modules', () {
     for (final module in glassesMenu.expand((s) => s.modules)) {
-      final src = File('../modules/${module.id}.lua').readAsStringSync();
+      final src = File('../apps/${module.id}/${module.id}.lua').readAsStringSync();
       final label = RegExp(r"_M\.label = '([^']+)'").firstMatch(src)!.group(1);
-      expect(module.label, label, reason: 'modules/${module.id}.lua');
+      expect(module.label, label, reason: 'apps/${module.id}/${module.id}.lua');
     }
   });
 }

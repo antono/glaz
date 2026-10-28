@@ -26,7 +26,7 @@ them, and the phone does not list it in their menu.
 
 Every part has the same name as its file plus the glasses' name: `reader.lua`,
 `reader.frame.lua`. A part with no `name.lua` is a file only those glasses
-have: `app/glaz_blink.frame.lua`, the eye closing before sleep, is Frame's
+have: `glaz/glaz_blink.frame.lua`, the eye closing before sleep, is Frame's
 alone.
 
 The glasses' names are those of `GlassesModel` on the phone
@@ -35,20 +35,20 @@ part named for any other.
 
 ## On the glasses: require() hands a file its part
 
-`require(name)` is glaz's own (`app/glaz_boot.lua`). It loads
+`require(name)` is glaz's own (`glaz/glaz_boot.lua`). It loads
 `name.<glasses>.lua` first, if it is there, then `name.lua`, and runs that
 with the part as its second argument. For example (Brightness does not do
 this yet: it is Frame's only):
 
 ```lua
--- modules/brightness.lua
+-- apps/brightness/brightness.lua
 local D = select(2, ...)     -- brightness.frame.lua or brightness.halo.lua
 local _M = {}
 local function apply(level) D.set_brightness(level) end
 ...
 return _M
 
--- modules/brightness.frame.lua
+-- apps/brightness/brightness.frame.lua
 local D = {}
 function D.set_brightness(level) frame.display.set_brightness(level) end
 return D
@@ -67,7 +67,7 @@ ask.
 
 Something has to know the glasses before anything can be loaded, so the
 boot is the other way round. `main.lua` is glaz_boot's part for the glasses
-at hand: `app/glaz_boot.frame.lua` or `app/glaz_boot.halo.lua`. It says
+at hand: `glaz/glaz_boot.frame.lua` or `glaz/glaz_boot.halo.lua`. It says
 which glasses these are (`D.device`), loads a file the way those glasses
 must (`D.load`: Frame's firmware require() cannot be trusted with large
 files, docs/FRAME.md), and says "restarted" on their screen
@@ -119,10 +119,10 @@ and with the glaz firmware the file system holds about 44 of them
 ### What check.sh holds to
 
 - A part's suffix names glasses there are.
-- Every module in `modules/` has a part, or it is on no glasses.
+- Every app in `apps/` has a part, or it is on no glasses.
 - A file that reaches more than one pair of glasses does not draw: it calls
   no `frame.display.*`, its parts do. This covers `glaz.lua`, the common
-  files in `app/`, and a module with more than one part.
+  files in `glaz/`, and a module with more than one part.
 - Nothing asks which glasses these are.
 
 ## On the phone
@@ -157,8 +157,8 @@ and with the glaz firmware the file system holds about 44 of them
 1. Add the model to `GlassesModel` (`model.dart`), told by its advertised
    name.
 2. Add the parts:
-   - `app/glaz_boot.<model>.lua`;
-   - `glaz.<model>.lua`, with every name in the table above;
+   - `glaz/glaz_boot.<model>.lua`;
+   - `glaz/glaz.<model>.lua`, with every name in the table above;
    - a part for each module that runs there.
 3. Add the name to `devices` in `check.sh`, to `device_of` in
    `host_test.py` if it uploads there, and to the file list in `flake.nix`.

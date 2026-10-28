@@ -112,7 +112,7 @@ tune then shows `thr ?`, and a tap on that row sets every axis to `3`.
 
 ## Calibrating
 
-[`modules/taptune.lua`](../modules/taptune.lua) is a menu module for tuning in
+[`apps/taptune/taptune.lua`](../apps/taptune/taptune.lua) is a menu module for tuning in
 place. Tilt moves the cursor over `threshold`, `quiet`, `duration`, `axes`
 and `test`; a single tap on a setting steps it to its next value (the screen
 says which) and reprograms the chip. On `test` a tap changes nothing. A hit
@@ -178,7 +178,7 @@ advances it.
 
 **The phone app carries the build of `glaz/stable`**, every build of it:
 the release (`.github/workflows/release.yml`, `FIRMWARE_REF`) and `apk`
-alike. Locally, `firmware` in the root shell (`utils/build_firmware.sh`)
+alike. Locally, `firmware` in the root shell (`scripts/build_firmware.sh`)
 builds a branch's current commit in a worktree of its own, named by the
 commit's time: `v26.299.1345-glaz` for `glaz/stable`,
 `v26.298.1306-glaz-emoji` for `glaz/emoji`. The same commit always gets
@@ -221,7 +221,7 @@ to its last, so a row of a terminal is a few sprites, not one a character.
 It returns the x after the last cell. Measured on the glasses: 28 normal
 is the smallest that reads well; in the visible 640x340 that is 45x12
 cells. A full screen of it draws in 87 ms, 152 ms with a background on
-every row. `utils/mono_test.py` shows every size and weight.
+every row. `scripts/mono_test.py` shows every size and weight.
 
 Also worth knowing: `frame.sleep()` with no argument is System OFF, and waking
 from it is a **reset**. Nothing after `frame.sleep()` in Lua runs; the glasses
@@ -392,14 +392,14 @@ builds together exceed the 824 KB application area (any two of ours, 600 to
 the glasses stay in `Frame Update` until an image arrives: docs/RECOVERY.md,
 section 6.
 
-**From a computer**, Linux or macOS: `utils/dfu.py`, Nordic Secure DFU
+**From a computer**, Linux or macOS: `scripts/dfu.py`, Nordic Secure DFU
 over bleak, the same protocol the phone app speaks. It needs no pairing,
 checks every 4 KB object by CRC32, resumes an update that broke off and
 prints progress every 5 %:
 
 ```bash
-python utils/dfu.py --enter build/frame-firmware-<version>.zip  # glasses running
-python utils/dfu.py build/frame-firmware-<version>.zip          # already in Frame Update
+python scripts/dfu.py --enter build/frame-firmware-<version>.zip  # glasses running
+python scripts/dfu.py build/frame-firmware-<version>.zip          # already in Frame Update
 ```
 
 About 2.5 KB/s from Linux, 4 to 5 minutes for a build. It replaces

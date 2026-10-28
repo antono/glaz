@@ -1,5 +1,5 @@
 """The services glaz gives the phone and the modules (glaz.lua,
-app/glaz_host.lua, app/glaz_files.lua, app/glaz_lua.lua; docs/PROTOCOL.md):
+glaz/glaz_host.lua, glaz/glaz_files.lua, glaz/glaz_lua.lua; docs/PROTOCOL.md):
 STATUS, the Lua console, browsing the files, a module's HTTP requests and
 location, the settings from the phone, the phone's own menus and the
 remote's HANDS_OFF lease.

@@ -14,28 +14,26 @@ on:
   push:
     branches: [main]
     paths:
-      - 'glaz*.lua'
-      - 'app/**'
-      - 'modules/**'
+      - 'glaz/**'
+      - 'apps/**'
       - 'sprites/**'
       - 'flutter-glaz/assets/lua/lib/**'
       - 'flutter-glaz/lib/frame/font.dart'
       - 'tests/**'
-      - 'utils/screenshots.py'
-      - 'check.sh'
+      - 'scripts/screenshots.py'
+      - 'scripts/check.sh'
       - 'requirements.txt'
       - '.github/workflows/tests.yml'
   pull_request:
     paths:
-      - 'glaz*.lua'
-      - 'app/**'
-      - 'modules/**'
+      - 'glaz/**'
+      - 'apps/**'
       - 'sprites/**'
       - 'flutter-glaz/assets/lua/lib/**'
       - 'flutter-glaz/lib/frame/font.dart'
       - 'tests/**'
-      - 'utils/screenshots.py'
-      - 'check.sh'
+      - 'scripts/screenshots.py'
+      - 'scripts/check.sh'
       - 'requirements.txt'
       - '.github/workflows/tests.yml'
   workflow_dispatch:
@@ -64,7 +62,7 @@ jobs:
           echo "$HOME/bin" >> "$GITHUB_PATH"
 
       - name: Static checks
-        run: ./check.sh
+        run: scripts/check.sh
 
       - uses: actions/setup-python@v7
         with:
@@ -77,11 +75,11 @@ jobs:
       - name: Apps on emulated Frame and Halo
         env:
           SHOTS: screens
-        run: pytest tests -q -p no:cacheprovider --junitxml=report.xml
+        run: pytest tests apps -q -p no:cacheprovider --junitxml=report.xml
 
       - name: Screens of every app
         if: always()
-        run: python utils/screenshots.py -o screens/apps
+        run: python scripts/screenshots.py -o screens/apps
 
       - uses: actions/upload-artifact@v7
         if: always()

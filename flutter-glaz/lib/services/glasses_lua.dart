@@ -139,7 +139,7 @@ class GlassesLua {
 }
 
 /// The Lua console for a computer: an HTTP server on the phone's own
-/// loopback, reached through `adb forward` (utils/phone_lua.py). Nothing on
+/// loopback, reached through `adb forward` (scripts/phone_lua.py). Nothing on
 /// the network can reach it. On while [Settings.luaBridge] is.
 ///
 ///   POST /lua         the body is Lua; 200 with the answer, 422 with the

@@ -30,11 +30,11 @@ fi
 rm -f "$out"/*.luac
 index="$out/index.txt"
 : > "$index"
-for src in assets/lua/glaz*.lua assets/lua/lib/*.lua assets/lua/app/*.lua \
-           assets/lua/modules/*.lua; do
+for src in assets/lua/glaz/*.lua assets/lua/lib/*.lua \
+           assets/lua/apps/*/*.lua; do
   rel="${src#assets/lua/}"
   # one folder, as Flutter takes an asset folder's files but not its
-  # subfolders': modules/photo.lua -> modules.photo.luac
+  # subfolders': apps/photo/photo.lua -> apps.photo.photo.luac
   dst="$out/$(echo "${rel%.lua}" | tr / .).luac"
   hash=$("$tool" "$src" "$dst" "$rel")
   echo "$src $hash" >> "$index"

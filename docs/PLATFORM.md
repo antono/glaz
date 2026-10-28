@@ -226,7 +226,7 @@ parameter GRAPHICS_DRAW_VECTOR = 'h13;
 ```
 
 — and then never references it again. Only `ASSIGN_COLOR`, `DRAW_SPRITE` and
-`BUFFER_SHOW` are decoded, and `modules/graphics/` contains a `sprite_engine.sv`
+`BUFFER_SHOW` are decoded, and `apps/graphics/` contains a `sprite_engine.sv`
 with no vector counterpart. Writing to `0x13` draws nothing.
 
 So the display cannot draw a line at all, at any level, without new RTL. Text
@@ -264,7 +264,7 @@ frame.fpga_write(0x13, string.pack('>I2I2I2I2I2I2I2I2B',
 frame.display.show()
 ```
 
-[`utils/test_vector.py`](../utils/test_vector.py) builds exactly this. It is
+[`scripts/test_vector.py`](../scripts/test_vector.py) builds exactly this. It is
 expected to draw **nothing**, because the RTL does not decode `0x13` — see
 above. It is kept as the ready-made probe for the day the engine lands, and as
 a way to disprove the reading of the RTL.

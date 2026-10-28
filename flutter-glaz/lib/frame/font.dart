@@ -1,5 +1,5 @@
 // Widths of the glasses' font, to cut text into lines that fit their
-// screen here, on the phone. The same table as modules/reader.lua (from
+// screen here, on the phone. The same table as apps/reader/reader.lua (from
 // system_font.h in the firmware): per glyph, the byte minus 48 is its
 // advance in px, 0 for none; the firmware puts [spacing] between glyphs.
 

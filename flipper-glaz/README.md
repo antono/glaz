@@ -29,7 +29,7 @@ The Flipper is no Bluetooth keyboard (`src/ble.rs`): it sends each press
 over its own service to glaz on the phone (below, "The link to the
 phone"), and Android, seeing no keyboard, keeps its on-screen one and
 gives the presses to no other app. What a press does is glaz's to say
-(`flutter-glaz/lib/flipper/presses.dart`); `utils/flipper_keys.py` prints
+(`flutter-glaz/lib/flipper/presses.dart`); `scripts/flipper_keys.py` prints
 them on a computer.
 
 | Flipper | Sends |
@@ -118,7 +118,7 @@ have no such thing, nor has Android before 12: there glaz finds the
 Flipper only while it runs (on iOS and desktop by a scan, while the
 glasses are connected). After a force stop in Android's settings,
 Android starts glaz for the Flipper again only once glaz has been opened
-by hand. `utils/flipper_keys.py` writes a status from a computer.
+by hand. `scripts/flipper_keys.py` writes a status from a computer.
 
 After a failed or cancelled pairing the Flipper's firmware may keep its
 PIN dialog on screen: press Back, or close and reopen Glaz, before

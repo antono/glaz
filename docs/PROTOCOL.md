@@ -31,7 +31,7 @@ selection events just go nowhere (`frame.bluetooth.send` is wrapped in `pcall`).
 
 ## Modules
 
-Each menu item is a Lua module in `modules/`. A module declares a label and
+Each menu item is a Lua module in `apps/`. A module declares a label and
 what to do when it is picked:
 
 ```lua
@@ -73,7 +73,7 @@ argument of the phone's `APP_OPEN`, when the phone opened it with one (see
 The returned text may hold up to **three lines** separated by `\n`; they are
 drawn on rows 3–5, below the breadcrumb. A module that sets `_M.rows` (at
 most 5) gets that many lines from row 1, every row under the top bar:
-Assistant's answers. `modules/timeseries.lua` uses all
+Assistant's answers. `apps/timeseries/timeseries.lua` uses all
 three: interval scale, status, sent/failed counters.
 
 **Sleeping or background (`_M.background`).** Every module is one of two:
@@ -89,7 +89,7 @@ three: interval scale, status, sent/failed counters.
 
 `background` may also be a **function**, asked each time the module leaves the
 screen: `true` keeps it running, `false` stops it like a sleeping one. That is
-how a background module ends itself — `modules/stopwatch.lua` answers `false`
+how a background module ends itself — `apps/stopwatch/stopwatch.lua` answers `false`
 once it has been reset. A background module can also finish on its own by
 returning `true` as the second value of `tick()`, on screen or off.
 
@@ -149,7 +149,7 @@ Reader draws its word that way.
   call, bounces and the taps of a double or triple included. `flags` is the
   tap status byte of the last knock's first hit, not its rebound (MC6470
   register `0x03`, which side was tapped), or `nil` on firmware that does
-  not pass it. For measuring taps (`modules/taptune.lua`); a module never
+  not pass it. For measuring taps (`apps/taptune/taptune.lua`); a module never
   takes `frame.imu.tap_callback` over, which would leave the app without
   taps.
 - `remote(arg)` — the phone calls the module (`MODULE_CALL`, see
@@ -173,7 +173,7 @@ Each input hook returns the text to show (`nil` keeps the current text) and, opt
 `true` as a second value meaning "done": the module is stopped — even a
 background one — and the menu comes back. Triple taps are never passed to a
 module, and a double tap only as `on_back()`, which at the top level cannot
-keep it, so back and sleep always work. `modules/brightness.lua` is the example: tilt previews a
+keep it, so back and sleep always work. `apps/brightness/brightness.lua` is the example: tilt previews a
 level, a single tap keeps it, a double tap cancels.
 
 ```lua
@@ -206,7 +206,7 @@ A string is a module; a table is a submenu — its `label`, then its entries,
 which can be submenus again. The order is the display order. Modules are
 numbered in tree order (`photo` = 1, `timeseries` = 2, ...); that number is the
 `index` in `APP_START` / `APP_STOP`. The host uploads every
-`modules/*.lua` to the device root, because `glaz.lua` requires them by
+`apps/*/*.lua` to the device root, because `glaz.lua` requires them by
 bare name.
 
 Two failures are contained deliberately:
@@ -241,7 +241,7 @@ Each tap count means one thing everywhere:
 | **3** | sleep — deep sleep, from any state |
 
 However they get there -- three taps, Sleep, the idle timeout -- the glasses
-show the eye closing for a second before deep sleep (`app/glaz_blink.frame.lua`,
+show the eye closing for a second before deep sleep (`glaz/glaz_blink.frame.lua`,
 made by `flutter-glaz/tool/logo.py blink`), or `sleeping...` if that file
 cannot be loaded: a dark screen alone looks the same as a hang.
 
@@ -450,7 +450,7 @@ Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 | `0x06` | audio end | `[0x06, samples...]` | last part; the recording is complete |
 
 `0x07` / `0x08` are the frame_msg `camera` library's codes, not this app's:
-`modules/photo.lua` sends through its `capture_and_send()`, and the host
+`apps/photo/photo.lua` sends through its `capture_and_send()`, and the host
 reassembles with `RxPhoto` and saves to `photos/`. The library must be
 uploaded next to `data` (`upload_stdlua_libs(["data", "camera"])`).
 
@@ -507,16 +507,16 @@ multi-tap, except three, which still sleep. What it covered keeps running
 and comes back as it was; while covered, a module gets no taps, raw hits or
 tilts, which would act unseen. The glasses hold only the one on screen.
 
-**Pop-ups (Settings > Notifications, `modules/notifyset.lua`).** Picked on
+**Pop-ups (Settings > Notifications, `apps/notifyset/notifyset.lua`).** Picked on
 the glasses, not the phone: whether a notification pops up (`on` / `off`)
 and how long it stays (3, 5, 10 or 20 s). Tilt picks the setting, a tap
 its next value, kept at once. They live in `prefs.txt` on the glasses,
 through `_M.host.pref(key, default)` / `_M.host.set_pref(key, value)`
-(`app/glaz_host.lua`): settings the wearer picks there, which
+(`glaz/glaz_host.lua`): settings the wearer picks there, which
 `SETTINGS_SET` leaves alone. Off, nothing covers the screen; the phone
 still keeps the notification for the list.
 
-**The list (Apps > Notifications, `modules/notifications.lua`).** The
+**The list (Apps > Notifications, `apps/notifications/notifications.lua`).** The
 phone keeps the last 50 it forwarded, newest first, also those that came
 with the glasses away (`flutter-glaz/lib/services/notifications.dart`).
 The glasses hold a window of it and ask as the cursor leaves it, with
@@ -528,7 +528,7 @@ The glasses hold a window of it and ask as the cursor leaves it, with
 | `2` | notification `id` `n`, all of it | `f:<id>`, then a `\n<line>` each: the time and the app, the title, the text; `(gone)` when no longer kept |
 
 Every line is cut to fit the screen by the font's widths
-(`flutter-glaz/lib/frame/font.dart`, the table in `modules/reader.lua`),
+(`flutter-glaz/lib/frame/font.dart`, the table in `apps/reader/reader.lua`),
 an answer to 900 bytes. Ids are the phone's and do not shift when a new
 one comes. Tilt moves the cursor (an open one: a screen down / up), a tap
 opens one and closes it again, and so does a double tap: back to the list,
@@ -552,7 +552,7 @@ local status, body = _M.host.result(id)   -- nil while pending
 On the wire the request is one text, `module\nMETHOD\nurl\nbody`, cut into
 `NET_REQUEST` packets of at most `frame.bluetooth.max_length()` bytes:
 `[0x19, id, more, bytes...]`, with `more = 0` on the last. `id` runs 1 to
-255 and wraps. `module` is the file name in `modules/`, without `.lua` —
+255 and wraps. `module` is the file name in `apps/`, without `.lua` —
 the name the phone checks the permission against.
 
 The phone answers with one `NET_RESPONSE` (`0x25`): `id`, the HTTP status
@@ -636,7 +636,7 @@ ones.
 
 ### Recorder
 
-Recorder (`modules/recorder.lua`) streams the microphone to the phone as it
+Recorder (`apps/recorder/recorder.lua`) streams the microphone to the phone as it
 records; the glasses keep nothing. A tap sends `REC_START`
 (`[0x1F, bits, rate / 1000]`: 8 or 16 bits, 8 kHz), then the samples follow
 as `0x05` packets and a final `0x06` when a tap stops it. `0x05` / `0x06` are
@@ -708,7 +708,7 @@ link cut a recording short -- is stopped at its next background tick.
 
 ### Assistant
 
-Assistant (`modules/assistant.lua`) is the glasses' voice assistant. A tap
+Assistant (`apps/assistant/assistant.lua`) is the glasses' voice assistant. A tap
 starts listening, the next stops it and asks; nothing guesses where a
 question ends (a pause cut questions short). A double tap goes back to
 the chats, and from them out of Assistant; either drops the question: the glasses send `REC_DROP` (`0x10`) instead of the
@@ -815,7 +815,7 @@ again in between is dropped.
 
 ### Translate
 
-Translate (`modules/translate.lua`) shows, translated, what the other
+Translate (`apps/translate/translate.lua`) shows, translated, what the other
 person says. The glasses stream their microphone as Assistant's do; the
 phone (`flutter-glaz/lib/services/translate.dart`) hears it with ML Kit
 in the speaker's language, translates each finished sentence with ML Kit
@@ -824,7 +824,7 @@ other speaker, into the wearer's language. The glasses hold a few lines
 of the log and ask for others as they scroll, as Gemini does.
 
 On entry it asks **Voice** or **Photo**. The pick is kept on the glasses,
-as a pref (`_M.host.pref('mode')`, app/glaz_host.lua): modules are
+as a pref (`_M.host.pref('mode')`, glaz/glaz_host.lua): modules are
 unloaded when they stop, so a local would be lost. Nothing about the
 mode goes over the wire.
 
@@ -835,7 +835,7 @@ mode goes over the wire.
 | double tap | leave | back to the chooser: end the sound, close the session | back to the chooser: the camera off, close the session |
 
 **Photo.** A tap takes a photo as the phone's remote does
-(`app/glaz_photo.frame.lua`, loaded for it alone): 720 px, quality HIGH, 1.5 s
+(`glaz/glaz_photo.frame.lua`, loaded for it alone): 720 px, quality HIGH, 1.5 s
 of auto exposure, the loop waiting meanwhile. Its `PHOTO_FROM` is
 `[0x1A, 255]`: Photos does not keep it, Translate reads it. The phone
 finds the blocks of text on it (ML Kit text recognition), tells their
@@ -990,7 +990,7 @@ is a service of its own (Services), on by default; off, the glasses say
 
 ### Tuner
 
-Tuner (`modules/tuner.lua`) tunes a string instrument. It opens on a list
+Tuner (`apps/tuner/tuner.lua`) tunes a string instrument. It opens on a list
 of instruments -- guitar, banjo, balalaika, domra, ukulele, bass guitar,
 violin -- each with its standard tuning beside it; tilt picks one, a tap
 tunes it, a double tap goes back to the list. The list opens at the
@@ -1035,7 +1035,7 @@ tunings live only in the module.
 
 ### Reader
 
-Reader (`modules/reader.lua`) is a speed reader (RSVP): one word at a
+Reader (`apps/reader/reader.lua`) is a speed reader (RSVP): one word at a
 time, at a speed in words a minute that is always on screen. The texts
 live on the phone, in a library (Glaz > Menu > Reader: add by pasting or
 typing, open to read through, rename, delete), each with its own place;
@@ -1116,7 +1116,7 @@ not close it; paused, it does.
 
 ### Gemini
 
-Gemini (`modules/gemini.lua`) is a browser for
+Gemini (`apps/gemini/gemini.lua`) is a browser for
 [Gemini](https://geminiprotocol.net), the small web of plain text pages:
 `gemini://` URLs, one TLS connection per page on port 1965, the page in
 gemtext -- headings, paragraphs, links one to a line, lists, quotes,
@@ -1291,7 +1291,7 @@ a file goes out, so a file stops at `FILE_MAX` (64 KB) with a
 
 The phone can run Lua on the glasses while their app runs (Glaz > More >
 Lua console) -- the REPL is blocked then, so `glaz.lua` runs it, in
-`app/glaz_lua.lua`, loaded for the request:
+`glaz/glaz_lua.lua`, loaded for the request:
 
 - `LUA_EVAL` (`0x30`), `[id]` and the Lua, is answered with `LUA_RESULT`
   (`0x09`), in packets as in [Files](#files), `+` and the text, or `-` and
@@ -1313,13 +1313,13 @@ Completion asks the glasses too: the names in a table (`_G`, `frame`,
 on its own loopback, `127.0.0.1:8137`: `POST /lua` with the Lua as the body
 (200 and the answer, 422 and the error, 503 when there is no answer), and
 `GET /complete?q=frame.disp`, one name a line. Nothing on the network
-reaches it; `adb forward` does. `utils/phone_lua.py` does both: a command,
+reaches it; `adb forward` does. `scripts/phone_lua.py` does both: a command,
 stdin, or an interactive prompt with Tab completion. The glasses stay
 connected to the phone the whole time.
 
 ### Terminal
 
-Apps > Terminal (`modules/term.lua`) is a shell on a host of the user's,
+Apps > Terminal (`apps/term/term.lua`) is a shell on a host of the user's,
 over SSH from the phone (`flutter-glaz/lib/services/term.dart`). The phone
 holds the session and the terminal's screen (xterm's model), 45x12 cells;
 the glasses draw it with `frame.display.mono`, 28 normal, in the visible
@@ -1645,19 +1645,19 @@ which defeats the thin-host design above.
 The Python reference host is **throwaway, for exercising the protocol**:
 
 ```bash
-.venv/bin/python host_test.py
+.venv/bin/python scripts/host_test.py
 ```
 
 What it does, in the order any host should:
 
 1. `connect()`
 2. `upload_stdlua_libs(['data'])` — the transport, onto the glasses
-3. `upload_file(m, m.name)` for `app/*.lua` and the `modules/*.lua` that
+3. `upload_file(m, m.name)` for `glaz/glaz_*.lua` and the `apps/*/*.lua` that
    are Frame's, with their Frame parts (docs/DEVICES.md) — the app's parts
    and the menu items
 4. `glaz.lua` and `glaz.frame.lua` as `glaz_app.lua` and
    `glaz_app.frame.lua`, then `upload_frame_app()` of
-   `app/glaz_boot.frame.lua` as `main.lua` — the application itself
+   `glaz/glaz_boot.frame.lua` as `main.lua` — the application itself
 5. `start_frame_app()` — waits for the line `Frame app is running`
 6. `register_data_response_handler(..., [0x11, 0x12, 0x13, 0x14], handler)`
 7. `send_message(0x23, ...)` — the wall clock for the top bar
@@ -1697,14 +1697,14 @@ the Lua side and the message codes are identical there.
 ## Static checks
 
 ```bash
-./check.sh
+scripts/check.sh
 ```
 
 Catches syntax errors and non-ASCII bytes without needing the glasses, which
 matters because the device gives poor feedback and is often asleep.
 
 **Check against Lua 5.4.** Frame runs 5.4; Lua 5.2 rejects valid code — the
-`//` integer division operator only arrived in 5.3, so `modules/uptime.lua`
+`//` integer division operator only arrived in 5.3, so `apps/uptime/uptime.lua`
 fails there for no real reason.
 
 ---
@@ -1797,6 +1797,6 @@ slowed down to accommodate it.
   breadcrumb for it
 - **submenus from modules** — let a module return a list instead of a string
 - **camera settings** — resolution and quality picked by tilt, as in
-  Brightness; `modules/photo.lua` has them fixed (512 px, `MEDIUM`)
+  Brightness; `apps/photo/photo.lua` has them fixed (512 px, `MEDIUM`)
 - **module-defined host actions** — a module that only emits an event, leaving
   the work to whichever host happens to be connected

@@ -13,7 +13,7 @@ import '../settings.dart';
 
 /// The longest piece of a word the glasses show at once, hyphen included:
 /// with the pivot letter at a third of the screen, longer runs off its
-/// right edge (modules/reader.lua).
+/// right edge (apps/reader/reader.lua).
 const maxPiece = 13;
 
 /// TEXT_GET's from: wherever the phone says the place is.
@@ -314,7 +314,7 @@ class ReaderService extends ChangeNotifier {
     );
   }
 
-  /// MODULE_CALL's argument for modules/reader.lua:
+  /// MODULE_CALL's argument for apps/reader/reader.lua:
   /// 't:from:total:version:words', as many of count words as fit in
   /// [maxBytes] of UTF-8. No text: 't:0:0:0:'.
   String answer(int from, int count) {
