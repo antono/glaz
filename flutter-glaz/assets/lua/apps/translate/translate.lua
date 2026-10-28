@@ -1,0 +1,1 @@
+../../../../../apps/translate/translate.lua

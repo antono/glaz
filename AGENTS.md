@@ -146,8 +146,9 @@ python3 -m venv .venv
   `return {}` if it has nothing of its own), and a `README.md`: what the
   app is for, its screenshots (`scripts/screenshots.py --readme name`
   makes `screens/<glasses>.png`) and how it works. List it in the `MENU`
-  tree in `glaz/glaz.lua` and as an asset folder in
-  `flutter-glaz/pubspec.yaml` (a test checks). See `docs/PROTOCOL.md` and
+  tree in `glaz/glaz.lua`, as an asset folder in
+  `flutter-glaz/pubspec.yaml`, and link its Lua into the phone's assets
+  with `flutter-glaz/tool/link_apps.sh` (a test checks both). See `docs/PROTOCOL.md` and
   `docs/DEVICES.md`. A change to how an app works updates its README.
 - What differs between Frame and Halo goes in the parts, never in a check
   of which glasses these are (docs/DEVICES.md); `check.sh` holds to it.
