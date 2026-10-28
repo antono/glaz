@@ -55,9 +55,10 @@ in
     upload.exec = ''python scripts/host_test.py "$@"'';
     sprite.exec = ''python scripts/show_sprite.py "$@"'';
     # every app on emulated Frame and Halo (docs/TESTING.md)
-    tests.exec = ''pytest tests "$@"'';
+    # (tests/, and each app's own in apps/<name>/; or the paths given)
+    tests.exec = ''if [ $# -eq 0 ]; then set -- tests apps; fi; pytest "$@"'';
     # the same, Halo's only
-    halo.exec = ''pytest tests -k halo "$@"'';
+    halo.exec = ''pytest tests apps -k halo "$@"'';
     # screenshots of every app on both, for the docs
     screens.exec = ''python scripts/screenshots.py "$@"'';
     # our firmware from a branch, glaz/stable by default, for the phone app

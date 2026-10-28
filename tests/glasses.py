@@ -45,8 +45,9 @@ APP_START, APP_STOP, MENU_LEVEL, APP_BACKGROUND = 0x15, 0x16, 0x17, 0x18
 NET_REQUEST, STATUS, LOCATION_GET = 0x19, 0x1B, 0x1C
 FILES, FILE_DATA = 0x1D, 0x1E
 
-# A fixed time the phone sets: 2026-10-27 13:37 UTC, UTC+2
-NOW = 1_793_108_220
+# A fixed time the phone sets: 2026-10-27 11:37 UTC, UTC+2, so every
+# screen shows 13:37
+NOW = 1_793_101_020
 ZONE_MINUTES = 120
 
 TAP_GAP = 0.3      # between the taps of one gesture: past TAP_BOUNCE

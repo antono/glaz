@@ -6,7 +6,7 @@
     python scripts/screenshots.py --readme      # into apps/<app>/screens/
 
 For every app: the glasses start as after an upload, the phone sets the
-clock (13:37 UTC, shown as 15:37), the app is opened as the phone's Menu
+clock (11:37 UTC, shown as 13:37), the app is opened as the phone's Menu
 tab opens it, and its screen is saved a few seconds later as
 <out>/<device>/<app>.png, or with --readme as
 apps/<app>/screens/<device>.png, the shots the app's README shows. The menu, the splash and a notification come

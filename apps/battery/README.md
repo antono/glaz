@@ -14,7 +14,7 @@ Halo:
 
 A reading of 37% while the top bar still says 85% (Frame; made by
 `test_shows_the_level_in_percent` in
-[test_battery.py](../../tests/test_battery.py)). The module shows the
+[test_battery.py](test_battery.py)). The module shows the
 firmware's reading of the moment; the top bar shows the mean of its
 samples:
 
@@ -59,5 +59,5 @@ is the same on both ([DEVICES.md](../../docs/DEVICES.md)).
 - [battery.lua](battery.lua) -- the module.
 - [battery.frame.lua](battery.frame.lua) -- Frame's part, empty.
 - [battery.halo.lua](battery.halo.lua) -- Halo's part, empty.
-- [../../tests/test_battery.py](../../tests/test_battery.py) -- the tests,
+- [test_battery.py](test_battery.py) -- the tests,
   on emulated Frame and Halo.

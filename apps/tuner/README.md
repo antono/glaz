@@ -27,7 +27,7 @@ The high E 37 cents flat: red, `tune up`
 
 ![Frame, far flat](screens/frame-flat.png)
 
-They are made by [`tests/test_tuner.py`](../../tests/test_tuner.py), with
+They are made by [`test_tuner.py`](test_tuner.py), with
 `SHOTS=dir`, as `tuner-in-tune.png`, `tuner-sharp.png` and
 `tuner-flat.png` ([docs/TESTING.md](../../docs/TESTING.md)).
 
@@ -101,4 +101,4 @@ Halo part, so the phone neither uploads it to Halo nor lists it there
 - [`tuner.frame.lua`](tuner.frame.lua) -- its part for Frame, empty
 - [`../../flutter-glaz/lib/services/tuner.dart`](../../flutter-glaz/lib/services/tuner.dart)
   -- the phone's side: the microphone and the pitch (YIN)
-- [`../../tests/test_tuner.py`](../../tests/test_tuner.py) -- its tests
+- [`test_tuner.py`](test_tuner.py) -- its tests

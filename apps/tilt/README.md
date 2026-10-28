@@ -16,7 +16,7 @@ The head turned: roll 16, pitch -90 (`test_follows_the_head_live`):
 
 ![Frame, head turned](screens/frame-turned.png)
 
-Made by [`tests/test_tilt.py`](../../tests/test_tilt.py), with `SHOTS=dir`,
+Made by [`test_tilt.py`](test_tilt.py), with `SHOTS=dir`,
 as `tilt-turned.png` ([docs/TESTING.md](../../docs/TESTING.md)).
 
 ## How it works
@@ -48,4 +48,4 @@ Halo part, so the phone neither uploads it to Halo nor lists it there
 
 - [`tilt.lua`](tilt.lua) -- the module
 - [`tilt.frame.lua`](tilt.frame.lua) -- its part for Frame, empty
-- [`../../tests/test_tilt.py`](../../tests/test_tilt.py) -- its tests
+- [`test_tilt.py`](test_tilt.py) -- its tests

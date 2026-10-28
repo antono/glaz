@@ -108,7 +108,10 @@ void main() {
 
   test('every app in ../apps is an asset folder in pubspec.yaml', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
-    final apps = Directory('../apps').listSync().whereType<Directory>();
+    final apps = Directory('../apps')
+        .listSync()
+        .whereType<Directory>()
+        .where((d) => !d.path.split('/').last.startsWith('_')); // __pycache__
     expect(apps, isNotEmpty);
     for (final d in apps) {
       final name = d.path.split('/').last;

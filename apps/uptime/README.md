@@ -17,7 +17,7 @@ The Halo shot above is from Brilliant Labs' Halo emulator, whose
 `frame.time.utc()` is a wall clock, so it shows the hours since 1970, cut
 by the round screen. The tests set the clock to 137 s first, as if just
 powered on (`test_shows_the_uptime` in
-[test_uptime.py](../../tests/test_uptime.py)):
+[test_uptime.py](test_uptime.py)):
 
 ![Halo, just powered on](screens/halo-just-on.png)
 
@@ -64,6 +64,6 @@ line and cuts it to the circle's width ([HALO.md](../../docs/HALO.md)).
 - [uptime.lua](uptime.lua) -- the module.
 - [uptime.frame.lua](uptime.frame.lua) -- Frame's part, empty.
 - [uptime.halo.lua](uptime.halo.lua) -- Halo's part, empty.
-- [../../tests/test_uptime.py](../../tests/test_uptime.py) -- the tests, on
+- [test_uptime.py](test_uptime.py) -- the tests, on
   emulated Frame and Halo: the format, the timeout, the inputs, no phone,
   starting from zero after sleep.

@@ -29,7 +29,7 @@ stays in the top bar over the menu
 
 ![Frame, recording in the background](screens/frame-background.png)
 
-Made by [`tests/test_recorder.py`](../../tests/test_recorder.py) with
+Made by [`test_recorder.py`](test_recorder.py) with
 `SHOTS=dir`, as `recorder-recording.png`, `recorder-saved.png` and
 `recorder-background.png` ([docs/TESTING.md](../../docs/TESTING.md)). The
 same tests also save `recorder-no-host.png` and `recorder-lost.png`.
@@ -93,5 +93,5 @@ nor lists it there ([docs/DEVICES.md](../../docs/DEVICES.md)).
 - [`recorder.lua`](recorder.lua) -- the app
 - [`recorder.frame.lua`](recorder.frame.lua) -- its part for Frame: nothing
   of its own
-- [`tests/test_recorder.py`](../../tests/test_recorder.py) -- its tests, on
+- [`test_recorder.py`](test_recorder.py) -- its tests, on
   emulated Frame (and that Halo has no Recorder)

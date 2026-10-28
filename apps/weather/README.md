@@ -16,7 +16,7 @@ Halo, the same (the round screen cuts the line):
 
 The answer for the phone's position, named by its coordinates
 (`test_the_weather_there_is_shown_by_its_numbers` in
-[test_weather.py](../../tests/test_weather.py)):
+[test_weather.py](test_weather.py)):
 
 ![Frame, the weather here](screens/frame-here.png)
 
@@ -104,6 +104,6 @@ ASCII, so it shows `?C`, and cuts each line to the circle's width, 13 or
 - [weather.lua](weather.lua) -- the module.
 - [weather.frame.lua](weather.frame.lua) -- Frame's part, empty.
 - [weather.halo.lua](weather.halo.lua) -- Halo's part, empty.
-- [../../tests/test_weather.py](../../tests/test_weather.py) -- the tests,
+- [test_weather.py](test_weather.py) -- the tests,
   on emulated Frame and Halo: the place, the position, the answer and its
   lines, errors, taps, no phone.

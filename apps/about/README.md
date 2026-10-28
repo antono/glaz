@@ -15,7 +15,7 @@ Halo:
 
 Where it is picked, Glaz > Info > About (Frame; made by
 `test_picked_in_the_menu_under_info` in
-[test_about.py](../../tests/test_about.py)):
+[test_about.py](test_about.py)):
 
 ![Frame, the Info menu](screens/frame-menu.png)
 
@@ -60,6 +60,6 @@ See [DEVICES.md](../../docs/DEVICES.md) for how a module gets its part.
 - [about.lua](about.lua) -- the module: label, version, author.
 - [about.frame.lua](about.frame.lua) -- Frame's part, empty.
 - [about.halo.lua](about.halo.lua) -- Halo's part, `lines()`.
-- [../../tests/test_about.py](../../tests/test_about.py) -- the tests, on
+- [test_about.py](test_about.py) -- the tests, on
   emulated Frame and Halo: the version is SemVer and the file ASCII, the
   lines in order, the timeout, the inputs, Halo's layout.

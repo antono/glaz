@@ -16,7 +16,7 @@ A tap on a file: its name and size, then its first two lines
 
 ![Frame, a preview](screens/frame-preview.png)
 
-Made by [`tests/test_files.py`](../../tests/test_files.py) with
+Made by [`test_files.py`](test_files.py) with
 `SHOTS=dir`, as `files-preview.png`
 ([docs/TESTING.md](../../docs/TESTING.md)).
 
@@ -68,5 +68,5 @@ lists it there ([docs/DEVICES.md](../../docs/DEVICES.md)).
 - [`files.lua`](files.lua) -- the app
 - [`files.frame.lua`](files.frame.lua) -- its part for Frame: nothing of
   its own
-- [`tests/test_files.py`](../../tests/test_files.py) -- its tests, on
+- [`test_files.py`](test_files.py) -- its tests, on
   emulated Frame (and that Halo has no Files)

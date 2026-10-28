@@ -7,7 +7,7 @@ import struct
 
 import pytest
 
-from glasses import (APP_START, APP_STOP, CLOCK_SET, Glasses, LUA_EVAL,
+from glasses import (APP_START, APP_STOP, CLOCK_SET, Glasses, LUA_EVAL, NOW,
                      LUA_RESULT, MENU_CLOSE, MENU_CURSOR, MENU_LEVEL,
                      MENU_OPEN, MENU_SELECT, STATUS, STATUS_GET)
 from sandbox import modules, stage
@@ -66,8 +66,8 @@ def test_answers_status_with_battery_and_version(glasses):
 
 def test_the_clock_shows_the_phones_time(glasses):
     glasses.tap(2)
-    assert "15:37" in glasses.screen_text()      # 13:37 UTC, UTC+2
-    glasses.send(CLOCK_SET, struct.pack(">Ih", 1_793_108_220 + 3600, 0))
+    assert "13:37" in glasses.screen_text()      # 11:37 UTC, UTC+2
+    glasses.send(CLOCK_SET, struct.pack(">Ih", NOW + 3 * 3600, 0))
     glasses.advance(1.5)
     assert "14:37" in glasses.screen_text()
 

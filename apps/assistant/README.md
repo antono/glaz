@@ -29,8 +29,8 @@ answer (`test_a_chat_is_drawn_coloured_by_kind`):
 
 ![Frame, a chat](screens/frame-chat.png)
 
-The tests are in [tests/test_assistant.py](../../tests/test_assistant.py);
-`SHOTS=<dir> pytest tests/test_assistant.py` saves these screens
+The tests are in [test_assistant.py](test_assistant.py);
+`SHOTS=<dir> pytest apps/assistant/test_assistant.py` saves these screens
 ([TESTING.md](../../docs/TESTING.md)).
 
 ## How it works
@@ -93,7 +93,7 @@ the agent may use the photos and recordings. The glasses read only
 - [assistant.lua](assistant.lua) -- the app
 - [assistant.frame.lua](assistant.frame.lua) -- its part for Frame,
   empty
-- [../../tests/test_assistant.py](../../tests/test_assistant.py) -- its
+- [test_assistant.py](test_assistant.py) -- its
   tests
 - [../../flutter-glaz/lib/services/assistant.dart](../../flutter-glaz/lib/services/assistant.dart)
   -- the phone side

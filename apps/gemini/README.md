@@ -30,8 +30,8 @@ A page in Cyrillic, with a heading, text, links and a quote
 
 ![Frame, Cyrillic](screens/frame-cyrillic.png)
 
-The tests are in [tests/test_gemini.py](../../tests/test_gemini.py);
-`SHOTS=<dir> pytest tests/test_gemini.py` saves these screens
+The tests are in [test_gemini.py](test_gemini.py);
+`SHOTS=<dir> pytest apps/gemini/test_gemini.py` saves these screens
 ([TESTING.md](../../docs/TESTING.md)).
 
 ## How it works
@@ -80,6 +80,6 @@ without input.
 
 - [gemini.lua](gemini.lua) -- the app
 - [gemini.frame.lua](gemini.frame.lua) -- its part for Frame, empty
-- [../../tests/test_gemini.py](../../tests/test_gemini.py) -- its tests
+- [test_gemini.py](test_gemini.py) -- its tests
 - [../../flutter-glaz/lib/services/gemini.dart](../../flutter-glaz/lib/services/gemini.dart)
   -- the phone side

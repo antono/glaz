@@ -107,12 +107,15 @@ fi
 if [ $parts_ok = 1 ]; then echo "parts ok"; else fail=1; fi
 
 # Every app is a directory of its own, apps/<name>/<name>.lua, with a
-# README.md: what it is for, its screens, how it works (AGENTS.md).
+# README.md (what it is for, its screens, how it works) and its tests,
+# test_<name>.py (AGENTS.md).
 apps_ok=1
 for d in apps/*/; do
   name=$(basename "$d")
+  case $name in _*) continue ;; esac     # __pycache__
   [ -f "$d$name.lua" ] || { echo "APP         $d  has no $name.lua"; apps_ok=0; }
   [ -f "${d}README.md" ] || { echo "APP         $d  has no README.md"; apps_ok=0; }
+  [ -f "${d}test_$name.py" ] || { echo "APP         $d  has no test_$name.py"; apps_ok=0; }
 done
 if [ $apps_ok = 1 ]; then echo "apps ok"; else fail=1; fi
 

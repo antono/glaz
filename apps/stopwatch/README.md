@@ -15,7 +15,7 @@ Halo (the round screen cuts the line; the hint reads `tap = ` there):
 ![Halo](screens/halo.png)
 
 Running, 37 s after a tap (`test_a_tap_starts_it_and_time_counts` in
-[test_stopwatch.py](../../tests/test_stopwatch.py)), Frame and Halo:
+[test_stopwatch.py](test_stopwatch.py)), Frame and Halo:
 
 ![Frame, running](screens/frame-running.png)
 
@@ -68,5 +68,5 @@ centres the line and cuts it to the circle's width
 - [stopwatch.lua](stopwatch.lua) -- the module.
 - [stopwatch.frame.lua](stopwatch.frame.lua) -- Frame's part, empty.
 - [stopwatch.halo.lua](stopwatch.halo.lua) -- Halo's part, empty.
-- [../../tests/test_stopwatch.py](../../tests/test_stopwatch.py) -- the
+- [test_stopwatch.py](test_stopwatch.py) -- the
   tests, on emulated Frame and Halo: start, pause, reset, the background.

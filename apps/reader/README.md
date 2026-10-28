@@ -26,7 +26,7 @@ The last word of the text (`test_a_tap_reads_one_word_after_another_to_the_end`)
 
 ![Frame, the end](screens/frame-end.png)
 
-Made by [`tests/test_reader.py`](../../tests/test_reader.py) with
+Made by [`test_reader.py`](test_reader.py) with
 `SHOTS=dir`, as `reader-paused.png`, `reader-reading.png` and
 `reader-end.png` ([docs/TESTING.md](../../docs/TESTING.md)). The same
 tests also save `reader-loading.png`, `reader-no-text.png` and
@@ -96,5 +96,5 @@ Halo nor lists it there ([docs/DEVICES.md](../../docs/DEVICES.md)).
 - [`reader.lua`](reader.lua) -- the app
 - [`reader.frame.lua`](reader.frame.lua) -- its part for Frame: nothing of
   its own
-- [`tests/test_reader.py`](../../tests/test_reader.py) -- its tests, on
+- [`test_reader.py`](test_reader.py) -- its tests, on
   emulated Frame (and that Halo has no Reader)

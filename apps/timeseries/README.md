@@ -13,7 +13,7 @@ Frame (Time series is Frame's only):
 
 Shooting at 4 s, after the first photo
 (`test_a_tap_starts_after_the_exposure_settles` in
-[test_timeseries.py](../../tests/test_timeseries.py)):
+[test_timeseries.py](test_timeseries.py)):
 
 ![Frame, shooting](screens/frame-running.png)
 
@@ -98,6 +98,6 @@ nor lists it there ([DEVICES.md](../../docs/DEVICES.md)).
 
 - [timeseries.lua](timeseries.lua) -- the module.
 - [timeseries.frame.lua](timeseries.frame.lua) -- Frame's part, empty.
-- [../../tests/test_timeseries.py](../../tests/test_timeseries.py) -- the
+- [test_timeseries.py](test_timeseries.py) -- the
   tests, on emulated Frame: the scale, the shots and their rhythm, the
   background, no phone, the phone's settings, the break.

@@ -218,7 +218,7 @@ glaz's tests run every app on it, as on our emulator of Frame
 (docs/TESTING.md). In the root devenv shell:
 
 ```sh
-halo                              # pytest tests -k halo
+halo                              # pytest tests apps -k halo
 SHOTS=/tmp/shots halo             # and keep the screens as PNG
 ```
 

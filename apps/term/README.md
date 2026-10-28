@@ -22,7 +22,7 @@ No screen to show, and the phone's words why
 
 ![Frame, the phone's words](screens/frame-status.png)
 
-Made by [`tests/test_term.py`](../../tests/test_term.py) with `SHOTS=dir`,
+Made by [`test_term.py`](test_term.py) with `SHOTS=dir`,
 as `term.png` and `term-status.png`
 ([docs/TESTING.md](../../docs/TESTING.md)). The same tests also save
 `term-full.png` (all 12 rows full), `term-waiting.png`, `term-no-phone.png`
@@ -89,5 +89,5 @@ neither uploads it to Halo nor lists it there
 - [`term.lua`](term.lua) -- the app
 - [`term.frame.lua`](term.frame.lua) -- its part for Frame: nothing of its
   own
-- [`tests/test_term.py`](../../tests/test_term.py) -- its tests, on
+- [`test_term.py`](test_term.py) -- its tests, on
   emulated Frame

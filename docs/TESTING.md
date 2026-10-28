@@ -80,10 +80,10 @@ def test_a_tap_starts_it(glasses):         # on each glasses with the app
   a part for them, `main.lua` the boot part. They are not minified or
   compiled, so the emulator counts what is there at the start as a full
   upload, with 32 KB left.
-- The fixtures (`tests/conftest.py`): `frame`, `halo`, and `glasses`, which
+- The fixtures (`tests/fixtures.py`): `frame`, `halo`, and `glasses`, which
   runs a test on each pair of glasses that has the module named by
   `pytestmark = pytest.mark.module('name')`. Each starts glaz from
-  `main.lua` and sets the phone's clock: 13:37 UTC, shown as 15:37.
+  `main.lua` and sets the phone's clock: 11:37 UTC, shown as 13:37.
 - The wearer: `tap(n)`, `tilt(±1)`, `button()` (Halo).
 - The phone: `send(code, payload)` with the codes of docs/PROTOCOL.md, and
   `open_app()`, `call()`, `remote()`, `notify()`, `settings()`,
@@ -95,22 +95,25 @@ def test_a_tap_starts_it(glasses):         # on each glasses with the app
 
 `test_app.py` is the app itself: start, menu, gestures, sleep and waking,
 notifications, the console, the break. `test_services.py` the phone's
-services, `test_boot.py` the loader and its restarts, `test_<module>.py`
-each app, and `test_frame_emulator.py` the emulator against the firmware.
+services, `test_boot.py` the loader and its restarts, and
+`test_frame_emulator.py` the emulator against the firmware, all in
+`tests/`. Each app's own tests are in its directory, next to its Lua:
+`apps/<name>/test_<name>.py`, with the same fixtures (`tests/fixtures.py`,
+taken by `tests/conftest.py` and `apps/conftest.py`).
 
 ## Running them
 
 In the root devenv shell:
 
 ```sh
-tests                          # pytest tests: everything, both glasses
-tests tests/test_reader.py     # one app
+tests                          # pytest tests apps: everything, both glasses
+tests apps/reader              # one app
 halo                           # Halo's only
 SHOTS=/tmp/shots tests         # and keep the screens the tests took
 screens -o docs/screens        # a screenshot of every app, both glasses
 ```
 
-Without devenv: `pip install -r requirements.txt`, then `pytest tests`.
+Without devenv: `pip install -r requirements.txt`, then `pytest tests apps`.
 
 ## Screenshots for the docs
 

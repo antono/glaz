@@ -26,8 +26,8 @@ One opened: the time and the app, the title, the text
 ![Frame, one opened](screens/frame-open.png)
 
 The tests are in
-[tests/test_notifications.py](../../tests/test_notifications.py);
-`SHOTS=<dir> pytest tests/test_notifications.py` saves these screens
+[test_notifications.py](test_notifications.py);
+`SHOTS=<dir> pytest apps/notifications/test_notifications.py` saves these screens
 ([TESTING.md](../../docs/TESTING.md)).
 
 ## How it works
@@ -69,7 +69,7 @@ without input. No settings of its own.
 - [notifications.lua](notifications.lua) -- the app
 - [notifications.frame.lua](notifications.frame.lua) -- its part for
   Frame, empty
-- [../../tests/test_notifications.py](../../tests/test_notifications.py)
+- [test_notifications.py](test_notifications.py)
   -- its tests
 - [../../flutter-glaz/lib/services/notifications.dart](../../flutter-glaz/lib/services/notifications.dart)
   -- the phone side

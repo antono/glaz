@@ -16,7 +16,7 @@ Halo:
 
 A version that cannot be read: the error instead, and the app carries on
 (Frame; made by `test_a_version_that_cannot_be_read_shows_the_error` in
-[test_firmware.py](../../tests/test_firmware.py), which makes reading
+[test_firmware.py](test_firmware.py), which makes reading
 the version raise `no 137`):
 
 ![Frame, the error](screens/frame-error.png)
@@ -66,6 +66,6 @@ round screen's row: the emulator's `0.8.12-emulator` shows as
 - [firmware.lua](firmware.lua) -- the module.
 - [firmware.frame.lua](firmware.frame.lua) -- Frame's part, empty.
 - [firmware.halo.lua](firmware.halo.lua) -- Halo's part, empty.
-- [../../tests/test_firmware.py](../../tests/test_firmware.py) -- the
+- [test_firmware.py](test_firmware.py) -- the
   tests, on emulated Frame and Halo: the version shown and the one the
   phone gets, the timeout, the inputs, errors.

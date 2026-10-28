@@ -24,7 +24,7 @@ The emulator's taps carry no status byte, hence the last row:
 
 ![Frame, hits](screens/frame-hits.png)
 
-They are made by [`tests/test_taptune.py`](../../tests/test_taptune.py),
+They are made by [`test_taptune.py`](test_taptune.py),
 with `SHOTS=dir`, as `taptune-quiet.png` and `taptune-hits.png`
 ([docs/TESTING.md](../../docs/TESTING.md)).
 
@@ -84,6 +84,6 @@ no Halo part, so the phone neither uploads it to Halo nor lists it there
 
 - [`taptune.lua`](taptune.lua) -- the module
 - [`taptune.frame.lua`](taptune.frame.lua) -- its part for Frame, empty
-- [`../../tests/test_taptune.py`](../../tests/test_taptune.py) -- its tests,
+- [`test_taptune.py`](test_taptune.py) -- its tests,
   on the emulator and, for `tap_config`'s per-axis thresholds, the module
   alone in Lua

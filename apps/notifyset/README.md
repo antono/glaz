@@ -31,8 +31,8 @@ Halo:
 ![Frame, a notification](screens/frame-notification.png)
 ![Halo, a notification](screens/halo-notification.png)
 
-The tests are in [tests/test_notifyset.py](../../tests/test_notifyset.py);
-`SHOTS=<dir> pytest tests/test_notifyset.py` saves these screens
+The tests are in [test_notifyset.py](test_notifyset.py);
+`SHOTS=<dir> pytest apps/notifyset/test_notifyset.py` saves these screens
 ([TESTING.md](../../docs/TESTING.md)).
 
 ## How it works
@@ -71,5 +71,5 @@ The same on Frame and Halo: both parts are empty.
 - [notifyset.frame.lua](notifyset.frame.lua) -- its part for Frame,
   empty
 - [notifyset.halo.lua](notifyset.halo.lua) -- its part for Halo, empty
-- [../../tests/test_notifyset.py](../../tests/test_notifyset.py) -- its
+- [test_notifyset.py](test_notifyset.py) -- its
   tests

@@ -23,7 +23,7 @@ The phone's words instead of a picture, when it has none to send
 
 ![Frame, the phone's words](screens/frame-status.png)
 
-Both are made by [`tests/test_flipper.py`](../../tests/test_flipper.py),
+Both are made by [`test_flipper.py`](test_flipper.py),
 with `SHOTS=dir`, as `flipper.png` and `flipper-status.png`
 ([docs/TESTING.md](../../docs/TESTING.md)).
 
@@ -84,4 +84,4 @@ nor lists it there ([docs/DEVICES.md](../../docs/DEVICES.md)).
 - [`flipper.frame.lua`](flipper.frame.lua) -- its part for Frame, empty
 - [`../../flutter-glaz/lib/services/flipper.dart`](../../flutter-glaz/lib/services/flipper.dart)
   -- the phone's side; the Flipper's protocol in `lib/flipper/`
-- [`../../tests/test_flipper.py`](../../tests/test_flipper.py) -- its tests
+- [`test_flipper.py`](test_flipper.py) -- its tests

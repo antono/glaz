@@ -220,12 +220,12 @@ def test_an_empty_log_says_it_listens(glasses):
 
 def test_the_log_is_shown_in_its_colours(glasses):
     voice(glasses)
-    window(glasses, 1, 0, 5, 1, ["I|en > ru 15:37", "S|good morning",
+    window(glasses, 1, 0, 5, 1, ["I|en > ru 13:37", "S|good morning",
                                  "T|dobroe utro", "E|not translated: 137",
                                  "P|how are"])
     shown = {t.text: t.color for t in glasses.texts()}
     # the tail: the last four of the five
-    assert "en > ru 15:37" not in shown
+    assert "en > ru 13:37" not in shown
     assert shown["good morning"] == "GREY"
     assert shown["dobroe utro"] == "WHITE"
     assert shown["not translated: 137"] == "RED"
@@ -237,9 +237,9 @@ def test_the_log_is_shown_in_its_colours(glasses):
 
 def test_an_info_line_is_sky_blue_and_text_splits_on_the_first_bar(glasses):
     voice(glasses)
-    window(glasses, 1, 0, 2, 1, ["I|en > ru 15:37", "T|a|b"])
+    window(glasses, 1, 0, 2, 1, ["I|en > ru 13:37", "T|a|b"])
     shown = {t.text: t.color for t in glasses.texts()}
-    assert shown["en > ru 15:37"] == "SKYBLUE"
+    assert shown["en > ru 13:37"] == "SKYBLUE"
     assert "a|b" in shown
     glasses.assert_ok()
 

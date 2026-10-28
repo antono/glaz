@@ -30,8 +30,8 @@ Photo, before the first photo
 
 ![Frame, Photo](screens/frame-photo.png)
 
-The tests are in [tests/test_translate.py](../../tests/test_translate.py);
-`SHOTS=<dir> pytest tests/test_translate.py` saves these screens
+The tests are in [test_translate.py](test_translate.py);
+`SHOTS=<dir> pytest apps/translate/test_translate.py` saves these screens
 ([TESTING.md](../../docs/TESTING.md)).
 
 ## How it works
@@ -97,7 +97,7 @@ a service of its own on the phone, on by default.
 - [translate.lua](translate.lua) -- the app
 - [translate.frame.lua](translate.frame.lua) -- its part for Frame,
   empty
-- [../../tests/test_translate.py](../../tests/test_translate.py) -- its
+- [test_translate.py](test_translate.py) -- its
   tests
 - [../../flutter-glaz/lib/services/translate.dart](../../flutter-glaz/lib/services/translate.dart)
   -- the phone side

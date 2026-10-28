@@ -12,7 +12,7 @@ Frame (Sleep is Frame's only):
 
 With the Stopwatch running in the background, Sleep says it will stop it
 (`test_names_the_background_module_it_will_stop` in
-[test_sleep.py](../../tests/test_sleep.py)):
+[test_sleep.py](test_sleep.py)):
 
 ![Frame, a background app to stop](screens/frame-will-stop.png)
 
@@ -77,6 +77,6 @@ put the glasses to sleep (`standby()`, [HALO.md](../../docs/HALO.md)).
 
 - [sleep.lua](sleep.lua) -- the module: the warning and the tap.
 - [sleep.frame.lua](sleep.frame.lua) -- Frame's part, empty.
-- [../../tests/test_sleep.py](../../tests/test_sleep.py) -- the tests, on
+- [test_sleep.py](test_sleep.py) -- the tests, on
   emulated Frame: the warning, sleeping and waking, the background app
   stopped, the timeout, no Sleep on Halo.

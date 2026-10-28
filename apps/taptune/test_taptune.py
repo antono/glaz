@@ -12,7 +12,7 @@ from glasses import APP_START, APP_STOP, HANDS_OFF, LUA_EVAL, has_module
 
 pytestmark = pytest.mark.module("taptune")
 
-TAPTUNE = Path(__file__).parent.parent / "apps" / "taptune" / "taptune.lua"
+TAPTUNE = Path(__file__).parent / "taptune.lua"
 
 
 def lines(g):

@@ -30,7 +30,7 @@ The ukulele's open box, with a nut after fret 0
 
 ![Frame, ukulele at fret 0](screens/frame-ukulele-open.png)
 
-They are made by [`tests/test_scales.py`](../../tests/test_scales.py), with
+They are made by [`test_scales.py`](test_scales.py), with
 `SHOTS=dir`, as `scales-dorian.png`, `scales-dorian-single.png` and
 `scales-ukulele-open.png` ([docs/TESTING.md](../../docs/TESTING.md)).
 
@@ -100,4 +100,4 @@ needs a layout of its own first.
 - [`scales.frame.lua`](scales.frame.lua) -- its part for Frame, empty
 - [`../../flutter-glaz/lib/services/scales.dart`](../../flutter-glaz/lib/services/scales.dart)
   -- the scales, and the phone's answer to `SCALE_GET`
-- [`../../tests/test_scales.py`](../../tests/test_scales.py) -- its tests
+- [`test_scales.py`](test_scales.py) -- its tests

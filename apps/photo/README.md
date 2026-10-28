@@ -17,7 +17,7 @@ After a photo has gone to the phone (`test_a_tap_sends_a_photo`):
 
 ![Frame, a photo sent](screens/frame-sent.png)
 
-Made by [`tests/test_photo.py`](../../tests/test_photo.py) with
+Made by [`test_photo.py`](test_photo.py) with
 `SHOTS=dir`, as `camera-sent.png`
 ([docs/TESTING.md](../../docs/TESTING.md)). The same tests also save
 `camera-no-host.png` and `camera-send-failed.png`.
@@ -89,5 +89,5 @@ lists it there ([docs/DEVICES.md](../../docs/DEVICES.md)).
 - [`photo.lua`](photo.lua) -- the app
 - [`photo.frame.lua`](photo.frame.lua) -- its part for Frame: nothing of
   its own
-- [`tests/test_photo.py`](../../tests/test_photo.py) -- its tests, on
+- [`test_photo.py`](test_photo.py) -- its tests, on
   emulated Frame

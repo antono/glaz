@@ -16,7 +16,7 @@ Halo:
 
 The link lost, 5 s after the drop, on Frame and on Halo (made by
 `test_a_drop_and_the_way_back_on_every_device` in
-[test_bluetooth.py](../../tests/test_bluetooth.py)):
+[test_bluetooth.py](test_bluetooth.py)):
 
 ![Frame, the link down](screens/frame-down.png)
 ![Halo, the link down](screens/halo-down.png)
@@ -75,7 +75,7 @@ Both parts ([bluetooth.frame.lua](bluetooth.frame.lua),
 [bluetooth.halo.lua](bluetooth.halo.lua)) are empty: the same three lines
 go to both. On Halo's round screen the lines are cut to its text rows, so
 the MTU, the number after `in` and most of the MAC do not show (see the
-Halo screenshots); [test_bluetooth.py](../../tests/test_bluetooth.py)
+Halo screenshots); [test_bluetooth.py](test_bluetooth.py)
 checks the MTU and the whole MAC on Frame only. Halo's `max_length()` is
 the MTU less 1 ([HALO.md, Bluetooth](../../docs/HALO.md#bluetooth)).
 
@@ -86,6 +86,6 @@ the MTU less 1 ([HALO.md, Bluetooth](../../docs/HALO.md#bluetooth)).
 - [bluetooth.halo.lua](bluetooth.halo.lua) -- Halo's part, empty.
 - [../../glaz/glaz.lua](../../glaz/glaz.lua) -- `glaz_link`, kept by the
   main loop.
-- [../../tests/test_bluetooth.py](../../tests/test_bluetooth.py) -- the
+- [test_bluetooth.py](test_bluetooth.py) -- the
   tests, on emulated Frame and Halo: counting, drops and reconnects, the
   time formats, the timeout.

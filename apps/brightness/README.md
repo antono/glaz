@@ -15,7 +15,7 @@ There is no Halo screenshot: Brightness does not run on Halo (see below).
 Level 2 previewed after a few tilts: the panel already shows that level,
 not yet kept (made by
 `test_a_tilt_previews_the_level_live` in
-[test_brightness.py](../../tests/test_brightness.py)):
+[test_brightness.py](test_brightness.py)):
 
 ![Frame, previewing level 2](screens/frame-preview.png)
 
@@ -77,6 +77,6 @@ part.
 
 - [brightness.lua](brightness.lua) -- the module.
 - [brightness.frame.lua](brightness.frame.lua) -- Frame's part, empty.
-- [../../tests/test_brightness.py](../../tests/test_brightness.py) -- the
+- [test_brightness.py](test_brightness.py) -- the
   tests, on emulated Frame (and that Halo has no Brightness): preview,
   keep, cancel on every way out, the remote, the boot level.

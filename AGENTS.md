@@ -138,8 +138,8 @@ python3 -m venv .venv
 - Frame-side Lua must be **ASCII only** — non-ASCII bytes break upload.
 - Frame runs **Lua 5.4**; check with 5.4, not older versions.
 - Run `scripts/check.sh` after changing any `.lua` file, and the tests
-  (`pytest tests`, docs/TESTING.md): CI runs both.
-- A new menu item gets its tests too: `tests/test_<name>.py`, on every
+  (`pytest tests apps`, docs/TESTING.md): CI runs both.
+- A new menu item gets its tests too: `apps/<name>/test_<name>.py`, on every
   pair of glasses it goes to.
 - Adding a menu item: add a directory `apps/<name>/` with `name.lua`, its
   part for each pair of glasses it runs on (`name.frame.lua`, empty
