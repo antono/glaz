@@ -191,9 +191,9 @@ What has a Halo part (docs/DEVICES.md):
   `standby()`, which keeps Bluetooth and wakes on a tap or the button;
   `sleep()` would wake on the button only. The tap callback is set again
   after standby, as Santos does.
-- **The host's break** is `"interrupted"` on Halo, raised once, where
-  Frame's `"break signal"` comes on every instruction until the chunk
-  unwinds. glaz_boot's part says which (`D.BREAK`), `glaz_break(e)` tells
+- **The host's break** is `"interrupted"` on Halo and `"break signal"`
+  on Frame, raised once on both (Frame's `luaport.c` sets its hook back
+  to the watchdog's before raising it). glaz_boot's part says which (`D.BREAK`), `glaz_break(e)` tells
   it, and every pcall into the app's or a module's code lets it through
   (`try` in `glaz.lua`). Otherwise the phone could not stop the app for an
   upload, and glaz_boot would take the break for a crash and restart it.
@@ -214,22 +214,17 @@ Brilliant Labs' Halo emulator, [`halo-emulator`](https://pypi.org/project/halo-e
 `frame.*` API. It has a 256x256 screen drawn with the firmware's fonts,
 taps and the button to inject, and the Bluetooth sends to read back.
 
-In the root devenv shell:
+glaz's tests run every app on it, as on our emulator of Frame
+(docs/TESTING.md). In the root devenv shell:
 
 ```sh
-halo                              # pytest tests
-HALO_SHOTS=/tmp/halo halo         # and keep the screens as PNG
+halo                              # pytest tests -k halo
+SHOTS=/tmp/shots halo             # and keep the screens as PNG
 ```
 
-`tests/halo_sandbox.py` lays out the files as the phone uploads them to
-Halo, and `tests/test_halo.py` starts glaz from `main.lua` and checks four
-things:
-
-- it starts without errors;
-- a double tap opens the menu;
-- a single tap goes into Apps and the first app there, and a double tap
-  comes back;
-- a triple tap goes to standby, and a tap wakes it.
+`tests/sandbox.py` lays out the files as the phone uploads them to Halo,
+and `tests/halo_sandbox.py` makes the emulator run glaz as Halo's
+firmware does today, in virtual time like Frame's.
 
 The emulator (2.3.0) follows firmware 0.8.12. Its `frame.file` is simpler
 than the firmware's today (`lua_file.c`, 0.8.22):

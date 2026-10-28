@@ -54,8 +54,12 @@ in
     check.exec = ''./check.sh'';
     upload.exec = ''python host_test.py "$@"'';
     sprite.exec = ''python utils/show_sprite.py "$@"'';
-    # glaz on Halo, in Brilliant Labs' Halo emulator (tests/test_halo.py)
-    halo.exec = ''pytest tests "$@"'';
+    # every app on emulated Frame and Halo (docs/TESTING.md)
+    tests.exec = ''pytest tests "$@"'';
+    # the same, Halo's only
+    halo.exec = ''pytest tests -k halo "$@"'';
+    # screenshots of every app on both, for the docs
+    screens.exec = ''python utils/screenshots.py "$@"'';
     # our firmware from a branch, glaz/stable by default, for the phone app
     firmware.exec = ''utils/build_firmware.sh "$@"'';
   };
@@ -65,7 +69,9 @@ in
     echo "  check            static checks for the Lua side"
     echo "  upload           upload the app to the glasses and listen"
     echo "  sprite NAME N    show sprites/NAME.lua at N x on the glasses"
-    echo "  halo             glaz on Halo, in the Halo emulator (pytest)"
+    echo "  tests            every app on emulated Frame and Halo (pytest)"
+    echo "  halo             the same, Halo only"
+    echo "  screens [-o DIR] screenshots of every app, for the docs"
     echo "  firmware [REF]   build our firmware, glaz/stable or REF, for the phone app"
     echo "  the companion app has its own shell: cd flutter-glaz && devenv shell"
   '';

@@ -32,6 +32,8 @@ The glasses run Lua; a laptop talks to them over Bluetooth using Python.
 - [`docs/HALO.md`](docs/HALO.md) — Brilliant Labs Halo: hardware,
   Bluetooth, its Lua next to Frame's, firmware and recovery; told apart by
   its name (`lib/frame/model.dart`); what of glaz runs on it.
+- [`docs/TESTING.md`](docs/TESTING.md) — the emulators of Frame and Halo,
+  the tests of every app on them, screenshots for the docs, CI.
 - [`docs/DEVICES.md`](docs/DEVICES.md) — more than one kind of glasses:
   `name.lua` and its parts `name.frame.lua`, `name.halo.lua`; what goes to
   which glasses, and what the phone lists.
@@ -49,8 +51,9 @@ The glasses run Lua; a laptop talks to them over Bluetooth using Python.
 - `host_test.py` — reference host: uploads everything, then listens
 - `utils/` — diagnostics, run individually
 - `check.sh` — static checks, no device needed
-- `tests/` — glaz on Halo in Brilliant Labs' Halo emulator (`halo` in the
-  root shell; docs/HALO.md)
+- `tests/` — every app tested on emulated glasses: Frame in our emulator
+  (`tests/frame_emulator/`), Halo in Brilliant Labs' (`tests` in the root
+  shell; docs/TESTING.md)
 - `sprites/` — the eye as glasses pixel art, for `utils/show_sprite.py`;
   not uploaded: the phone draws the eye itself during Upload
 - `flutter-glaz/` — the Flutter companion app (phone side)
@@ -73,7 +76,8 @@ check                    # ./check.sh
 upload                   # python host_test.py
 python utils/connect.py
 python utils/phone_lua.py 'frame.battery_level()'   # through the phone
-halo                     # glaz on Halo, in the Halo emulator (pytest)
+tests                    # every app on emulated Frame and Halo (pytest)
+screens -o docs/screens  # screenshots of every app, for the docs
 
 cd flutter-glaz && devenv shell   # first run downloads the Android SDK
 emulator-start &         # Android emulator
@@ -132,7 +136,10 @@ python3 -m venv .venv
 
 - Frame-side Lua must be **ASCII only** — non-ASCII bytes break upload.
 - Frame runs **Lua 5.4**; check with 5.4, not older versions.
-- Run `./check.sh` after changing any `.lua` file.
+- Run `./check.sh` after changing any `.lua` file, and the tests
+  (`pytest tests`, docs/TESTING.md): CI runs both.
+- A new menu item gets its tests too: `tests/test_<name>.py`, on every
+  pair of glasses it goes to.
 - Adding a menu item: add a file in `modules/`, its part for each pair of
   glasses it runs on (`name.frame.lua`, empty `return {}` if it has
   nothing of its own), and list it in the `MENU` tree in `glaz.lua`. See

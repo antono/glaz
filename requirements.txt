@@ -3,9 +3,10 @@ frame-ble==1.1.1
 frame-msg==5.2.1
 # Sprite previews and pixel-art tooling.
 pillow==11.3.0
-# Brilliant Labs' Halo emulator, for the app on Halo without one
-# (tests/test_halo.py, docs/HALO.md).
+# The glasses emulated, for the tests (docs/TESTING.md): Brilliant Labs'
+# Halo emulator, and lupa's Lua 5.4 for ours of Frame (tests/frame_emulator).
 halo-emulator==2.3.0
+lupa==2.8
 pytest
 # Over-the-air firmware flashing from Linux with nrf5-ota-dfu-python
 # (docs/FIRMWARE.md): it needs these next to bleak.

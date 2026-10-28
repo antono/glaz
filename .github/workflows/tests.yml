@@ -1,0 +1,83 @@
+# The glasses' Lua: the static checks (check.sh), then every app tested
+# on emulated Frame and Halo (tests/, docs/TESTING.md). The screens the
+# tests saw are kept as an artifact, for the docs and for a look at what
+# a failing test saw.
+#
+# Runs on every push and pull request that touches the Lua or the tests.
+name: tests
+
+on:
+  push:
+    paths:
+      - 'glaz*.lua'
+      - 'app/**'
+      - 'modules/**'
+      - 'sprites/**'
+      - 'flutter-glaz/assets/lua/lib/**'
+      - 'flutter-glaz/lib/frame/font.dart'
+      - 'tests/**'
+      - 'utils/screenshots.py'
+      - 'check.sh'
+      - 'requirements.txt'
+      - '.github/workflows/tests.yml'
+  pull_request:
+    paths:
+      - 'glaz*.lua'
+      - 'app/**'
+      - 'modules/**'
+      - 'sprites/**'
+      - 'flutter-glaz/assets/lua/lib/**'
+      - 'flutter-glaz/lib/frame/font.dart'
+      - 'tests/**'
+      - 'utils/screenshots.py'
+      - 'check.sh'
+      - 'requirements.txt'
+      - '.github/workflows/tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lua:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # check.sh wants lua and luac 5.4 by those names
+      - name: Lua 5.4
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.4
+          mkdir -p "$HOME/bin"
+          ln -s "$(command -v lua5.4)" "$HOME/bin/lua"
+          ln -s "$(command -v luac5.4)" "$HOME/bin/luac"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Static checks
+        run: ./check.sh
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Python packages
+        run: pip install -r requirements.txt
+
+      - name: Apps on emulated Frame and Halo
+        env:
+          SHOTS: screens
+        run: pytest tests -q -p no:cacheprovider --junitxml=report.xml
+
+      - name: Screens of every app
+        if: always()
+        run: python utils/screenshots.py -o screens/apps
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screens
+          path: |
+            screens
+            report.xml

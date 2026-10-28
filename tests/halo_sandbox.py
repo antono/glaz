@@ -1,70 +1,32 @@
-"""The glasses' files as the phone uploads them to Halo, in a directory the
-Halo emulator runs from (tests/test_halo.py, docs/DEVICES.md).
+"""Brilliant Labs' Halo emulator (halo-emulator) made to run glaz the way
+Halo's firmware does today, with the time of tests/vclock.py
+(tests/glasses.py, docs/HALO.md).
 
-Mirrors luaFiles(..., model: halo) in flutter-glaz/lib/frame/upload.dart:
-every file the same on all glasses, Halo's parts, a module only when it
-has a Halo part, no empty parts; glaz.lua as glaz_app.lua, and glaz_boot's
-Halo part as main.lua.
+halo-emulator 2.3.0 (firmware 0.8.12) keeps frame.file simpler than
+Halo's firmware does today (lua_file.c, 0.8.22): it takes only Python's
+modes, has no file:read(n), keeps the line break read() should drop, and
+listdir() gives bare names. glaz goes by the firmware, so the emulator
+gets the firmware's file API here.
+
+Its time is the machine's; here it is virtual, as for Frame's emulator:
+utc() is the clock's, and sleep(), standby(), light_sleep() and yield()
+wait on it. Every string drawn is kept, for tests to read the screen as
+text, and the host's break comes as Halo raises it: "interrupted", once.
 """
-import re
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+from sandbox import stage as stage_for
+from vclock import Stopped, VirtualClock, START
+
 DEVICE = "halo"
-DEVICES = ("frame", "halo")
-
-
-def device_of(path: Path) -> str | None:
-    """The glasses a part is for (reader.halo.lua -> 'halo'), or None."""
-    parts = path.name.split(".")
-    return parts[-2] if len(parts) >= 3 and parts[-2] in DEVICES else None
-
-
-def stem(path: Path) -> str:
-    return path.name.split(".")[0]
-
-
-def empty(path: Path) -> bool:
-    """A part with nothing in it, which Upload leaves on the phone."""
-    if device_of(path) is None:
-        return False
-    code = "".join(l for l in path.read_text().splitlines()
-                   if not l.lstrip().startswith("--"))
-    return re.sub(r"\s", "", code) in ("", "return{}")
-
-
-def ours(path: Path) -> bool:
-    return device_of(path) in (None, DEVICE) and not empty(path)
 
 
 def stage(sandbox: Path) -> list[str]:
     """Copies Halo's files into sandbox; returns their names there."""
-    sandbox.mkdir(parents=True, exist_ok=True)
-    out = {}
-    for p in sorted((ROOT / "flutter-glaz/assets/lua/lib").glob("*.lua")):
-        out[p.name] = p
-    for p in sorted((ROOT / "app").glob("*.lua")):
-        if ours(p) and stem(p) != "glaz_boot" or p.name == "glaz_boot.lua":
-            out[p.name] = p
-    modules = {stem(p) for p in (ROOT / "modules").glob(f"*.{DEVICE}.lua")}
-    for p in sorted((ROOT / "modules").glob("*.lua")):
-        if stem(p) in modules and ours(p):
-            out[p.name] = p
-    if not empty(ROOT / f"glaz.{DEVICE}.lua"):
-        out[f"glaz_app.{DEVICE}.lua"] = ROOT / f"glaz.{DEVICE}.lua"
-    out["glaz_app.lua"] = ROOT / "glaz.lua"
-    out["main.lua"] = ROOT / f"app/glaz_boot.{DEVICE}.lua"
-    for name, src in out.items():
-        shutil.copyfile(src, sandbox / name)
-    return sorted(out)
+    return stage_for(sandbox, DEVICE)
 
-
-# halo-emulator 2.3.0 (firmware 0.8.12) keeps frame.file simpler than
-# Halo's firmware does today (lua_file.c, 0.8.22): it takes only Python's
-# modes, has no file:read(n), keeps the line break read() should drop, and
-# listdir() gives bare names. glaz goes by the firmware, so the emulator
-# gets the firmware's file API here.
 
 class FirmwareFile:
     """A file as Halo's firmware hands it to Lua."""
@@ -143,18 +105,191 @@ class FirmwareFiles:
         return out
 
 
+@dataclass
+class Text:
+    """A string drawn, and where: what tests read the screen as."""
+    text: str
+    x: int
+    y: int
+    color: int = 0xFFFFFF
+
+
+class ClockQueue:
+    """The emulator's event queue, handing its events to the clock."""
+
+    def __init__(self, clock: VirtualClock):
+        self._clock = clock
+
+    def put(self, event):
+        self._clock.put(event)
+
+    def drain(self):
+        return []
+
+
+# Run after the emulator's own frame.*: sleeps that report the host's break,
+# a callback's error and the emulator's stop instead of raising Python's
+# exceptions, which a pcall would take for the app's own.
+WRAP = r"""
+local function unwind(msg)
+  debug.sethook(function() error(msg, 0) end, '', 1)
+  error(msg, 0)
+end
+local function slept(r, msg)
+  if r == 'break' then error('interrupted', 0) end   -- Halo: once
+  if r == 'stop' then unwind('emulator stopped') end
+  if r == 'restart' then unwind('emulator restart') end
+  if r == 'error' then error(msg, 0) end
+end
+for _, name in ipairs({'sleep', 'standby', 'light_sleep', 'yield'}) do
+  local f = frame[name]
+  frame[name] = function(...) return slept(f(...)) end
+end
+"""
+
+
 def emulator(sandbox: Path, print_handler=print):
-    """A HaloEmulator on sandbox, with the firmware's frame.file."""
+    """A HaloEmulator on sandbox: the firmware's frame.file, virtual time,
+    and the screen's strings kept (emu.texts)."""
     from halo_emulator import HaloEmulator
 
     emu = HaloEmulator(sandbox_dir=sandbox, print_handler=print_handler)
+    clock = VirtualClock(start=START)
+    emu.clock = clock
+    emu._event_queue = ClockQueue(clock)
+    emu._system._event_queue = emu._event_queue
+    clock.watch(emu.is_running)
     files = FirmwareFiles(sandbox)
     emu._file = files
+    emu.texts = []
+    restart = {"pending": False}
+
+    # ---- time
+    utc_base = {"v": 0.0}
+
+    def utc(timestamp=None):
+        if timestamp is None:
+            return clock.utc() + utc_base["v"]
+        utc_base["v"] = float(timestamp) - clock.now
+        return float(timestamp)
+
+    emu._time.utc = utc
+
+    wake_sources = {"ble": "ble", "button_single": "button",
+                    "button_double": "button", "button_long": "button",
+                    "imu_tap": "imu"}
+
+    def run_events(seconds, asleep):
+        state = {"error": None}
+
+        def dispatch(event):
+            if event.type in ("stop", "break"):
+                return True
+            if asleep:
+                return event.type in wake_sources
+            try:
+                emu._dispatch_event(event)
+            except Exception as e:   # a callback's Lua error
+                state["error"] = str(e)
+                return True
+            return False
+
+        try:
+            ev = clock.wait(seconds, dispatch)
+        except Stopped:
+            return "stop"
+        if ev is None:
+            return None
+        if ev.type == "stop":
+            return "stop"
+        if ev.type == "break":
+            return "break"
+        if state["error"] is not None:
+            return "error", state["error"]
+        emu._system._wakeup_src = wake_sources.get(ev.type, "timeout")
+        return "woke"
+
+    def sleep(seconds=None):
+        if not seconds:
+            return "stop"   # deep sleep: Bluetooth drops, as a shutdown
+        r = run_events(float(seconds), asleep=False)
+        return None if r == "woke" else r
+
+    def standby(seconds=None):
+        r = run_events(float(seconds) if seconds else None, asleep=True)
+        return None if r == "woke" else r
+
+    def light_sleep(seconds=None):
+        r = run_events(float(seconds) if seconds else None, asleep=True)
+        if r in (None, "woke"):
+            restart["pending"] = True
+            return "restart"
+        return r
+
+    def yield_():
+        r = run_events(0, asleep=False)
+        return None if r == "woke" else r
+
+    emu._system.sleep = sleep
+    emu._system.standby = standby
+    emu._system.light_sleep = light_sleep
+    emu._system.yield_ = yield_
+
+    # ---- the screen as text
+    display = emu._display
+    draw_text, clear = display.text, display.clear
+
+    def text(txt, x, y, color=0xFFFFFF):
+        emu.texts.append(Text(str(txt), int(x), int(y), int(color)))
+        return draw_text(txt, x, y, color)
+
+    def cleared(color=0):
+        emu.texts.clear()
+        return clear(color)
+
+    display.text, display.clear = text, cleared
+
+    # ---- the runtime, with all of the above
     build = emu._build_runtime
 
     def build_with_files():
         build()
         files._runtime = emu._lua
+        emu._lua.execute(WRAP)
 
     emu._build_runtime = build_with_files
+
+    # ---- stop, break and restart
+    from halo_emulator.event_queue import Event
+    from halo_emulator.stubs.system import EmulatorRestartException
+
+    def stop():
+        clock.stop()
+        if emu._lua_thread is not None:
+            emu._lua_thread.join(timeout=5)
+
+    def break_signal():
+        clock.put(Event(type="break"))
+        clock.settle()
+
+    run_lua = emu._run_lua
+
+    def run(script_name):
+        # a restart unwinds Lua with an error; the emulator's loop wants
+        # its exception, so main.lua runs again here
+        while True:
+            restart["pending"] = False
+            run_lua(script_name)
+            if not restart["pending"]:
+                return
+            emu.texts.clear()
+            emu._lua_error = None
+            emu._build_runtime()
+            emu._running = True
+
+    emu._run_lua = run
+    emu.stop = stop
+    emu.break_signal = break_signal
+    emu.advance = clock.advance
+    emu.settle = clock.settle
     return emu

@@ -851,8 +851,8 @@ closes.
 
 **Screen.** Four rows of the log and a status row under them, not five
 rows: the top bar is `glaz.lua`'s, so the module has nowhere else
-for where it is and whether it listens. The status reads `12/137
-listening`: the last line on screen of all there are, then `listening`,
+for where it is and whether it listens. The status reads `12:137
+listening` (Frame's font has no `/`): the last line on screen of all there are, then `listening`,
 `paused` or the phone's status text; `^` after it when not following,
 `lost N K` when the link dropped sound. While listening `_M.rec` is true
 (the red dot in the top bar) and the module is `busy()`, so `APP_TIMEOUT`

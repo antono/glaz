@@ -31,7 +31,8 @@ end
 
 local D = {
   device = 'frame',          -- the suffix of this glasses' parts
-  -- the host's break: raised on every instruction until the chunk unwinds
+  -- the host's break: raised once (luaport.c), so a pcall that catches
+  -- it must raise it again
   BREAK = 'break signal',
 }
 

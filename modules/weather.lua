@@ -11,7 +11,7 @@
 -- wttr.in places the request by the phone's IP address, unless the phone
 -- names a place (url() below). format= picks the
 -- fields, '|' separated: location, temperature, conditions. The answer has a
--- degree sign, which the display font lacks, so non-ASCII bytes are dropped.
+-- degree sign, which Frame's font lacks and Halo's part shows as '?'.
 local _M = {}
 
 _M.label = 'Weather'
@@ -60,8 +60,10 @@ local function fetch(place)
 end
 
 -- A place set on the phone wins; otherwise ask where the phone is first.
+-- What is still on its way from an earlier start is forgotten: its answer
+-- would put the old place or the old weather over the new.
 local function start()
-  here = nil
+  here, loc, req = nil, nil, nil
   local place = chosen_place()
   if place ~= '' then return fetch(place) end
   loc = _M.host.locate()

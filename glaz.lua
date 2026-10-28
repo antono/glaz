@@ -306,6 +306,7 @@ local requests, fixes = host.requests, host.fixes
 local send_packet, send_chunks = host.send_packet, host.send_chunks
 local host_api, store_settings = host.api, host.store_settings
 local LOCATION_WHY = host.LOCATION_WHY
+host.read_piece = D.read_piece   -- for glaz_files.lua; nil: whole lines
 
 -- Load the modules and build the tree. A broken module must not take the
 -- whole menu down, so each require is guarded and failures become visible
@@ -1275,6 +1276,14 @@ function app_loop()
           if visible then open_menu() else render() end
         end
 
+        -- settings first: an APP_OPEN in the same pass starts the module
+        -- with them, as the phone sends them just before
+        if data.app_data[SETTINGS_SET] ~= nil then
+          local text = data.app_data[SETTINGS_SET]
+          data.app_data[SETTINGS_SET] = nil
+          store_settings(text)
+        end
+
         if data.app_data[CLOCK_SET] ~= nil then
           local block = data.app_data[CLOCK_SET]
           data.app_data[CLOCK_SET] = nil
@@ -1362,6 +1371,7 @@ function app_loop()
           if #block >= 3 then
             take_photo(string.unpack('>I2B', block))
             last_act = frame.time.utc()
+            run_at = last_act   -- an open module's timeout too, as a tap
           end
         end
 
@@ -1427,12 +1437,6 @@ function app_loop()
           end
         end
 
-        if data.app_data[SETTINGS_SET] ~= nil then
-          local text = data.app_data[SETTINGS_SET]
-          data.app_data[SETTINGS_SET] = nil
-          store_settings(text)
-        end
-
         if data.app_data[MENU_SHOW] ~= nil then
           data.app_data[MENU_SHOW] = nil
           if not visible then open_menu(not running) end
@@ -1462,7 +1466,12 @@ function app_loop()
       -- A tap on a notification dismisses it at once, and what it covered
       -- comes back as it was; the rest of that multi-tap means nothing
       -- (three taps still sleep). A tap begun before it came is not on it.
-      if notice and tap_n > 0 and (tap_remote or tap_at >= notice_at) then
+      -- A whole gesture (Halo's) is dated back past the window
+      -- (tap_gesture), which no counted tap is: when it hit is tap_shake.
+      if notice and tap_n > 0
+         and (tap_remote or tap_at >= notice_at
+              or tap_shake - tap_at > TAP_WINDOW and tap_shake >= notice_at)
+      then
         notice, notice_tap = nil, true
         render()
       end

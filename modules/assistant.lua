@@ -228,6 +228,13 @@ function _M.tick()
   return state_str()
 end
 
+-- Listening is not being left alone: without this glaz.lua's APP_TIMEOUT
+-- (60 s) would stop the module, dropping the question, long before
+-- MAX_LISTEN.
+function _M.busy()
+  return started ~= nil
+end
+
 function _M.on_tap()
   if started then
     ask()

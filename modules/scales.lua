@@ -266,8 +266,9 @@ end
 -- The phone's answer: the scale asked for, as above
 function _M.remote(arg)
   local i, c, name, short, notes, flav, bshort, bnotes =
-    arg:match('^g(%d+) (%d+) ([^|]*)|([^|]*)|(%x*)|(%x?)|([^|]*)|(%x*)$')
-  if not i then return end
+    arg:match('^g(%d+) (%d+) ([^|]*)|([^|]*)|(%x+)|(%x?)|([^|]*)|(%x*)$')
+  -- malformed, no scales, or more than SCALE_GET's one byte can ask for
+  if not i or tonumber(c) == 0 or tonumber(c) > 256 then return end
   n, count = tonumber(i), tonumber(c)
   scale = { name = name, short = short, notes = semis(notes),
             flavour = flav ~= '' and tonumber(flav, 16) or nil,

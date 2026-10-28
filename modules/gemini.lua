@@ -6,8 +6,9 @@
 --   single tap        -- open the link under the cursor; with none, a
 --                        screen down
 --   double tap        -- back to the page before, as '< back' does; on
---                        the home page, back to the menu: the page
---                        stays, and is there when it opens again
+--                        the home page, back to the menu: the phone
+--                        keeps the page, and it is there when this
+--                        opens again
 --
 -- The phone fetches the pages (gemini://, over TLS), keeps the one open
 -- and where it came from, and cuts it into lines that fit the screen
@@ -101,7 +102,8 @@ local function state()
                         tostring(asked), note }, '|')
 end
 
--- The page stays, its lines go: they are asked for again from tick().
+-- The phone keeps the page; its lines are asked for again from tick()
+-- (glaz.lua drops the module when it is left: nothing here stays).
 -- Nothing is asked here (as Reader, modules/reader.lua): an answer after
 -- the module was left starts it in the background for remote().
 function _M.start()
@@ -204,7 +206,8 @@ function _M.on_back()
     return false
   end
   ask(1, BACK)
-  if asked == 'o' then sel = nil end
+  -- after 'no answer' too: the note goes, 'opening..' is shown
+  if asked == 'o' then sel, note = nil, '' end
   return state()
 end
 
