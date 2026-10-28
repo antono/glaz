@@ -40,12 +40,12 @@ env:
 
 jobs:
   version:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.v.outputs.version }}
       release: ${{ steps.v.outputs.release }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: v
@@ -65,12 +65,12 @@ jobs:
   firmware:
     needs: version
     if: needs.version.outputs.release == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       glaz: ${{ steps.build.outputs.glaz }}
       official: ${{ steps.official.outputs.official }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: ${{ env.FIRMWARE_REPO }}
           ref: ${{ env.FIRMWARE_REF }}
@@ -106,7 +106,7 @@ jobs:
           tag=$(gh release view -R "$OFFICIAL_REPO" --json tagName --jq .tagName)
           gh release download "$tag" -R "$OFFICIAL_REPO" -p "frame-firmware-$tag.zip" -D build
           echo "official=$tag" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: firmware
           path: build/frame-firmware-*.zip
@@ -118,22 +118,22 @@ jobs:
   # the -glaz build from the job above.
   app:
     needs: [version, firmware]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         target: [apk, linux]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           repository: ${{ env.FIRMWARE_REPO }}
           ref: ${{ env.FIRMWARE_REF }}
           path: frame-codebase
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: firmware
           path: frame-codebase/build
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         if: matrix.target == 'apk'
         with:
           distribution: temurin
@@ -185,7 +185,7 @@ jobs:
             tar -C build/linux/x64/release/bundle -czf \
               "../dist/glaz-$VERSION-linux-x64.tar.gz" .
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: app-${{ matrix.target }}
           path: dist/*
@@ -193,14 +193,14 @@ jobs:
 
   release:
     needs: [version, firmware, app]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
