@@ -35,6 +35,10 @@ D.layout = {
   notice_chars = 26,
 }
 
+-- The most a file's read() gives: a line is cut at LUAL_BUFFERSIZE, and
+-- its break comes with the next read() (file.c). Halo's reads whole lines.
+D.read_piece = 512
+
 -- Text at x, y in a palette colour (name; nil draws the default, WHITE).
 function D.text(s, x, y, color)
   if color then

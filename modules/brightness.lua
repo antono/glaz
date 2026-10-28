@@ -9,7 +9,15 @@
 --
 -- The firmware has no getter for brightness, so the level is tracked here.
 -- It lives in RAM: after a reboot the panel is back at the firmware default
--- and so is this (0).
+-- and so is this. That default is 1, not 0: at boot the firmware writes
+-- 0xCB to the panel's luminosity register (display_configuration.h, 0x05),
+-- which is what set_brightness(1) writes (display.c); set_brightness(0)
+-- writes 0xC8. Taken as 0, a picker opened and cancelled dimmed the panel.
+-- Not in a local of this file: glaz drops a module when it stops, and
+-- Frame's require() reads the file again, so a local would be back at the
+-- default on every open -- the scale showing it while the panel is not, and
+-- a cancel setting the panel to it. The global glaz_brightness outlives the
+-- module; glaz_boot clears it with the app's other globals after a crash.
 local _M = {}
 
 _M.label = 'Brightness'
@@ -17,9 +25,10 @@ _M.mode = 'app'
 _M.background = false  -- sleeps: stopped as soon as it leaves the screen
 
 local MIN, MAX = -2, 2
+local BOOT = 1   -- the level the firmware starts the panel at, see above
 
-local level = 0      -- the confirmed level
-local preview = 0    -- the level being shown while the picker is open
+local level = glaz_brightness or BOOT   -- the confirmed level
+local preview = level    -- the level being shown while the picker is open
 local picked = false
 
 local function apply(l)
@@ -58,6 +67,7 @@ end
 
 function _M.on_tap()
   level = preview
+  glaz_brightness = level
   picked = true
   return nil, true   -- done: the menu comes straight back
 end

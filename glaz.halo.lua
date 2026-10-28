@@ -136,6 +136,7 @@ end
 -- '<glaz>' centred, the brackets in a second colour: one width for every
 -- character, so the word drawn alone, centred too, lands inside them.
 function D.splash(word, color, brackets)
+  disp.clear()   -- over whatever was drawn: a notification, say
   local y = CY - SIZE // 2
   D.text('<' .. word .. '>', 0, y, brackets)
   D.text(word, 0, y, color)

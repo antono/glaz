@@ -27,7 +27,9 @@
 -- distance. Where, the phone may set (aim_x, aim_y; Glaz > Menu > Camera).
 --
 -- The camera is powered only while this module is open. glaz.lua powers
--- it down again on every exit path (release_hardware), stop() included.
+-- it down again on every exit path (release_hardware, in quit()) but
+-- with a module in the background; then stop() does, unless that one is
+-- a Timeseries series, which shoots with it ('camera is asleep').
 local camera = require('camera.min')
 
 local _M = {}
@@ -45,8 +47,9 @@ local QUALITIES  = { VERY_LOW = true, LOW = true, MEDIUM = true, HIGH = true,
 -- The capture settings, as the phone last set them, checked: a bad value
 -- falls back to the default rather than failing the shot.
 local function capture_args()
+  -- % 2 ~= 0 also takes 137.5, which capture() cannot (luaL_checkinteger)
   local res = _M.host.setting('resolution', RESOLUTION)
-  if res % 2 == 1 or res < 100 or res > 720 then res = RESOLUTION end
+  if res % 2 ~= 0 or res < 100 or res > 720 then res = RESOLUTION end
   local q = _M.host.setting('quality', QUALITY)
   if not QUALITIES[q] then q = QUALITY end
   return { resolution = res, quality = q, pan = 0, raw = false }
@@ -87,10 +90,17 @@ end
 
 local opened_at = 0
 local shots = 0
+local failed = false   -- the last shot did not reach the phone
+local beside = nil     -- the background module's label, at start()
 
+-- What tick() shows too, so a failed shot stays said until the next one
+-- goes through, rather than for a quarter of a second.
 local function status()
   if not frame.bluetooth.is_connected() then
     return 'no host'
+  end
+  if failed then
+    return 'send failed, tap = photo'
   end
   if shots == 0 then
     return 'tap = photo'
@@ -98,10 +108,12 @@ local function status()
   return 'sent ' .. shots .. ', tap = photo'
 end
 
-function _M.start()
+function _M.start(ctx)
+  beside = ctx and ctx.background
   frame.camera.power_save(false)
   opened_at = frame.time.utc()
   shots = 0
+  failed = false
 end
 
 function _M.tick()
@@ -129,15 +141,16 @@ function _M.on_tap()
   -- size. Taps that arrive meanwhile are counted by the callback and handled
   -- afterwards.
   local ok = pcall(camera.capture_and_send, capture_args())
+  failed = not ok
   if not ok then
-    return 'send failed'
+    return status()
   end
   shots = shots + 1
   return status()
 end
 
 function _M.stop()
-  pcall(frame.camera.power_save, true)
+  if beside ~= 'Time series' then pcall(frame.camera.power_save, true) end
 end
 
 return _M

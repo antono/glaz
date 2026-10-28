@@ -52,6 +52,7 @@ local function ask(op, arg)
     return
   end
   if send(op, arg) then
+    note = ''
     asked = (op == 1 and 'l' or 'f') .. arg
     asked_at = frame.time.utc()
   end
@@ -112,7 +113,7 @@ end
 
 function _M.remote(arg)
   local kind, a, b, body = string.match(arg, '^(%a):(%d+):?(%d*)\n?(.*)$')
-  if kind == 'l' and asked == 'l' .. a then
+  if kind == 'l' and b ~= '' and asked == 'l' .. a then
     asked, note = nil, ''
     lo, total = tonumber(a), tonumber(b)
     items, hi = {}, lo
@@ -153,7 +154,7 @@ function _M.on_tap()
     open, asked = nil, nil
     return list_screen()
   end
-  if note == 'no phone' then
+  if total == nil and note == 'no phone' then
     note = ''
     return screen()
   end

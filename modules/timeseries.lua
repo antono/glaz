@@ -84,7 +84,9 @@ local function shoot()
     frame.sleep(0.01)
   end
   local res = _M.host.setting('resolution', RESOLUTION)
-  if res % 2 == 1 or res < 100 or res > 720 then res = RESOLUTION end
+  -- even, whole: the firmware's luaL_checkinteger fails a fraction, and
+  -- every shot of the series would fail with it
+  if res % 2 ~= 0 or res < 100 or res > 720 then res = RESOLUTION end
   local q = _M.host.setting('quality', QUALITY)
   if not QUALITIES[q] then q = QUALITY end
   local ok = pcall(camera.capture_and_send, {
@@ -94,8 +96,9 @@ local function shoot()
     sent = sent + 1
   else
     failed = failed + 1
-    -- Most likely the camera was powered down under us -- the Camera module
-    -- does that on exit. Power it back for the next shot.
+    -- Most likely the camera was powered down under us -- by the app's
+    -- release_hardware() between modules, or the host's break. Power it
+    -- back for the next shot.
     pcall(frame.camera.power_save, false)
   end
 end
@@ -106,9 +109,13 @@ function _M.tick()
     local now = frame.time.utc()
     if now >= next_at and frame.bluetooth.is_connected() then
       shoot()
-      -- Keep the rhythm, but never schedule into the past: a transfer
-      -- slower than the interval drops the backlog instead of bursting.
-      next_at = math.max(next_at + interval(), frame.time.utc())
+      -- Keep the rhythm, but drop a backlog instead of bursting: a shot a
+      -- whole interval late (the link was gone, the transfer was slow)
+      -- starts the rhythm again from itself, and a transfer slower than
+      -- the interval is followed by the next shot straight away.
+      next_at = next_at + interval()
+      if next_at <= now then next_at = now + interval() end
+      next_at = math.max(next_at, frame.time.utc())
     end
   end
   return screen()
@@ -148,8 +155,8 @@ function _M.on_roll(dir)
   return screen()
 end
 
--- Closed for good. The interval is kept for next time; the counters stay on
--- screen until the next series starts.
+-- Closed for good. glaz.lua drops the module then, so it opens again at
+-- 4 s with nothing counted; the phone's interval is where a series starts.
 function _M.stop()
   shooting = false
   pcall(frame.camera.power_save, true)

@@ -179,10 +179,12 @@ local function tail_top()
 end
 
 -- What the screen shows, in short: tick() returns it, so a change redraws.
+-- lost: the status shows 'lost 0K' from the first byte, and none once
+-- listening again resets it, so whether any is lost counts too.
 local function state_str()
   return table.concat({ state, sel, note, sess, tostring(total), top, lo, hi,
                         tostring(follow), tostring(started ~= nil),
-                        lost // 1024 }, '|')
+                        tostring(lost > 0), lost // 1024 }, '|')
 end
 
 -- Passive: nothing listens and nothing is asked until Voice is picked. A
@@ -430,8 +432,10 @@ function _M.draw()
       end
     end
   end
+  -- '12:137': the firmware's font has no '/' (it read 12137), and a
+  -- wider ' of ' cut 'lost NK' off the end of a long status
   local pos = total and total > 0 and
-              (math.min(top + ROWS, total) .. '/' .. total) or '-'
+              (math.min(top + ROWS, total) .. ':' .. total) or '-'
   frame.display.text(pos .. '  ' ..
                      (note ~= '' and note or
                       (state == 'photo' and 'tap = photo' or

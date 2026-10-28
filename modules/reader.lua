@@ -66,7 +66,7 @@ local SPACING  = 4        -- the firmware's default gap between glyphs
 local WIDTHS = '=5=CARD5:;EC8A60B@@?B?A?BA68CCC>OFB@CAABC<>C@GCDBFDADCEGEGA' ..
                '9?:DI;CB=B@?DB5;B8LBBBB;?>ACNDD@<5<A'
 local LATIN1 = '06>B0F000L0A00M0?D000A06000A000>FGGGGGP@A@AA<;@?FCDDDDDBDCC' ..
-               'CCCFBCCCCCCCM>A@AA;;@?B@BBBABCBAA@ADBD'
+               'CCFBCCCCCCCM>A@AA;;@?B@BBBABCBAA@ADBD'
 local CYRILLIC = 'AAH?AA<?>PPHCDECF@B?FAP@DDCDGCDCB@DEHEDALNEG@AMBCCB=F@P@BBCC' ..
                  'HABAB=BDIDDAKNEF@@LBAAF=@?5?;MLFCBCC'
 local OTHER_W = 18        -- the font's other Cyrillic (Kazakh, Tatar..): an 'o'

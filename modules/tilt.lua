@@ -12,9 +12,16 @@ _M.label = 'Tilt'
 _M.mode = 'app'
 _M.background = false  -- sleeps: stopped as soon as it leaves the screen
 
+-- Whole degrees, rounded half up. Not '%.0f': that prints -0.4 as '-0',
+-- and a level head would flicker between r0 and r-0.
+local function deg(x)
+  return math.floor(x + 0.5)
+end
+
 function _M.tick()
   local d = frame.imu.direction()
-  return string.format('r%.0f  p%.0f  h%.0f', d.roll, d.pitch, d.heading)
+  return string.format('r%d  p%d  h%d',
+                       deg(d.roll), deg(d.pitch), deg(d.heading))
 end
 
 return _M

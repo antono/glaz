@@ -53,18 +53,22 @@ local function contents(id, path, host)
     host.send_chunks(FILE_DATA, id, '-' .. tostring(fh))
     return
   end
-  -- read() gives a line without its '\n'; send as it comes
+  -- read() gives a line without its '\n', send as it comes; but on Frame
+  -- at most host.read_piece bytes of it (the parts): a piece that long is
+  -- a line cut short, not ended, and its break comes with the next read(),
+  -- an empty line then
   local chunk = frame.bluetooth.max_length() - 3
   local buf, total, sent = '+', 0, true
   while sent do
     local line = fh:read()
     if line == nil then break end
-    total = total + #line + 1
+    local cut = #line == host.read_piece
+    total = total + #line + (cut and 0 or 1)
     if total > FILE_MAX then
       buf = buf .. '... cut at ' .. FILE_MAX .. ' bytes\n'
       break
     end
-    buf = buf .. line .. '\n'
+    buf = buf .. line .. (cut and '' or '\n')
     while sent and #buf >= chunk do
       sent = host.send_packet(FILE_DATA, id, true, string.sub(buf, 1, chunk))
       buf = string.sub(buf, chunk + 1)
