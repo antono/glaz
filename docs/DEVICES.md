@@ -41,14 +41,14 @@ with the part as its second argument. For example (Brightness does not do
 this yet: it is Frame's only):
 
 ```lua
--- modules/brightness.lua
+-- apps/brightness/brightness.lua
 local D = select(2, ...)     -- brightness.frame.lua or brightness.halo.lua
 local _M = {}
 local function apply(level) D.set_brightness(level) end
 ...
 return _M
 
--- modules/brightness.frame.lua
+-- apps/brightness/brightness.frame.lua
 local D = {}
 function D.set_brightness(level) frame.display.set_brightness(level) end
 return D
@@ -119,7 +119,7 @@ and with the glaz firmware the file system holds about 44 of them
 ### What check.sh holds to
 
 - A part's suffix names glasses there are.
-- Every module in `modules/` has a part, or it is on no glasses.
+- Every app in `apps/` has a part, or it is on no glasses.
 - A file that reaches more than one pair of glasses does not draw: it calls
   no `frame.display.*`, its parts do. This covers `glaz.lua`, the common
   files in `glaz/`, and a module with more than one part.

@@ -1,4 +1,4 @@
-"""Settings > Brightness (modules/brightness.lua), Frame only: a tilt
+"""Settings > Brightness (apps/brightness/brightness.lua), Frame only: a tilt
 previews the next or previous level live, a tap keeps it, and leaving any
 other way -- a double tap, the timeout, three taps, the menu, another app
 -- puts the last kept level back.

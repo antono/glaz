@@ -25,7 +25,7 @@ Sources, cited below by these short names:
 
 - **FW:** [halo-firmware](https://github.com/brilliantlabsAR/halo-firmware)
   at 8415ce0 (firmware 0.8.22, 2026-10-26). `M:` stands for
-  `modules/halo/src/` in it.
+  `apps/halo/src/` in it.
 - **docs:** Brilliant's documentation (`lab-frame-docs/halo/`).
 - **[mkt]:** the product page,
   [brilliant.xyz](https://brilliant.xyz/products/halo).

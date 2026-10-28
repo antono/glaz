@@ -9,7 +9,7 @@ import '../frame/protocol.dart';
 import '../settings.dart';
 import 'glaz_log.dart';
 
-/// A Flipper Zero's screen on the glasses (modules/flipper.lua, and
+/// A Flipper Zero's screen on the glasses (apps/flipper/flipper.lua, and
 /// docs/FLIPPER.md). The module asks with FLIPPER [1] when it comes on
 /// screen and says [0] when it goes; meanwhile the phone holds the Flipper
 /// over Bluetooth, takes its screen frames and sends the glasses the rows

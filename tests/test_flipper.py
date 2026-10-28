@@ -1,4 +1,4 @@
-"""Flipper (modules/flipper.lua): a Flipper Zero's screen, as the phone
+"""Flipper (apps/flipper/flipper.lua): a Flipper Zero's screen, as the phone
 passes it on (docs/FLIPPER.md). The module asks the phone for the screen
 (FLIPPER [1]), asks again while the phone is silent, draws the rows of
 each frame four times the size in orange inside a brown frame, answers

@@ -1,4 +1,4 @@
-"""Tuner (modules/tuner.lua) on each pair of glasses that has it -- Frame
+"""Tuner (apps/tuner/tuner.lua) on each pair of glasses that has it -- Frame
 only for now: the list of instruments, the tilt and the tap that pick
 one, the tuning drawn from what the phone hears (MODULE_CALL 'tuner':
 'p<pitch> <hz>', 'p', 's<text>'), the colours of in tune and out, TUNER

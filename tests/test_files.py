@@ -1,4 +1,4 @@
-"""Files (modules/files.lua), Apps > Files on Frame: the files on the
+"""Files (apps/files/files.lua), Apps > Files on Frame: the files on the
 glasses in a window of three around the cursor, a tilt to move it, a tap
 to preview the file under it (name, size, first two lines), a tap or a
 double tap back to the list, and a double tap from the list out of the

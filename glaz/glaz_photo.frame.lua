@@ -5,7 +5,7 @@
 -- idle: nothing else uses the camera, so it goes off again after.
 -- from: PHOTO_FROM's byte, 0 when not given: a single shot. Translate
 -- passes 255, so the phone reads the photo rather than files it.
--- A photo for the phone's remote, the way modules/photo.lua takes one: the
+-- A photo for the phone's remote, the way apps/photo/photo.lua takes one: the
 -- camera library loaded just for it (modules load only while in use, and so
 -- does this), auto exposure given time to settle, and PHOTO_FROM 0 first so
 -- the phone files it with the single shots. The loop waits meanwhile, about

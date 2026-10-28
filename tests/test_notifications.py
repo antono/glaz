@@ -1,4 +1,4 @@
-"""Notifications (modules/notifications.lua), Apps > Notifications: the
+"""Notifications (apps/notifications/notifications.lua), Apps > Notifications: the
 phone's notifications, newest first. The glasses ask for a window of the
 list with NOTICES_GET (0x0E, '>BBI4': op 1 the list from a number, op 2 one
 by id) and the phone answers through MODULE_CALL ('l:<from>:<total>' and a

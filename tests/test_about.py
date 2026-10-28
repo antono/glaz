@@ -1,4 +1,4 @@
-"""Info > About (modules/about.lua) on each pair of glasses that has it:
+"""Info > About (apps/about/about.lua) on each pair of glasses that has it:
 the app's name, version and author, a line each; reached from the menu or
 opened by the phone; an 'info' module, gone from the screen on its own
 after a few seconds, never in the background, deaf to tilts, the remote
@@ -14,7 +14,7 @@ from glasses import (APP_BACKGROUND, APP_START, APP_STOP, LUA_EVAL,
 
 pytestmark = pytest.mark.module("about")
 
-SOURCE = (Path(__file__).parent.parent / "modules" / "about.lua").read_text()
+SOURCE = (Path(__file__).parent.parent / "apps" / "about" / "about.lua").read_text()
 VERSION = re.search(r"VERSION\s*=\s*'([^']+)'", SOURCE).group(1)
 # Frame's lines; Halo's round screen holds 14, 13 and 11 characters on
 # its text rows, so its part (about.halo.lua) lays them out to fit whole
@@ -56,7 +56,7 @@ def walk_to_about(glasses):
 def test_the_version_is_semver_and_the_file_ascii():
     assert re.fullmatch(r"\d+\.\d+\.\d+", VERSION)
     for part in ("about.lua", "about.frame.lua", "about.halo.lua"):
-        (Path(__file__).parent.parent / "modules" / part).read_bytes() \
+        (Path(__file__).parent.parent / "apps" / "about" / part).read_bytes() \
             .decode("ascii")
 
 

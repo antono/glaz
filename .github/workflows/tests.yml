@@ -10,7 +10,7 @@ on:
   push:
     paths:
       - 'glaz/**'
-      - 'modules/**'
+      - 'apps/**'
       - 'sprites/**'
       - 'flutter-glaz/assets/lua/lib/**'
       - 'flutter-glaz/lib/frame/font.dart'
@@ -22,7 +22,7 @@ on:
   pull_request:
     paths:
       - 'glaz/**'
-      - 'modules/**'
+      - 'apps/**'
       - 'sprites/**'
       - 'flutter-glaz/assets/lua/lib/**'
       - 'flutter-glaz/lib/frame/font.dart'

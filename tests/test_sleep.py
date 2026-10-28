@@ -1,4 +1,4 @@
-"""Sleep (modules/sleep.lua), Settings > Sleep, on Frame, the only glasses
+"""Sleep (apps/sleep/sleep.lua), Settings > Sleep, on Frame, the only glasses
 that have it: it says which background module it would stop, a tap puts
 the glasses into deep sleep at once -- connected or not, the background
 module stopped -- two taps go back with nothing done, and a tap after

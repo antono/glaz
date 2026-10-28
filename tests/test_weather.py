@@ -1,4 +1,4 @@
-"""Weather (modules/weather.lua) on each pair of glasses that has it: with
+"""Weather (apps/weather/weather.lua) on each pair of glasses that has it: with
 no place set it asks the phone where it is (LOCATION_GET) and fetches
 wttr.in for 'lat,lon'; refused, without a fix or with no answer it lets
 wttr.in go by the phone's IP; a city set on the phone wins and asks for no

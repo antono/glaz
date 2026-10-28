@@ -112,7 +112,7 @@ tune then shows `thr ?`, and a tap on that row sets every axis to `3`.
 
 ## Calibrating
 
-[`modules/taptune.lua`](../modules/taptune.lua) is a menu module for tuning in
+[`apps/taptune/taptune.lua`](../apps/taptune/taptune.lua) is a menu module for tuning in
 place. Tilt moves the cursor over `threshold`, `quiet`, `duration`, `axes`
 and `test`; a single tap on a setting steps it to its next value (the screen
 says which) and reprograms the chip. On `test` a tap changes nothing. A hit

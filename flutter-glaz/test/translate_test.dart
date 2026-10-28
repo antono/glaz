@@ -117,7 +117,7 @@ class _Ending extends Transcription {
   Future<void> cancel() async => end();
 }
 
-/// [0x0F, op, sess, from (2), count], as modules/translate.lua packs it.
+/// [0x0F, op, sess, from (2), count], as apps/translate/translate.lua packs it.
 List<int> req(int op, int sess, int from, int count) => [
   translate,
   op,
@@ -284,7 +284,7 @@ void main() {
       t.onMessage([photoEnd, 0xFF, 0xD9]);
     }
 
-    /// What went to modules/translate.lua, in order.
+    /// What went to apps/translate/translate.lua, in order.
     List<String> calls() => [
       for (final s in link.sent)
         if (s.$1 == moduleCall && s.$2.startsWith('translate\n'))

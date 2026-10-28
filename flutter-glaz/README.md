@@ -110,7 +110,7 @@ transport the Python host uses. Connecting sends no break or reset, so
 and match `../docs/PROTOCOL.md`.
 
 Upload takes the Lua from `assets/lua/`, which links to the repository's
-`glaz/` and `modules/`. Firmware offers the zips in
+`glaz/` and `apps/`. Firmware offers the zips in
 `assets/firmware/`, which are not committed:
 
 ```sh

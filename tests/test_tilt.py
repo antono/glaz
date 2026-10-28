@@ -1,4 +1,4 @@
-"""Tilt (modules/tilt.lua), Sensors > Tilt: the head's roll, pitch and
+"""Tilt (apps/tilt/tilt.lua), Sensors > Tilt: the head's roll, pitch and
 heading from frame.imu.direction(), live, until a double tap or a minute
 left alone. Frame only: Halo gets no part of it, so neither the module nor
 its menu item."""

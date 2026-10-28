@@ -38,7 +38,7 @@ def empty(path: Path) -> bool:
 
 def modules(device: str) -> list[str]:
     """The modules that go to these glasses: those with a part for them."""
-    return sorted({stem(p) for p in (ROOT / "modules").glob(f"*.{device}.lua")})
+    return sorted({stem(p) for p in (ROOT / "apps").glob(f"*/*.{device}.lua")})
 
 
 def files(device: str) -> dict[str, Path]:
@@ -55,7 +55,7 @@ def files(device: str) -> dict[str, Path]:
         if ours(p) and stem(p) != "glaz_boot" or p.name == "glaz_boot.lua":
             out[p.name] = p
     mods = set(modules(device))
-    for p in sorted((ROOT / "modules").glob("*.lua")):
+    for p in sorted((ROOT / "apps").glob("*/*.lua")):
         if stem(p) in mods and ours(p):
             out[p.name] = p
     if not empty(APP / f"glaz.{device}.lua"):

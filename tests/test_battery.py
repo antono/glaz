@@ -1,4 +1,4 @@
-"""Battery (modules/battery.lua), Sensors > Battery, on each pair of
+"""Battery (apps/battery/battery.lua), Sensors > Battery, on each pair of
 glasses that has it: the level in percent, read once when it opens, shown
 for a few seconds ('info' mode), then the screen goes blank; a tap brings
 it back with a fresh reading, a double tap goes to the Sensors menu.

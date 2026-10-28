@@ -13,7 +13,7 @@
  *
  *   luac_frame in.lua out.luac [name]
  *
- * name: what errors call the file, glaz.lua or modules/recorder.lua;
+ * name: what errors call the file, glaz.lua or apps/recorder/recorder.lua;
  * in.lua by default.
  *
  * Prints the FNV-1a hash of in.lua, in hex: the app compares it with the

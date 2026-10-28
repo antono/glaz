@@ -9,7 +9,7 @@ import 'package:glaz/settings.dart';
 
 import 'assistant_test.dart' show SentLink;
 
-/// NOTICES_GET as the glasses send it (modules/notifications.lua).
+/// NOTICES_GET as the glasses send it (apps/notifications/notifications.lua).
 List<int> request(int op, int n) {
   final b = ByteData(6)
     ..setUint8(0, noticesGet)

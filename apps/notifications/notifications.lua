@@ -84,7 +84,7 @@ local function screen()
 end
 
 -- Nothing is asked here: tick() asks, and only a module on screen is
--- ticked (as Reader, modules/reader.lua: an answer coming after it was
+-- ticked (as Reader, apps/reader/reader.lua: an answer coming after it was
 -- left starts it in the background for remote()).
 function _M.start()
   items, lo, hi, total = {}, 0, 0, nil

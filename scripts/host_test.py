@@ -2,7 +2,7 @@
 """Reference host for the Frame menu. Exists only to exercise the protocol.
 
 The real host may be anything (Flutter, etc.) -- all menu logic lives on the
-glasses, and the menu items are Lua modules in modules/. This script uploads
+glasses, and the menu items are Lua modules in apps/. This script uploads
 them and then just listens. See glaz.lua and docs/PROTOCOL.md.
 """
 import asyncio
@@ -47,13 +47,13 @@ EVENTS = {
 }
 
 ROOT = Path(__file__).resolve().parent.parent
-MODULES_DIR = ROOT / "modules"
+APPS_DIR = ROOT / "apps"  # a directory an app: apps/<name>/<name>.lua
 SPRITES_DIR = ROOT / "sprites"
 # glaz.lua and its parts in files of their own (glaz_host.lua and the
 # rest): main.lua in one piece no longer fits the glasses' memory to compile.
 APP_DIR = ROOT / "glaz"
 
-# The Camera module (modules/photo.lua) streams each JPEG in chunks flagged
+# The Camera module (apps/photo/photo.lua) streams each JPEG in chunks flagged
 # 0x07 / 0x08 -- the frame_msg camera library's own codes. Saved here.
 PHOTOS_DIR = ROOT / "photos"
 
@@ -233,7 +233,7 @@ async def main():
     await frame.send_lua(loading, await_print=True)
     await asyncio.sleep(1.0)
     await frame.send_lua(loading, await_print=True)
-    # 'camera' is the frame_msg capture library, used by modules/photo.lua
+    # 'camera' is the frame_msg capture library, used by apps/photo/photo.lua
     await frame.upload_stdlua_libs(lib_names=["data", "camera"])
 
     # One module per menu item. glaz.lua requires them by bare name,
@@ -246,8 +246,8 @@ async def main():
         await frame.upload_file(str(path), path.name)
         print(f"  app part: {path.name}")
 
-    modules = {p.name.split(".")[0] for p in MODULES_DIR.glob(f"*.{DEVICE}.lua")}
-    for path in sorted(MODULES_DIR.glob("*.lua")):
+    modules = {p.name.split(".")[0] for p in APPS_DIR.glob(f"*/*.{DEVICE}.lua")}
+    for path in sorted(APPS_DIR.glob("*/*.lua")):
         if not ours(path) or path.name.split(".")[0] not in modules:
             continue
         await frame.upload_file(str(path), path.name)

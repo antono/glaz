@@ -73,7 +73,7 @@
             fileset = lib.fileset.unions [
               ./flutter-glaz
               ./glaz
-              ./modules
+              ./apps
               ./sprites
             ];
           };

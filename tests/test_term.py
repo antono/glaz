@@ -1,4 +1,4 @@
-"""Terminal (modules/term.lua) on the glasses that have it, Frame only: the
+"""Terminal (apps/term/term.lua) on the glasses that have it, Frame only: the
 phone holds the SSH session and sends the rows that changed, one frame at
 a time; the glasses draw them with frame.display.mono, ask for the
 terminal when it opens, say each frame was taken, and close it when it is

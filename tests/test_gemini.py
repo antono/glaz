@@ -1,4 +1,4 @@
-"""Gemini (modules/gemini.lua), the Gemini browser whose pages the phone
+"""Gemini (apps/gemini/gemini.lua), the Gemini browser whose pages the phone
 fetches: asking for lines (GEM_GET) and showing the phone's answer
 (MODULE_CALL 'p:...'), the cursor on links and scrolling by tilt and tap,
 opening a link, going back, the notes for no phone and no answer, and the

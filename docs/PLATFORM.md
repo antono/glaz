@@ -226,7 +226,7 @@ parameter GRAPHICS_DRAW_VECTOR = 'h13;
 ```
 
 — and then never references it again. Only `ASSIGN_COLOR`, `DRAW_SPRITE` and
-`BUFFER_SHOW` are decoded, and `modules/graphics/` contains a `sprite_engine.sv`
+`BUFFER_SHOW` are decoded, and `apps/graphics/` contains a `sprite_engine.sv`
 with no vector counterpart. Writing to `0x13` draws nothing.
 
 So the display cannot draw a line at all, at any level, without new RTL. Text

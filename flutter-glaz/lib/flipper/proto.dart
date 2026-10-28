@@ -241,7 +241,7 @@ Uint8List toRows(List<int> page, [int orientation = orientationHorizontal]) {
 /// What the glasses get for [rows] when they show [shown]: a mask of the
 /// rows that changed, 8 bytes, row 0 in the high bit of the first, and
 /// those rows, [rowNibbles] bytes each: a nibble a byte, high one first.
-/// The glasses widen a nibble with a table of 16 (modules/flipper.lua); a
+/// The glasses widen a nibble with a table of 16 (apps/flipper/flipper.lua); a
 /// table for whole bytes took more of their memory than they have to spare.
 /// Everything when [shown] is null. Null when nothing changed.
 Uint8List? rowsUpdate(Uint8List rows, Uint8List? shown) {

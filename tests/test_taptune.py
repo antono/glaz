@@ -1,4 +1,4 @@
-"""Tap tune (modules/taptune.lua), Sensors > Tap tune, Frame only: the
+"""Tap tune (apps/taptune/taptune.lua), Sensors > Tap tune, Frame only: the
 accelerometer's tap settings on four rows from the top, a tilt to pick one,
 a tap to step it and program the chip (frame.imu.tap_config), and on test
 the raw hits counted, bounces included (on_hit). Axes go back when it
@@ -12,7 +12,7 @@ from glasses import APP_START, APP_STOP, HANDS_OFF, LUA_EVAL, has_module
 
 pytestmark = pytest.mark.module("taptune")
 
-TAPTUNE = Path(__file__).parent.parent / "modules" / "taptune.lua"
+TAPTUNE = Path(__file__).parent.parent / "apps" / "taptune" / "taptune.lua"
 
 
 def lines(g):

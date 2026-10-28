@@ -71,7 +71,7 @@ const _photoSettings = [
 ];
 
 // Reader's speeds: words a minute, in the steps a tilt makes
-// (modules/reader.lua, WPM_MIN to WPM_MAX by WPM_STEP).
+// (apps/reader/reader.lua, WPM_MIN to WPM_MAX by WPM_STEP).
 const _wpm = [
   '100',
   '125',
@@ -163,7 +163,7 @@ class GlassesModule {
   bool get configurable =>
       settings.isNotEmpty || network || location || ownPage;
 
-  /// File name in ../modules/, without .lua.
+  /// File name in ../apps/, without .lua.
   final String id;
 
   /// The label the glasses draw (_M.label).

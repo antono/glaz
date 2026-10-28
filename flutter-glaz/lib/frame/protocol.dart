@@ -44,36 +44,36 @@ const recDrop = 0x10;
 const luaResult = 0x09;
 const textGet = 0x0A;
 
-/// modules/gemini.lua: [op, page, n (2), top (2)] -- op 1 opens link n,
+/// apps/gemini/gemini.lua: [op, page, n (2), top (2)] -- op 1 opens link n,
 /// op 2 asks for lines from n
 const geminiGet = 0x0D;
 
-/// modules/notifications.lua: [op, n (4)] -- op 1 the list from number n,
+/// apps/notifications/notifications.lua: [op, n (4)] -- op 1 the list from number n,
 /// op 2 notification n, all of it
 const noticesGet = 0x0E;
 
-/// modules/translate.lua: [op, sess, from (2), count] -- op 0 close,
+/// apps/translate/translate.lua: [op, sess, from (2), count] -- op 0 close,
 /// 1 lines from `from` (stops following), 2 the last `count` (follows);
 /// 3, 4 reserved (phone microphone, photo)
 const translate = 0x0F;
 
-/// modules/scales.lua: [n] scale n wanted, answered with MODULE_CALL
+/// apps/scales/scales.lua: [n] scale n wanted, answered with MODULE_CALL
 /// 'scales' (services/scales.dart)
 const scaleGet = 0x02;
 
-/// modules/tuner.lua: [1, mic] a tuning on screen, listen (mic 0 the
+/// apps/tuner/tuner.lua: [1, mic] a tuning on screen, listen (mic 0 the
 /// phone's, 1 the glasses'), [0] stop
 const tuner = 0x03;
 
-/// modules/assistant.lua: [op, id (2)] -- op 1 the chats, 2 go on with
+/// apps/assistant/assistant.lua: [op, id (2)] -- op 1 the chats, 2 go on with
 /// chat id, 3 a new chat
 const assist = 0x04;
 
-/// modules/flipper.lua: [1] show the Flipper, [0] stop, [2, seq] frame taken
+/// apps/flipper/flipper.lua: [1] show the Flipper, [0] stop, [2, seq] frame taken
 const flipper = 0x0B;
 
 /// The terminal: [1, cols, rows] start, [0] stop, [2, seq] frame taken
-/// (modules/term.lua).
+/// (apps/term/term.lua).
 const term = 0x0C;
 
 // The frame_msg camera library's own codes, used by Camera and Time series

@@ -18,7 +18,7 @@ else
   luac54=(nix shell nixpkgs#lua5_4 -c luac)
 fi
 
-for f in glaz/*.lua modules/*.lua sprites/*.lua; do
+for f in glaz/*.lua apps/*/*.lua sprites/*.lua; do
   if out=$("${lua54[@]}" -e "assert(loadfile('$f'))" 2>&1); then
     echo "syntax ok   $f"
   else
@@ -30,7 +30,7 @@ done
 
 # Non-ASCII breaks upload_file(): it chunks by characters but enforces the MTU
 # limit in bytes. See docs/PROTOCOL.md.
-for f in glaz/*.lua modules/*.lua sprites/*.lua; do
+for f in glaz/*.lua apps/*/*.lua sprites/*.lua; do
   if LC_ALL=C grep -qP '[^\x00-\x7F]' "$f" 2>/dev/null; then
     echo "NON-ASCII   $f  (will break upload)"
     fail=1
@@ -44,7 +44,7 @@ done
 # run time. A local declared inside a function by mistake made host.pref
 # nil, and every notification stopped the app (glaz/glaz_host.lua).
 lua_globals=$("${lua54[@]}" -e 'for k in pairs(_G) do print(k) end')
-listing=$(for f in glaz/*.lua modules/*.lua sprites/*.lua; do
+listing=$(for f in glaz/*.lua apps/*/*.lua sprites/*.lua; do
   "${luac54[@]}" -p -l "$f" | sed -nE \
     "s/.*(GET|SET)TABUP.*_ENV \"([A-Za-z_][A-Za-z0-9_]*)\".*/$(
       printf '%s' "$f" | sed 's|/|\\/|g') \1 \2/p"
@@ -71,7 +71,7 @@ fi
 # glasses these are, the parts on them say so.
 devices="frame halo"
 parts_ok=1
-for f in glaz/*.*.lua modules/*.*.lua; do
+for f in glaz/*.*.lua apps/*/*.*.lua; do
   dev=${f%.lua}; dev=${dev##*.}
   case " $devices " in
     *" $dev "*) ;;
@@ -79,12 +79,12 @@ for f in glaz/*.*.lua modules/*.*.lua; do
   esac
 done
 shared=()
-for f in glaz/*.lua modules/*.lua; do
+for f in glaz/*.lua apps/*/*.lua; do
   base=$(basename "$f" .lua)
   case $base in *.*) continue ;; esac
   if [ "${f%%/*}" = glaz ]; then shared+=("$f"); continue; fi
   n=0
-  for d in $devices; do [ -f "modules/$base.$d.lua" ] && n=$((n + 1)); done
+  for d in $devices; do [ -f "apps/$base/$base.$d.lua" ] && n=$((n + 1)); done
   if [ $n -eq 0 ]; then
     echo "PART        $f  has no part: it is on no glasses"
     parts_ok=0
@@ -100,10 +100,20 @@ for f in "${shared[@]}"; do
   fi
 done
 if grep -n 'display\.width\|HARDWARE_VERSION' glaz/*.lua \
-     modules/*.lua | grep -v ':[0-9]*: *--'; then
+     apps/*/*.lua | grep -v ':[0-9]*: *--'; then
   echo "PART        asks which glasses these are: the parts say so"
   parts_ok=0
 fi
 if [ $parts_ok = 1 ]; then echo "parts ok"; else fail=1; fi
+
+# Every app is a directory of its own, apps/<name>/<name>.lua, with a
+# README.md: what it is for, its screens, how it works (AGENTS.md).
+apps_ok=1
+for d in apps/*/; do
+  name=$(basename "$d")
+  [ -f "$d$name.lua" ] || { echo "APP         $d  has no $name.lua"; apps_ok=0; }
+  [ -f "${d}README.md" ] || { echo "APP         $d  has no README.md"; apps_ok=0; }
+done
+if [ $apps_ok = 1 ]; then echo "apps ok"; else fail=1; fi
 
 exit $fail

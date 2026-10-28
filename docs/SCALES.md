@@ -4,7 +4,7 @@ A glasses app that shows scales on the fretboard, two related
 scales at once, so the guitarist sees both and picks the colour to
 improvise with.
 
-`modules/scales.lua`, Apps > Scales. Frame only (Halo, below).
+`apps/scales/scales.lua`, Apps > Scales. Frame only (Halo, below).
 
 ## Example: "Oye Como Va" (Santana), A Dorian
 
@@ -109,7 +109,7 @@ minute.
 ## Halo
 
 Not drawn there yet. Scales has a Frame part only
-(`modules/scales.frame.lua`, empty: `scales.lua` draws with Frame's API as
+(`apps/scales/scales.frame.lua`, empty: `scales.lua` draws with Frame's API as
 it is), so the phone neither uploads it to Halo nor lists it there
 (docs/DEVICES.md), as with Recorder and Tuner. Halo's screen (256x256,
 round) needs a layout of its own first.

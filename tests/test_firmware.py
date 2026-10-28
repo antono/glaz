@@ -1,4 +1,4 @@
-"""Info > Firmware (modules/firmware.lua) on each pair of glasses that has
+"""Info > Firmware (apps/firmware/firmware.lua) on each pair of glasses that has
 it: it shows the version the firmware gives (frame.FIRMWARE_VERSION), the
 one STATUS tells the phone, read again each time it opens; it comes from
 the menu, the phone or a tap on the blank screen, goes back with a double

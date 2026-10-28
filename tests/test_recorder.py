@@ -1,4 +1,4 @@
-"""Recorder (modules/recorder.lua), Frame only: a tap starts and stops a
+"""Recorder (apps/recorder/recorder.lua), Frame only: a tap starts and stops a
 recording, the microphone's bytes go to the phone as AUDIO packets between
 REC_START and AUDIO_END, at most two seconds' worth a tick and in packets
 the link's size, a recording goes on in the background with a red dot in

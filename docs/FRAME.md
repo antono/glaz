@@ -557,7 +557,7 @@ glaz/              the application that runs on the glasses
   glaz.halo.lua      its part for Halo
   glaz_*.lua         parts of glaz.lua in files of their own; glaz_boot's
                      part for the glasses is main.lua there
-modules/           one Lua file per menu item, and its parts
+apps/              one directory per menu item: its Lua, its parts, README.md
 docs/              FRAME.md, PLATFORM.md, PROTOCOL.md
 scripts/           every script, run individually as needed
   check.sh           syntax, ASCII and unknown-global checks, no device needed

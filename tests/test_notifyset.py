@@ -1,4 +1,4 @@
-"""Settings > Notifications (modules/notifyset.lua) on each pair of glasses
+"""Settings > Notifications (apps/notifyset/notifyset.lua) on each pair of glasses
 that has it: tilt picks a setting, a tap its next value, kept at once in
 prefs.txt; and what they do to the phone's NOTIFY pop-ups -- off, nothing
 covers the screen; on, it stays the seconds picked (docs/PROTOCOL.md,

@@ -1,4 +1,4 @@
-"""Apps > Timeseries (modules/timeseries.lua), Frame only: a photo every
+"""Apps > Timeseries (apps/timeseries/timeseries.lua), Frame only: a photo every
 few seconds, sent to the phone. A tilt picks the interval on the scale, a
 tap starts and stops the series, and leaving a running series keeps it
 shooting in the background. Each photo goes out as PHOTO_FROM [0x1A,

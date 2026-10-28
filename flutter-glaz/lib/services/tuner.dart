@@ -178,7 +178,7 @@ class _ChannelMic implements PhoneMic {
   Future<void> stop() => _calls.invokeMethod('stop');
 }
 
-/// The glasses' Tuner (modules/tuner.lua, docs/PROTOCOL.md, "Tuner"): it
+/// The glasses' Tuner (apps/tuner/tuner.lua, docs/PROTOCOL.md, "Tuner"): it
 /// asks with TUNER [1, mic] when a tuning is on screen and says [0] when
 /// it goes. The phone hears -- its own microphone (mic 0), or the glasses'
 /// streamed as Recorder's is (mic 1, REC_START's for = 3) -- finds the

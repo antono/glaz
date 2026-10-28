@@ -38,7 +38,7 @@ class TermTrouble implements Exception {
   String toString() => message;
 }
 
-/// The terminal on the glasses (modules/term.lua). The module asks with
+/// The terminal on the glasses (apps/term/term.lua). The module asks with
 /// TERM [1, cols, rows] when it comes on screen and says [0] when it goes;
 /// the phone holds an SSH shell on the chosen host (term/hosts.dart), keeps
 /// its screen in an xterm [Terminal], and sends the glasses the rows that

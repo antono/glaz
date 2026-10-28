@@ -71,7 +71,7 @@ class FakeMic implements PhoneMic {
 void main() {
   group('pitchOf', () {
     // the lowest and highest open strings of the Tuner's instruments
-    // (modules/tuner.lua), and some between
+    // (apps/tuner/tuner.lua), and some between
     const notes = {
       'bass E1': 41.20,
       'guitar E2': 82.41,

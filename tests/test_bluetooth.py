@@ -1,4 +1,4 @@
-"""Info > Bluetooth (modules/bluetooth.lua) on each pair of glasses that has
+"""Info > Bluetooth (apps/bluetooth/bluetooth.lua) on each pair of glasses that has
 it: the link up or down and for how long, drops since boot, how long ago
 the phone was heard and how many messages it sent, the MTU and the MAC;
 refreshed while open, closed after APP_TIMEOUT, never in the background."""

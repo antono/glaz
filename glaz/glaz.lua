@@ -4,7 +4,7 @@
 -- limit in bytes, so any non-ASCII byte here breaks upload_file() with
 -- "payload length is too large". See docs/PROTOCOL.md.
 --
--- Menu state lives here, not on the host. Each item is a module in modules/
+-- Menu state lives here, not on the host. Each item is a module in apps/
 -- that declares a label and either run() or tick(). Adding an item means
 -- adding one file and listing it in MENU below. The host still receives
 -- every event, so it can react too, but nothing here needs a host.
@@ -68,7 +68,7 @@ local draw = D.text
 
 local data = require('data.min')
 
--- The menu tree, in display order. A string names a module in modules/; a
+-- The menu tree, in display order. A string names a module in apps/; a
 -- table is a submenu -- its label, then its entries, which may themselves be
 -- submenus. Each module must return a table with a .label and either .run()
 -- (mode 'info') or .tick() (mode 'app'), and may set .background.
@@ -185,7 +185,7 @@ local LINK_GRACE      = 60    -- seconds
 
 -- Host services (docs/PROTOCOL.md). A notification pops up over whatever is
 -- on screen and goes away by itself, or with a tap -- unless pop-ups are off
--- in Settings > Notifications (modules/notifyset.lua), which also sets how
+-- in Settings > Notifications (apps/notifyset/notifyset.lua), which also sets how
 -- long it stays. The phone keeps the list (Apps > Notifications); the
 -- glasses hold only the one on screen. An HTTP request the phone never
 -- answers is given up on after NET_TIMEOUT -- the phone has its own,
@@ -327,7 +327,7 @@ host.read_piece = D.read_piece   -- for glaz_files.lua; nil: whole lines
 local mods  = {}   -- id -> module table, while loaded
 local broken = {}  -- id -> true for a module that did not load at start
 local paths = {}   -- id -> { root, ..., the level holding the module }
-local names = {}   -- id -> file name in modules/, the module's host identity
+local names = {}   -- id -> file name in apps/, the module's host identity
 
 local function new_level(label)
   return { label = label, items = {}, sel = 1, top = 1 }

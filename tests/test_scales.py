@@ -1,4 +1,4 @@
-"""Scales (modules/scales.lua, docs/SCALES.md): guitar scales on the
+"""Scales (apps/scales/scales.lua, docs/SCALES.md): guitar scales on the
 fretboard, Frame only. It opens on the instruments; a tap takes one, a
 tilt moves the box along the neck, a tap or the remote's Up and Down ask
 the phone for the next scale (SCALE_GET), the phone answers through

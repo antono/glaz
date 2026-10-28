@@ -46,8 +46,9 @@ The glasses run Lua; a laptop talks to them over Bluetooth using Python.
   file browsing, photo); and `glaz_boot.lua`, which loads the app and
   restarts it; its part for the glasses (`glaz_boot.frame.lua`) is
   `main.lua` there. See docs/FRAME.md
-- `modules/` — one Lua file per menu item, and its part for each pair of
-  glasses it runs on (`reader.frame.lua`)
+- `apps/` — one directory per menu item, `apps/<name>/`: `<name>.lua`,
+  its part for each pair of glasses it runs on (`reader.frame.lua`), and a
+  `README.md` with screenshots (`screens/`) and how the app works
 - `scripts/` — every script, run individually: `check.sh` (static
   checks, no device needed), `host_test.py` (reference host: uploads
   everything, then listens), diagnostics
@@ -140,10 +141,14 @@ python3 -m venv .venv
   (`pytest tests`, docs/TESTING.md): CI runs both.
 - A new menu item gets its tests too: `tests/test_<name>.py`, on every
   pair of glasses it goes to.
-- Adding a menu item: add a file in `modules/`, its part for each pair of
-  glasses it runs on (`name.frame.lua`, empty `return {}` if it has
-  nothing of its own), and list it in the `MENU` tree in `glaz/glaz.lua`. See
-  `docs/PROTOCOL.md` and `docs/DEVICES.md`.
+- Adding a menu item: add a directory `apps/<name>/` with `name.lua`, its
+  part for each pair of glasses it runs on (`name.frame.lua`, empty
+  `return {}` if it has nothing of its own), and a `README.md`: what the
+  app is for, its screenshots (`scripts/screenshots.py --readme name`
+  makes `screens/<glasses>.png`) and how it works. List it in the `MENU`
+  tree in `glaz/glaz.lua` and as an asset folder in
+  `flutter-glaz/pubspec.yaml` (a test checks). See `docs/PROTOCOL.md` and
+  `docs/DEVICES.md`. A change to how an app works updates its README.
 - What differs between Frame and Halo goes in the parts, never in a check
   of which glasses these are (docs/DEVICES.md); `check.sh` holds to it.
 - Every commit that changes an app bumps its version in the same commit,
@@ -151,8 +156,8 @@ python3 -m venv .venv
   side or saved data no longer works with it), minor for a feature, patch
   for a fix. Docs, tests and tooling alone bump nothing. While a version
   is `0.x`, a breaking change bumps the minor.
-  - Glasses (`glaz/`, `modules/`, `sprites/`): `VERSION` in
-    `modules/about.lua`, shown in Info > About.
+  - Glasses (`glaz/`, `apps/`, `sprites/`): `VERSION` in
+    `apps/about/about.lua`, shown in Info > About.
   - Phone (`flutter-glaz/`): `version` in `flutter-glaz/pubspec.yaml` and
     `appVersion` in `lib/screens/about_screen.dart` (a test keeps them
     equal); the `+N` build number goes up by one with every bump.

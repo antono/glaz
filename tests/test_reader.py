@@ -1,4 +1,4 @@
-"""Reader (modules/reader.lua), the speed reader, on each pair of glasses
+"""Reader (apps/reader/reader.lua), the speed reader, on each pair of glasses
 that has it (Frame only for now): one word at a time with its pivot letter
 red at a fixed spot, the words asked from the phone in batches (TEXT_GET)
 and answered through MODULE_CALL, a tap to read and pause, a tilt for the

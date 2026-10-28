@@ -30,10 +30,10 @@ String stemOf(String file) {
 }
 
 /// The modules (file names, no .lua) with a part for [model], from the
-/// app's assets (assets/lua/modules/).
+/// app's assets (assets/lua/apps/).
 Set<String> modulesFor(Iterable<String> assets, GlassesModel model) => {
   for (final a in assets)
-    if (a.startsWith('assets/lua/modules/'))
+    if (a.startsWith('assets/lua/apps/'))
       if (partFor(a.split('/').last) == model) stemOf(a.split('/').last),
 };
 

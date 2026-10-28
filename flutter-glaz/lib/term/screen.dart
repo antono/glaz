@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:xterm/core.dart';
 
-/// The terminal on the glasses (modules/term.lua): what the phone's model
+/// The terminal on the glasses (apps/term/term.lua): what the phone's model
 /// of the screen becomes there. A cell is one ASCII character and one
 /// attribute byte, frame.display.mono's attrs: the text's palette index in
 /// the low nibble, the background's in the high one (0: none).
@@ -294,7 +294,7 @@ List<int> encodeRow(GlassesRow row) {
   return [n, ...row.text.codeUnits.take(n), ...row.attrs.take(n)];
 }
 
-/// The frame for modules/term.lua, its remote() 'f': seq, flags (bit 0:
+/// The frame for apps/term/term.lua, its remote() 'f': seq, flags (bit 0:
 /// the wearer typed since the last), a 16-bit mask of the rows that differ
 /// from [shown] (row 1 the high bit), then those rows. Null when nothing
 /// changed and nothing was typed. [shown] null: every row.

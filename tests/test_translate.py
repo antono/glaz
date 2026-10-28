@@ -1,4 +1,4 @@
-"""Translate (modules/translate.lua), Frame only: the chooser of Voice and
+"""Translate (apps/translate/translate.lua), Frame only: the chooser of Voice and
 Photo, the mode kept as a pref; Voice streams the microphone with
 REC_START's fourth byte 2, a tap pauses and listens again; Photo sends a
 photo with PHOTO_FROM 255; the log window the phone sends (w:, n:, s:,

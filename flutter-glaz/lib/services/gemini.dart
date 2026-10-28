@@ -86,7 +86,7 @@ const backLink = 0;
 const homeLink = 65535;
 
 /// The width a line may take on the glasses, in px: from where
-/// modules/gemini.lua draws text (TEXT_X) to the screen's right edge, less
+/// apps/gemini/gemini.lua draws text (TEXT_X) to the screen's right edge, less
 /// a little.
 const lineWidth = 530;
 
@@ -269,7 +269,7 @@ String _scheme(String url) {
 }
 
 /// The Gemini browser's phone side (docs/PROTOCOL.md, "Gemini"): fetches
-/// the pages modules/gemini.lua opens, keeps the one open and the way
+/// the pages apps/gemini/gemini.lua opens, keeps the one open and the way
 /// back, and hands the glasses its lines a few dozen at a time. The home
 /// page is the bookmarks, set in Glaz > Menu > Gemini.
 class GeminiService extends ChangeNotifier {
@@ -360,7 +360,7 @@ class GeminiService extends ChangeNotifier {
 
   Future<void> _send(int from) => link.callModule('gemini', answer(from));
 
-  /// MODULE_CALL's argument for modules/gemini.lua:
+  /// MODULE_CALL's argument for apps/gemini/gemini.lua:
   /// 'p:page:from:total:top:back' and a line each, as many as fit; back is
   /// 1 when there is a page to go back to, so the glasses' double tap goes
   /// there rather than out of Gemini.

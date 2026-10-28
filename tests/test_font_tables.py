@@ -1,5 +1,5 @@
 """The width tables of Frame's font kept outside the firmware: Reader's
-(modules/reader.lua) and the phone's (flutter-glaz/lib/frame/font.dart),
+(apps/reader/reader.lua) and the phone's (flutter-glaz/lib/frame/font.dart),
 both to fit text to the screen. Each must be the firmware's own widths
 (fonts.json.gz, from system_font.h): one off, and every glyph after it
 is placed a glyph's width wrong."""
@@ -28,7 +28,7 @@ def lua_string(src, name):
 
 @pytest.mark.parametrize("table", ["latin1", "cyrillic"])
 def test_readers_table_is_the_firmwares(table):
-    src = (ROOT / "modules/reader.lua").read_text()
+    src = (ROOT / "apps/reader/reader.lua").read_text()
     assert lua_string(src, table.upper()) == firmware(*RANGES[table])
 
 

@@ -1,4 +1,4 @@
-"""Info > Uptime (modules/uptime.lua) on each pair of glasses that has it:
+"""Info > Uptime (apps/uptime/uptime.lua) on each pair of glasses that has it:
 the time since power-on as 'Hh MMm SSs', read from frame.time.utc(), which
 glaz never sets, so the phone's clock changes nothing; it comes from the
 menu or the phone, shows its value once, with minutes and hours carried

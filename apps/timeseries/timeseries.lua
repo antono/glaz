@@ -12,7 +12,7 @@
 -- _M.background(). The interval can be changed while running; the next shot
 -- moves accordingly.
 --
--- Photos go out exactly as in modules/photo.lua: camera.min's
+-- Photos go out exactly as in apps/photo/photo.lua: camera.min's
 -- capture_and_send(), chunks flagged 0x07 / 0x08, saved by the host. Each
 -- capture blocks the loop for about 1-3 s, so at 1-2 s the real rate is set
 -- by the transfer, not the interval: shots that fall behind are dropped, not
@@ -33,7 +33,7 @@ _M.mode = 'app'
 
 local INTERVALS  = { 1, 2, 4, 8, 10, 20, 30, 40, 60 }   -- seconds
 -- Defaults; the phone may set others (Glaz > Menu > Time series).
-local RESOLUTION = 512       -- px, square; same as modules/photo.lua
+local RESOLUTION = 512       -- px, square; same as apps/photo/photo.lua
 local QUALITY    = 'MEDIUM'
 local QUALITIES  = { VERY_LOW = true, LOW = true, MEDIUM = true, HIGH = true,
                      VERY_HIGH = true }

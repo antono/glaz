@@ -106,6 +106,16 @@ void main() {
     needBytecode(text, GlassesModel.halo);
   });
 
+  test('every app in ../apps is an asset folder in pubspec.yaml', () {
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    final apps = Directory('../apps').listSync().whereType<Directory>();
+    expect(apps, isNotEmpty);
+    for (final d in apps) {
+      final name = d.path.split('/').last;
+      expect(pubspec, contains('- assets/lua/apps/$name/\n'), reason: name);
+    }
+  });
+
   test('a part is told by its suffix', () {
     expect(partFor('reader.frame.lua'), GlassesModel.frame);
     expect(partFor('about.halo.lua'), GlassesModel.halo);
@@ -115,11 +125,11 @@ void main() {
     expect(stemOf('data.min.lua'), 'data.min');
     expect(
       modulesFor([
-        'assets/lua/modules/about.lua',
-        'assets/lua/modules/about.frame.lua',
-        'assets/lua/modules/about.halo.lua',
-        'assets/lua/modules/reader.lua',
-        'assets/lua/modules/reader.frame.lua',
+        'assets/lua/apps/about/about.lua',
+        'assets/lua/apps/about/about.frame.lua',
+        'assets/lua/apps/about/about.halo.lua',
+        'assets/lua/apps/reader/reader.lua',
+        'assets/lua/apps/reader/reader.frame.lua',
         'assets/lua/glaz/glaz_boot.halo.lua',
       ], GlassesModel.halo),
       {'about'},
@@ -163,8 +173,8 @@ void main() {
 
   test('luacAsset and fnv1a match tool/compile_lua.sh', () {
     expect(
-      luacAsset('assets/lua/modules/photo.lua'),
-      'assets/luac/modules.photo.luac',
+      luacAsset('assets/lua/apps/photo/photo.lua'),
+      'assets/luac/apps.photo.photo.luac',
     );
     expect(
       luacAsset('assets/lua/glaz/glaz.lua'),

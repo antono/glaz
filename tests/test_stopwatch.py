@@ -1,4 +1,4 @@
-"""Stopwatch (modules/stopwatch.lua) on each pair of glasses that has it:
+"""Stopwatch (apps/stopwatch/stopwatch.lua) on each pair of glasses that has it:
 a tap starts and pauses it, a tilt resets it while paused, and leaving it
 keeps it counting in the background."""
 import pytest

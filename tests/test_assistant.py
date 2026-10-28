@@ -1,4 +1,4 @@
-"""Assistant (modules/assistant.lua) on Frame, the only glasses that have
+"""Assistant (apps/assistant/assistant.lua) on Frame, the only glasses that have
 it: the chats the phone keeps, listed and picked; a tap listens, the
 microphone's sound streamed to the phone, the next tap asks; the chat the
 phone sends back drawn as a coloured log; a double tap drops the question;
@@ -14,7 +14,7 @@ from glasses import APP_START, APP_STOP, INPUT, LUA_EVAL, LUA_RESULT, has_module
 
 pytestmark = pytest.mark.module("assistant")
 
-# Glasses -> phone (modules/assistant.lua)
+# Glasses -> phone (apps/assistant/assistant.lua)
 ASSIST, AUDIO, AUDIO_END = 0x04, 0x05, 0x06
 REC_DROP, REC_START = 0x10, 0x1F
 

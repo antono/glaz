@@ -128,7 +128,7 @@ menu before `frame.sleep()`. Rule: going to sleep closes whatever is open.
 
 ### 3. Brightness persists at whatever level was last chosen
 
-`modules/brightness.lua` sets −2…2 (a picker), and the level stays until reboot. A
+`apps/brightness/brightness.lua` sets −2…2 (a picker), and the level stays until reboot. A
 brighter panel costs more. Not measured.
 
 ### Already in place (working as intended)

@@ -15,7 +15,7 @@ import 'update_screen.dart';
 /// ../../docs/FRAME.md ("Deploy as main.lua") for why each step is there.
 ///
 /// The Lua comes from the app's assets (assets/lua/), which link to the
-/// repository's glaz/ and modules/.
+/// repository's glaz/ and apps/.
 
 /// One file for the glasses: its name there, its text, and its bytecode
 /// when the app was built with it (tool/compile_lua.sh) and it still
@@ -33,7 +33,7 @@ int fnv1a(List<int> bytes) {
 }
 
 /// Where tool/compile_lua.sh puts the bytecode of the source asset [path]:
-/// assets/lua/modules/photo.lua -> assets/luac/modules.photo.luac.
+/// assets/lua/apps/photo/photo.lua -> assets/luac/apps.photo.photo.luac.
 String luacAsset(String path) =>
     'assets/luac/${path.substring('assets/lua/'.length).replaceAll(RegExp(r'\.lua$'), '').replaceAll('/', '.')}.luac';
 
@@ -124,7 +124,7 @@ Future<List<LuaFile>> luaFiles(
           stemOf(f.$1) != 'glaz' &&
           (partFor(f.$1) == null || stemOf(f.$1) != _boot),
     ),
-    ...await under('modules', (m) => installed(m) && modules.contains(m)),
+    ...await under('apps', (m) => installed(m) && modules.contains(m)),
     // the app itself, loaded by main.lua: the firmware's require() cannot
     // be trusted with a file its size (glaz/glaz_boot.frame.lua)
     await file(

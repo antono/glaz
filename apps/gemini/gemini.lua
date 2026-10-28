@@ -104,7 +104,7 @@ end
 
 -- The phone keeps the page; its lines are asked for again from tick()
 -- (glaz.lua drops the module when it is left: nothing here stays).
--- Nothing is asked here (as Reader, modules/reader.lua): an answer after
+-- Nothing is asked here (as Reader, apps/reader/reader.lua): an answer after
 -- the module was left starts it in the background for remote().
 function _M.start()
   lines, lo, hi, asked, note = {}, 0, 0, nil, ''
