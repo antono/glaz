@@ -73,10 +73,10 @@ local data = require('data.min')
 -- submenus. Each module must return a table with a .label and either .run()
 -- (mode 'info') or .tick() (mode 'app'), and may set .background.
 local MENU = {
-  { label = 'Apps',     'assistant', 'translate', 'notifications', 'gemini',
-                        'reader', 'photo', 'timeseries', 'recorder',
-                        'stopwatch', 'tuner', 'files', 'weather', 'flipper',
-                        'term', 'scales' },
+  { label = 'Apps',     'assistant', 'factcheck', 'translate',
+                        'notifications', 'gemini', 'reader', 'photo',
+                        'timeseries', 'recorder', 'stopwatch', 'tuner',
+                        'files', 'weather', 'flipper', 'term', 'scales' },
   { label = 'Sensors',  'battery', 'tilt', 'taptune' },
   { label = 'Settings', 'brightness', 'notifyset', 'sleep' },
   { label = 'Info',     'bluetooth', 'uptime', 'firmware', 'about' },

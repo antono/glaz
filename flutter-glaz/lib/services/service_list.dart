@@ -42,6 +42,13 @@ const services = [
     true,
   ),
   GlazService(
+    'factcheck',
+    'Fact check',
+    "Checks the facts said around you, with your agent, for the glasses' "
+        'Fact check',
+    true,
+  ),
+  GlazService(
     'translate',
     'Translate',
     "Translates what the other speaker says, on the phone, for the "

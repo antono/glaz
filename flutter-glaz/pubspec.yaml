@@ -4,7 +4,7 @@ publish_to: 'none'
 
 # Shown in the About tab too: keep lib/screens/about_screen.dart in step
 # (test/version_test.dart checks it).
-version: 4.12.4+75
+version: 4.13.0+76
 
 environment:
   sdk: ^3.13.3
@@ -56,6 +56,7 @@ flutter:
     - assets/lua/apps/battery/
     - assets/lua/apps/bluetooth/
     - assets/lua/apps/brightness/
+    - assets/lua/apps/factcheck/
     - assets/lua/apps/files/
     - assets/lua/apps/firmware/
     - assets/lua/apps/flipper/

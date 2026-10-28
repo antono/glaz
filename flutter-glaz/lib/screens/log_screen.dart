@@ -24,6 +24,7 @@ enum _Filter {
   task,
   assistant,
   translate,
+  factcheck,
   message,
 }
 

@@ -208,6 +208,25 @@ const glassesMenu = <MenuSection>[
       ],
     ),
     GlassesModule(
+      'factcheck',
+      'Fact check',
+      ModuleKind.app,
+      Icons.fact_check,
+      'Listens to the conversation; a tap checks the claims said since '
+          'the last, with the agent: true green, false red, partly '
+          'yellow. Tap a fact to read why.',
+      settings: [
+        ModuleSetting.choice(
+          'bits',
+          'Quality',
+          '16',
+          ['8', '16'],
+          optionLabels: ['8 bit', '16 bit, heard better'],
+          help: '16 bit sends twice as much; on a busy link some is lost.',
+        ),
+      ],
+    ),
+    GlassesModule(
       'translate',
       'Translate',
       ModuleKind.app,

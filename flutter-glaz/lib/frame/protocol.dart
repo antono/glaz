@@ -65,6 +65,10 @@ const scaleGet = 0x02;
 /// phone's, 1 the glasses'), [0] stop
 const tuner = 0x03;
 
+/// apps/factcheck/factcheck.lua: [op, id (2)] -- op 0 the wearer left, 1 cut:
+/// check what was said since the last cut, 2 open fact id, 3 the list again
+const facts = 0x01;
+
 /// apps/assistant/assistant.lua: [op, id (2)] -- op 1 the chats, 2 go on with
 /// chat id, 3 a new chat
 const assist = 0x04;
@@ -92,6 +96,9 @@ const forTranslate = 2;
 
 // REC_START's fourth byte: the sound is for the Tuner
 const forTuner = 3;
+
+// REC_START's fourth byte: the sound is for Fact check
+const forFactcheck = 4;
 
 // PHOTO_FROM's byte: the photo is Translate's to read, not to keep
 const photoForTranslate = 255;
@@ -140,6 +147,7 @@ const codeNames = {
   translate: 'TRANSLATE',
   tuner: 'TUNER',
   scaleGet: 'SCALE_GET',
+  facts: 'FACTS',
   photoChunk: 'photo chunk',
   photoEnd: 'photo end',
   audioChunk: 'audio chunk',
