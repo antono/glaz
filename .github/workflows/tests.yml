@@ -9,28 +9,26 @@ name: tests
 on:
   push:
     paths:
-      - 'glaz*.lua'
-      - 'app/**'
+      - 'glaz/**'
       - 'modules/**'
       - 'sprites/**'
       - 'flutter-glaz/assets/lua/lib/**'
       - 'flutter-glaz/lib/frame/font.dart'
       - 'tests/**'
-      - 'utils/screenshots.py'
-      - 'check.sh'
+      - 'scripts/screenshots.py'
+      - 'scripts/check.sh'
       - 'requirements.txt'
       - '.github/workflows/tests.yml'
   pull_request:
     paths:
-      - 'glaz*.lua'
-      - 'app/**'
+      - 'glaz/**'
       - 'modules/**'
       - 'sprites/**'
       - 'flutter-glaz/assets/lua/lib/**'
       - 'flutter-glaz/lib/frame/font.dart'
       - 'tests/**'
-      - 'utils/screenshots.py'
-      - 'check.sh'
+      - 'scripts/screenshots.py'
+      - 'scripts/check.sh'
       - 'requirements.txt'
       - '.github/workflows/tests.yml'
   workflow_dispatch:
@@ -55,7 +53,7 @@ jobs:
           echo "$HOME/bin" >> "$GITHUB_PATH"
 
       - name: Static checks
-        run: ./check.sh
+        run: scripts/check.sh
 
       - uses: actions/setup-python@v5
         with:
@@ -72,7 +70,7 @@ jobs:
 
       - name: Screens of every app
         if: always()
-        run: python utils/screenshots.py -o screens/apps
+        run: python scripts/screenshots.py -o screens/apps
 
       - uses: actions/upload-artifact@v4
         if: always()

@@ -72,10 +72,7 @@
             root = ./.;
             fileset = lib.fileset.unions [
               ./flutter-glaz
-              ./glaz.lua
-              ./glaz.frame.lua
-              ./glaz.halo.lua
-              ./app
+              ./glaz
               ./modules
               ./sprites
             ];

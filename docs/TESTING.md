@@ -114,7 +114,7 @@ Without devenv: `pip install -r requirements.txt`, then `pytest tests`.
 
 ## Screenshots for the docs
 
-`utils/screenshots.py` (`screens` in the shell) opens every app on both
+`scripts/screenshots.py` (`screens` in the shell) opens every app on both
 glasses as the phone does and saves its screen as
 `<out>/<device>/<app>.png`, with the splash, the menu and a notification.
 The tests save more, the screens along the way (`SHOTS=dir`), in

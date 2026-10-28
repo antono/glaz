@@ -176,7 +176,7 @@ glaz never asks which glasses it is on: the parts on them say so
 
 What has a Halo part (docs/DEVICES.md):
 
-- **`app/glaz_boot.halo.lua`**, Halo's `main.lua`. It loads files as text,
+- **`glaz/glaz_boot.halo.lua`**, Halo's `main.lua`. It loads files as text,
   under Halo's file names, and shows "restarted" on Halo's screen.
 - **`glaz.halo.lua`**, the app's display. It has five rows of 16 px text,
   30 px apart, around the middle where the circle is widest. Each line is

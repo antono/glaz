@@ -46,15 +46,16 @@ EVENTS = {
     APP_BACKGROUND: "app to background",
 }
 
-MODULES_DIR = Path(__file__).parent / "modules"
-SPRITES_DIR = Path(__file__).parent / "sprites"
-# Parts of glaz.lua in files of their own (glaz_host.lua and the
+ROOT = Path(__file__).resolve().parent.parent
+MODULES_DIR = ROOT / "modules"
+SPRITES_DIR = ROOT / "sprites"
+# glaz.lua and its parts in files of their own (glaz_host.lua and the
 # rest): main.lua in one piece no longer fits the glasses' memory to compile.
-APP_DIR = Path(__file__).parent / "app"
+APP_DIR = ROOT / "glaz"
 
 # The Camera module (modules/photo.lua) streams each JPEG in chunks flagged
 # 0x07 / 0x08 -- the frame_msg camera library's own codes. Saved here.
-PHOTOS_DIR = Path(__file__).parent / "photos"
+PHOTOS_DIR = ROOT / "photos"
 
 # Internet for modules (_M.host.http, docs/PROTOCOL.md "Internet"). The phone
 # asks the user per module; here the permission is a comma-separated list of
@@ -236,10 +237,11 @@ async def main():
     await frame.upload_stdlua_libs(lib_names=["data", "camera"])
 
     # One module per menu item. glaz.lua requires them by bare name,
-    # so each must land at /<name>.lua on the device; glaz_boot's part
-    # goes up as main.lua, last.
+    # so each must land at /<name>.lua on the device; glaz.lua and its
+    # part go up as glaz_app, and glaz_boot's part as main.lua, last.
     for path in sorted(APP_DIR.glob("*.lua")):
-        if not ours(path) or path.name.startswith("glaz_boot."):
+        if (not ours(path) or path.name.startswith("glaz_boot.")
+                or path.name.split(".")[0] == "glaz"):
             continue
         await frame.upload_file(str(path), path.name)
         print(f"  app part: {path.name}")
@@ -256,10 +258,9 @@ async def main():
         await frame.upload_file(str(path), path.name)
         print(f"  sprite: {path.name}")
 
-    root = Path(__file__).parent
-    await frame.upload_file(str(root / f"glaz.{DEVICE}.lua"),
+    await frame.upload_file(str(APP_DIR / f"glaz.{DEVICE}.lua"),
                             f"{APP_NAME}.{DEVICE}.lua")
-    await frame.upload_file(str(root / "glaz.lua"), f"{APP_NAME}.lua")
+    await frame.upload_file(str(APP_DIR / "glaz.lua"), f"{APP_NAME}.lua")
     await frame.upload_frame_app(
         local_filename=str(APP_DIR / f"glaz_boot.{DEVICE}.lua"),
         frame_filename="main.lua",

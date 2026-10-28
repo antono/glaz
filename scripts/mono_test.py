@@ -3,8 +3,8 @@
 glaz/mono-font: every size and weight on one screen, then how fast a full
 terminal screen redraws.
 
-    python utils/mono_test.py              # show them, 30 s to look
-    python utils/mono_test.py --look 60    # longer
+    python scripts/mono_test.py              # show them, 30 s to look
+    python scripts/mono_test.py --look 60    # longer
 
 Connects straight from the computer: the phone must let the glasses go
 (turn Bluetooth off on it, or close Glaz). Stops the app on the glasses

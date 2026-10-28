@@ -1,4 +1,4 @@
-# Host side: talking to the glasses over Bluetooth (host_test.py, utils/).
+# Host side: talking to the glasses over Bluetooth (scripts/).
 frame-ble==1.1.1
 frame-msg==5.2.1
 # Sprite previews and pixel-art tooling.

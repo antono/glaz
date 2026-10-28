@@ -6,7 +6,7 @@ writes it a status, as glaz on the phone would: the Flipper then shows
 glasses named "Frame 137". Pairs on the first run (confirm the PIN on
 the Flipper). Open Apps > Bluetooth > Glaz on the Flipper first.
 
-    python utils/flipper_keys.py [--name "Frame 137"]
+    python scripts/flipper_keys.py [--name "Frame 137"]
 
 A connected Flipper does not advertise: if this does not find it, see
 that nothing else holds it (bluetoothctl disconnect).

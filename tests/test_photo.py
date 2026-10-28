@@ -1,5 +1,5 @@
 """Camera (modules/photo.lua) and the phone remote's photo (PHOTO_TAKE,
-app/glaz_photo.frame.lua), on Frame, the only glasses that have them: a
+glaz/glaz_photo.frame.lua), on Frame, the only glasses that have them: a
 tap sends a JPEG to the phone, PHOTO_FROM first, then 0x07 chunks and an
 0x08 end; the cross where the photo's centre is; the phone's settings for
 size, quality and aim, bad ones falling back to the defaults; no host, a

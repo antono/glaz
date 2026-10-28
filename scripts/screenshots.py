@@ -1,8 +1,8 @@
 """Screenshots of glaz on the emulated glasses, for the docs.
 
-    python utils/screenshots.py                 # every app, Frame and Halo
-    python utils/screenshots.py -d frame reader # some apps, on Frame only
-    python utils/screenshots.py -o docs/screens # where (default: screens/)
+    python scripts/screenshots.py                 # every app, Frame and Halo
+    python scripts/screenshots.py -d frame reader # some apps, on Frame only
+    python scripts/screenshots.py -o docs/screens # where (default: screens/)
 
 For every app: the glasses start as after an upload, the phone sets the
 clock (13:37 UTC, shown as 15:37), the app is opened as the phone's Menu

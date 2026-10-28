@@ -9,7 +9,7 @@
 #
 #   lua 5.4         check.sh -- Frame runs Lua 5.4, older versions reject
 #                   valid code (docs/PROTOCOL.md)
-#   python + venv   host_test.py and utils/ (frame-ble, frame-msg), from
+#   python + venv   scripts/ (frame-ble, frame-msg), from
 #                   requirements.txt
 #   gcc-arm-embedded, make
 #                   building the firmware in ../frame-codebase
@@ -51,17 +51,17 @@ in
   };
 
   scripts = {
-    check.exec = ''./check.sh'';
-    upload.exec = ''python host_test.py "$@"'';
-    sprite.exec = ''python utils/show_sprite.py "$@"'';
+    check.exec = ''scripts/check.sh'';
+    upload.exec = ''python scripts/host_test.py "$@"'';
+    sprite.exec = ''python scripts/show_sprite.py "$@"'';
     # every app on emulated Frame and Halo (docs/TESTING.md)
     tests.exec = ''pytest tests "$@"'';
     # the same, Halo's only
     halo.exec = ''pytest tests -k halo "$@"'';
     # screenshots of every app on both, for the docs
-    screens.exec = ''python utils/screenshots.py "$@"'';
+    screens.exec = ''python scripts/screenshots.py "$@"'';
     # our firmware from a branch, glaz/stable by default, for the phone app
-    firmware.exec = ''utils/build_firmware.sh "$@"'';
+    firmware.exec = ''scripts/build_firmware.sh "$@"'';
   };
 
   enterShell = ''

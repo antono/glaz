@@ -120,7 +120,7 @@ void main() {
         'assets/lua/modules/about.halo.lua',
         'assets/lua/modules/reader.lua',
         'assets/lua/modules/reader.frame.lua',
-        'assets/lua/app/glaz_boot.halo.lua',
+        'assets/lua/glaz/glaz_boot.halo.lua',
       ], GlassesModel.halo),
       {'about'},
     );
@@ -166,7 +166,10 @@ void main() {
       luacAsset('assets/lua/modules/photo.lua'),
       'assets/luac/modules.photo.luac',
     );
-    expect(luacAsset('assets/lua/glaz.lua'), 'assets/luac/glaz.luac');
+    expect(
+      luacAsset('assets/lua/glaz/glaz.lua'),
+      'assets/luac/glaz.glaz.luac',
+    );
     expect(
       luacAsset('assets/lua/lib/data.min.lua'),
       'assets/luac/lib.data.min.luac',

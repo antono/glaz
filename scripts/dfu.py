@@ -6,9 +6,9 @@ bootloader ("Frame Update", dark, deaf to taps and to the reset button)
 after an update that broke off, or the phone is not paired any more. The
 bootloader needs no pairing, so any computer with Bluetooth will do.
 
-    python utils/dfu.py firmware.zip            # glasses already in Frame Update
-    python utils/dfu.py --enter firmware.zip    # glasses running: send them there
-    python utils/dfu.py --address E0:EF:CE:1C:08:16 firmware.zip
+    python scripts/dfu.py firmware.zip            # glasses already in Frame Update
+    python scripts/dfu.py --enter firmware.zip    # glasses running: send them there
+    python scripts/dfu.py --address E0:EF:CE:1C:08:16 firmware.zip
 
 --address is the real MAC on Linux (bluetoothctl shows it); macOS gives a
 CoreBluetooth UUID instead. Without it the first "Frame Update" found is

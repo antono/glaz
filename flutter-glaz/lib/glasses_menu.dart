@@ -184,7 +184,7 @@ class MenuSection {
   final List<GlassesModule> modules;
 }
 
-/// The menu as the glasses show it: the MENU tree in ../glaz.lua.
+/// The menu as the glasses show it: the MENU tree in ../glaz/glaz.lua.
 ///
 /// The glasses own the menu; this copy only describes it. A test
 /// (test/glasses_menu_test.dart) fails when the two drift apart.

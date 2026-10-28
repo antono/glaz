@@ -110,7 +110,7 @@ local HANDS_OFF = 0x2E    -- [1]: the phone's remote is in front, so the
                           -- remote drives, only the triple tap is left;
                           -- [0]: all back. A lease: see HANDS_OFF_LEASE
 local LUA_EVAL  = 0x30    -- [id] .. Lua: the phone's console runs it here,
-                          -- answered with LUA_RESULT (app/glaz_lua.lua)
+                          -- answered with LUA_RESULT (glaz/glaz_lua.lua)
 local LOCATION  = 0x28    -- '>BBi4i4I2I2' id, status, lat and lon in
                           -- microdegrees, accuracy m, age s; an answer to
                           -- LOCATION_GET
@@ -132,7 +132,7 @@ local STATUS      = 0x1B  -- [0x1B, battery %, firmware version...]; 255 =
 local LOCATION_GET = 0x1C -- [0x1C, id, module...] a module asks where it is
 local FILES     = 0x1D    -- [0x1D, id, more, bytes...] a folder listing
 local FILE_DATA = 0x1E    -- [0x1E, id, more, bytes...] a file's contents
--- LUA_RESULT = 0x09, [0x09, id, more, bytes...]: sent by app/glaz_lua.lua
+-- LUA_RESULT = 0x09, [0x09, id, more, bytes...]: sent by glaz/glaz_lua.lua
 
 -- Navigation tuning. Scrolling is driven by roll -- tilting the head toward
 -- a shoulder -- not by pitch. Roll has the wider usable swing of the two
@@ -787,7 +787,7 @@ local function release_hardware()
 end
 
 -- A photo for the phone's remote: glaz_photo, loaded for it alone; Frame's
--- only (app/glaz_photo.frame.lua), so elsewhere it does not load.
+-- only (glaz/glaz_photo.frame.lua), so elsewhere it does not load.
 local function take_photo(size, quality)
   local ok, shoot = try_require('glaz_photo')
   if ok then
@@ -798,7 +798,7 @@ end
 -- Going to deep sleep, the glasses say so: a dark screen alone looks the
 -- same as a hang or a flat battery. Every way to sleep -- Sleep, three
 -- taps, the idle timeout -- passes through here: the eye closes for a
--- second (glaz_blink, Frame's only: app/glaz_blink.frame.lua). Should it fail to load or
+-- second (glaz_blink, Frame's only: glaz/glaz_blink.frame.lua). Should it fail to load or
 -- draw -- short of memory, an old upload without it -- a line of text
 -- takes its place for that second, so sleep is never silent. The host's
 -- break signal still gets through.

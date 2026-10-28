@@ -5,10 +5,10 @@ The Glaz app's Lua console (More > Lua console) runs Lua inside the app on
 the glasses. With "Open to a computer" on, it also listens on the phone's
 own 127.0.0.1:8137; this forwards that port over adb and talks to it.
 
-    python utils/phone_lua.py 'frame.battery_level()'
-    echo 'print(frame.file.space().free)' | python utils/phone_lua.py
-    python utils/phone_lua.py --complete frame.disp
-    python utils/phone_lua.py              # interactive, Tab completes
+    python scripts/phone_lua.py 'frame.battery_level()'
+    echo 'print(frame.file.space().free)' | python scripts/phone_lua.py
+    python scripts/phone_lua.py --complete frame.disp
+    python scripts/phone_lua.py              # interactive, Tab completes
 
 ADB_SERIAL picks the phone when more than one is attached. Exit status: 0
 answered, 1 a Lua error, 2 no answer (no phone, console off, no glasses).

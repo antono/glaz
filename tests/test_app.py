@@ -1,6 +1,6 @@
 """glaz itself on each pair of glasses: start, the menu, gestures, sleep,
 the phone's services, the host's break and the restart after a crash
-(glaz.lua, app/; docs/PROTOCOL.md). The modules have tests of their own,
+(glaz/; docs/PROTOCOL.md). The modules have tests of their own,
 test_<module>.py.
 """
 import struct

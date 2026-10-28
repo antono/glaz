@@ -148,7 +148,7 @@ class _LuaScreenState extends State<LuaScreen> {
             title: const Text('Open to a computer'),
             subtitle: const Text(
               'Lua over adb: 127.0.0.1:${LuaBridge.port} on the phone '
-              '(utils/phone_lua.py)',
+              '(scripts/phone_lua.py)',
             ),
             value: _settings.luaBridge,
             onChanged: (on) => _settings.luaBridge = on,

@@ -131,8 +131,8 @@ iOS and macOS builds are in the code but need Xcode.
   console from your laptop over USB:
 
   ```sh
-  python utils/phone_lua.py 'frame.battery_level()'   # one line
-  python utils/phone_lua.py                           # interactive, Tab completes
+  python scripts/phone_lua.py 'frame.battery_level()'   # one line
+  python scripts/phone_lua.py                           # interactive, Tab completes
   ```
 
 - **Glasses files** and a **Log** for when something goes wrong.

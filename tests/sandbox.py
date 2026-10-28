@@ -13,6 +13,7 @@ import shutil
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+APP = ROOT / "glaz"                  # glaz.lua, its parts, the boot loader
 DEVICES = ("frame", "halo")
 
 
@@ -48,17 +49,19 @@ def files(device: str) -> dict[str, Path]:
     out = {}
     for p in sorted((ROOT / "flutter-glaz/assets/lua/lib").glob("*.lua")):
         out[p.name] = p
-    for p in sorted((ROOT / "app").glob("*.lua")):
+    for p in sorted(APP.glob("*.lua")):
+        if stem(p) == "glaz":
+            continue
         if ours(p) and stem(p) != "glaz_boot" or p.name == "glaz_boot.lua":
             out[p.name] = p
     mods = set(modules(device))
     for p in sorted((ROOT / "modules").glob("*.lua")):
         if stem(p) in mods and ours(p):
             out[p.name] = p
-    if not empty(ROOT / f"glaz.{device}.lua"):
-        out[f"glaz_app.{device}.lua"] = ROOT / f"glaz.{device}.lua"
-    out["glaz_app.lua"] = ROOT / "glaz.lua"
-    out["main.lua"] = ROOT / f"app/glaz_boot.{device}.lua"
+    if not empty(APP / f"glaz.{device}.lua"):
+        out[f"glaz_app.{device}.lua"] = APP / f"glaz.{device}.lua"
+    out["glaz_app.lua"] = APP / "glaz.lua"
+    out["main.lua"] = APP / f"glaz_boot.{device}.lua"
     return out
 
 

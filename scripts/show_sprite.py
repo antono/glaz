@@ -4,8 +4,8 @@
 For judging the art on the real display: uploads the sprite and a small
 drawing helper, then draws it centred and leaves it on screen.
 
-    .venv/bin/python utils/show_sprite.py eye 2
-    .venv/bin/python utils/show_sprite.py flipper 3
+    .venv/bin/python scripts/show_sprite.py eye 2
+    .venv/bin/python scripts/show_sprite.py flipper 3
 
 Arguments: sprite name (a file in sprites/, without .lua) and scale.
 The drawing is the same as the splash in glaz.lua: 16-colour

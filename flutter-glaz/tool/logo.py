@@ -9,7 +9,7 @@ as PNG with zlib, scaled up by whole pixels so the edges stay sharp.
     python tool/logo.py glasses [variant]  # ../sprites/logo.lua, the splash
     python tool/logo.py update [variant]   # lib/frame/update_art.dart, the
                                          # eye wired up for a firmware update
-    python tool/logo.py blink [variant]    # ../app/glaz_blink.frame.lua, the eye
+    python tool/logo.py blink [variant]    # ../glaz/glaz_blink.frame.lua, the eye
                                          # closing before deep sleep
     python tool/logo.py adaptive-preview [variant] [out.png]
                                          # the Android icon under Pixel's mask
@@ -519,7 +519,7 @@ def update_art(name='bloodshot'):
 
 
 # The eye closing, shown on the glasses before they go to deep sleep:
-# ../app/glaz_blink.frame.lua. The lids are worked out on the glasses from the
+# ../glaz/glaz_blink.frame.lua. The lids are worked out on the glasses from the
 # open eye; only the closed eye, a lid line with lashes, is drawn here.
 def _closed_rows(eye):
     width = len(eye[0])
@@ -620,7 +620,7 @@ def blink_lua(name='bloodshot'):
     out += [f"  '{r}'," for r in shut]
     out += ["}"]
     out += BLINK_LUA.split('\n')
-    path = ROOT.parent / 'app/glaz_blink.frame.lua'
+    path = ROOT.parent / 'glaz/glaz_blink.frame.lua'
     path.write_text('\n'.join(out), encoding='ascii')
     return path
 

@@ -5,7 +5,7 @@
 # division operator arrived in 5.3). Checking with the wrong version produces
 # false failures.
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 fail=0
 
@@ -18,7 +18,7 @@ else
   luac54=(nix shell nixpkgs#lua5_4 -c luac)
 fi
 
-for f in glaz*.lua app/*.lua modules/*.lua sprites/*.lua; do
+for f in glaz/*.lua modules/*.lua sprites/*.lua; do
   if out=$("${lua54[@]}" -e "assert(loadfile('$f'))" 2>&1); then
     echo "syntax ok   $f"
   else
@@ -30,7 +30,7 @@ done
 
 # Non-ASCII breaks upload_file(): it chunks by characters but enforces the MTU
 # limit in bytes. See docs/PROTOCOL.md.
-for f in glaz*.lua app/*.lua modules/*.lua sprites/*.lua; do
+for f in glaz/*.lua modules/*.lua sprites/*.lua; do
   if LC_ALL=C grep -qP '[^\x00-\x7F]' "$f" 2>/dev/null; then
     echo "NON-ASCII   $f  (will break upload)"
     fail=1
@@ -42,9 +42,9 @@ done
 # Globals. A name read that is neither Lua's own, nor frame, nor set as a
 # global by one of these files is a local out of scope or a typo: nil at
 # run time. A local declared inside a function by mistake made host.pref
-# nil, and every notification stopped the app (app/glaz_host.lua).
+# nil, and every notification stopped the app (glaz/glaz_host.lua).
 lua_globals=$("${lua54[@]}" -e 'for k in pairs(_G) do print(k) end')
-listing=$(for f in glaz*.lua app/*.lua modules/*.lua sprites/*.lua; do
+listing=$(for f in glaz/*.lua modules/*.lua sprites/*.lua; do
   "${luac54[@]}" -p -l "$f" | sed -nE \
     "s/.*(GET|SET)TABUP.*_ENV \"([A-Za-z_][A-Za-z0-9_]*)\".*/$(
       printf '%s' "$f" | sed 's|/|\\/|g') \1 \2/p"
@@ -71,18 +71,18 @@ fi
 # glasses these are, the parts on them say so.
 devices="frame halo"
 parts_ok=1
-for f in glaz.*.lua app/*.*.lua modules/*.*.lua; do
+for f in glaz/*.*.lua modules/*.*.lua; do
   dev=${f%.lua}; dev=${dev##*.}
   case " $devices " in
     *" $dev "*) ;;
     *) echo "PART        $f  names no glasses ($devices)"; parts_ok=0 ;;
   esac
 done
-shared=(glaz.lua)
-for f in app/*.lua modules/*.lua; do
+shared=()
+for f in glaz/*.lua modules/*.lua; do
   base=$(basename "$f" .lua)
   case $base in *.*) continue ;; esac
-  if [ "${f%%/*}" = app ]; then shared+=("$f"); continue; fi
+  if [ "${f%%/*}" = glaz ]; then shared+=("$f"); continue; fi
   n=0
   for d in $devices; do [ -f "modules/$base.$d.lua" ] && n=$((n + 1)); done
   if [ $n -eq 0 ]; then
@@ -99,7 +99,7 @@ for f in "${shared[@]}"; do
     parts_ok=0
   fi
 done
-if grep -n 'display\.width\|HARDWARE_VERSION' glaz*.lua app/*.lua \
+if grep -n 'display\.width\|HARDWARE_VERSION' glaz/*.lua \
      modules/*.lua | grep -v ':[0-9]*: *--'; then
   echo "PART        asks which glasses these are: the parts say so"
   parts_ok=0

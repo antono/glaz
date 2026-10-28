@@ -9,13 +9,13 @@ import 'model.dart';
 import 'parts.dart';
 import 'update_screen.dart';
 
-/// Putting the app on the glasses, the way ../../host_test.py does it:
+/// Putting the app on the glasses, the way ../../scripts/host_test.py does it:
 /// stop the running app, take main.lua out of the way, reset into a bare
 /// REPL with all memory free, upload, then start main.lua. See
 /// ../../docs/FRAME.md ("Deploy as main.lua") for why each step is there.
 ///
 /// The Lua comes from the app's assets (assets/lua/), which link to the
-/// repository's glaz.lua, app/ and modules/.
+/// repository's glaz/ and modules/.
 
 /// One file for the glasses: its name there, its text, and its bytecode
 /// when the app was built with it (tool/compile_lua.sh) and it still
@@ -119,22 +119,25 @@ Future<List<LuaFile>> luaFiles(
     ...await under('lib'),
     // parts of glaz.lua in files of their own (glaz_host.lua...); the
     // loader's part goes up as main.lua, last
-    ...(await under('app'))
-        .where((f) => partFor(f.$1) == null || stemOf(f.$1) != _boot),
+    ...(await under('glaz')).where(
+      (f) =>
+          stemOf(f.$1) != 'glaz' &&
+          (partFor(f.$1) == null || stemOf(f.$1) != _boot),
+    ),
     ...await under('modules', (m) => installed(m) && modules.contains(m)),
     // the app itself, loaded by main.lua: the firmware's require() cannot
-    // be trusted with a file its size (app/glaz_boot.frame.lua)
+    // be trusted with a file its size (glaz/glaz_boot.frame.lua)
     await file(
-      'assets/lua/glaz.${model.name}.lua',
+      'assets/lua/glaz/glaz.${model.name}.lua',
       '$appName.${model.name}.lua',
     ),
-    await file('assets/lua/glaz.lua', appFile),
-    await file('assets/lua/app/$_boot.${model.name}.lua', 'main.lua'),
+    await file('assets/lua/glaz/glaz.lua', appFile),
+    await file('assets/lua/glaz/$_boot.${model.name}.lua', 'main.lua'),
   ];
 }
 
 /// Whether [f] is a part with nothing in it: `return {}`, or no code at
-/// all. require() does without it (app/glaz_boot.lua).
+/// all. require() does without it (glaz/glaz_boot.lua).
 bool emptyPart(LuaFile f) {
   if (partFor(f.$1) == null) return false;
   final code = f.$2
@@ -657,7 +660,7 @@ Future<void> restartApp(
   if (!hasApp) {
     throw Exception('there is no app on the glasses: Upload it again');
   }
-  // the app is up in about a second (app/glaz_boot.lua)
+  // the app is up in about a second (glaz/glaz_boot.lua)
   final running = replLines(device)
       .firstWhere((s) => s == 'Frame app is running')
       .timeout(restartWait);

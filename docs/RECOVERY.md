@@ -44,7 +44,7 @@ likelihood:
 Confirm the radio is fine rather than guessing:
 
 ```bash
-.venv/bin/python utils/wait_for_frame.py
+.venv/bin/python scripts/wait_for_frame.py
 ```
 
 It scans for three minutes and prints how many other devices it sees. Plenty
@@ -97,7 +97,7 @@ with Lua.
 Back to a known-good state:
 
 ```bash
-.venv/bin/python host_test.py      # re-uploads modules and the app
+.venv/bin/python scripts/host_test.py      # re-uploads modules and the app
 ```
 
 ---
@@ -126,11 +126,11 @@ To go back to stock:
    (currently `v25.278.1113`).
 2. `frame.update()` — reboots into the bootloader, advertises as
    `Frame Update`, times out after 3 minutes of inactivity.
-3. DFU the `.zip`: `python utils/dfu.py <zip>` from a computer (section 6),
+3. DFU the `.zip`: `python scripts/dfu.py <zip>` from a computer (section 6),
    or nRF Connect on a phone.
 
 If Lua is too broken to call `frame.update()`, send a break signal first; the
-REPL comes back. `python utils/dfu.py --enter <zip>` does both steps.
+REPL comes back. `python scripts/dfu.py --enter <zip>` does both steps.
 
 **Keep a known-good `.zip` on disk** so recovery never depends on having
 network and a build toolchain at the same time.
@@ -169,7 +169,7 @@ matter: the bootloader needs no bond.
 **From a computer**, with the last build that worked:
 
 ```bash
-python utils/dfu.py flutter-glaz/assets/firmware/frame-firmware-<version>.zip
+python scripts/dfu.py flutter-glaz/assets/firmware/frame-firmware-<version>.zip
 ```
 
 It finds `Frame Update`, sends the init packet and then the image in 4 KB
@@ -217,7 +217,7 @@ See [`../../frame-recovery/README.md`](../../frame-recovery/README.md).
 To check what is actually on the glasses:
 
 ```bash
-.venv/bin/python utils/connect.py        # prints firmware, battery, MTU
+.venv/bin/python scripts/connect.py        # prints firmware, battery, MTU
 ```
 
 And the single most effective precaution, given how much time flat batteries

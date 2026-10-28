@@ -264,7 +264,7 @@ frame.fpga_write(0x13, string.pack('>I2I2I2I2I2I2I2I2B',
 frame.display.show()
 ```
 
-[`utils/test_vector.py`](../utils/test_vector.py) builds exactly this. It is
+[`scripts/test_vector.py`](../scripts/test_vector.py) builds exactly this. It is
 expected to draw **nothing**, because the RTL does not decode `0x13` — see
 above. It is kept as the ready-made probe for the day the engine lands, and as
 a way to disprove the reading of the RTL.

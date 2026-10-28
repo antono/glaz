@@ -30,7 +30,7 @@
 --   'x:<text>'          -- as s:, and the phone no longer hears: the
 --                          microphone stops
 --
--- Photo: a tap takes a photo as the phone's remote does (app/glaz_photo.frame.lua,
+-- Photo: a tap takes a photo as the phone's remote does (glaz/glaz_photo.frame.lua,
 -- loaded for it alone), with PHOTO_FROM 255: the phone reads the text on
 -- it and translates it into the same log, rather than filing the photo.
 --

@@ -241,7 +241,7 @@ Each tap count means one thing everywhere:
 | **3** | sleep — deep sleep, from any state |
 
 However they get there -- three taps, Sleep, the idle timeout -- the glasses
-show the eye closing for a second before deep sleep (`app/glaz_blink.frame.lua`,
+show the eye closing for a second before deep sleep (`glaz/glaz_blink.frame.lua`,
 made by `flutter-glaz/tool/logo.py blink`), or `sleeping...` if that file
 cannot be loaded: a dark screen alone looks the same as a hang.
 
@@ -512,7 +512,7 @@ the glasses, not the phone: whether a notification pops up (`on` / `off`)
 and how long it stays (3, 5, 10 or 20 s). Tilt picks the setting, a tap
 its next value, kept at once. They live in `prefs.txt` on the glasses,
 through `_M.host.pref(key, default)` / `_M.host.set_pref(key, value)`
-(`app/glaz_host.lua`): settings the wearer picks there, which
+(`glaz/glaz_host.lua`): settings the wearer picks there, which
 `SETTINGS_SET` leaves alone. Off, nothing covers the screen; the phone
 still keeps the notification for the list.
 
@@ -824,7 +824,7 @@ other speaker, into the wearer's language. The glasses hold a few lines
 of the log and ask for others as they scroll, as Gemini does.
 
 On entry it asks **Voice** or **Photo**. The pick is kept on the glasses,
-as a pref (`_M.host.pref('mode')`, app/glaz_host.lua): modules are
+as a pref (`_M.host.pref('mode')`, glaz/glaz_host.lua): modules are
 unloaded when they stop, so a local would be lost. Nothing about the
 mode goes over the wire.
 
@@ -835,7 +835,7 @@ mode goes over the wire.
 | double tap | leave | back to the chooser: end the sound, close the session | back to the chooser: the camera off, close the session |
 
 **Photo.** A tap takes a photo as the phone's remote does
-(`app/glaz_photo.frame.lua`, loaded for it alone): 720 px, quality HIGH, 1.5 s
+(`glaz/glaz_photo.frame.lua`, loaded for it alone): 720 px, quality HIGH, 1.5 s
 of auto exposure, the loop waiting meanwhile. Its `PHOTO_FROM` is
 `[0x1A, 255]`: Photos does not keep it, Translate reads it. The phone
 finds the blocks of text on it (ML Kit text recognition), tells their
@@ -1291,7 +1291,7 @@ a file goes out, so a file stops at `FILE_MAX` (64 KB) with a
 
 The phone can run Lua on the glasses while their app runs (Glaz > More >
 Lua console) -- the REPL is blocked then, so `glaz.lua` runs it, in
-`app/glaz_lua.lua`, loaded for the request:
+`glaz/glaz_lua.lua`, loaded for the request:
 
 - `LUA_EVAL` (`0x30`), `[id]` and the Lua, is answered with `LUA_RESULT`
   (`0x09`), in packets as in [Files](#files), `+` and the text, or `-` and
@@ -1313,7 +1313,7 @@ Completion asks the glasses too: the names in a table (`_G`, `frame`,
 on its own loopback, `127.0.0.1:8137`: `POST /lua` with the Lua as the body
 (200 and the answer, 422 and the error, 503 when there is no answer), and
 `GET /complete?q=frame.disp`, one name a line. Nothing on the network
-reaches it; `adb forward` does. `utils/phone_lua.py` does both: a command,
+reaches it; `adb forward` does. `scripts/phone_lua.py` does both: a command,
 stdin, or an interactive prompt with Tab completion. The glasses stay
 connected to the phone the whole time.
 
@@ -1645,19 +1645,19 @@ which defeats the thin-host design above.
 The Python reference host is **throwaway, for exercising the protocol**:
 
 ```bash
-.venv/bin/python host_test.py
+.venv/bin/python scripts/host_test.py
 ```
 
 What it does, in the order any host should:
 
 1. `connect()`
 2. `upload_stdlua_libs(['data'])` — the transport, onto the glasses
-3. `upload_file(m, m.name)` for `app/*.lua` and the `modules/*.lua` that
+3. `upload_file(m, m.name)` for `glaz/glaz_*.lua` and the `modules/*.lua` that
    are Frame's, with their Frame parts (docs/DEVICES.md) — the app's parts
    and the menu items
 4. `glaz.lua` and `glaz.frame.lua` as `glaz_app.lua` and
    `glaz_app.frame.lua`, then `upload_frame_app()` of
-   `app/glaz_boot.frame.lua` as `main.lua` — the application itself
+   `glaz/glaz_boot.frame.lua` as `main.lua` — the application itself
 5. `start_frame_app()` — waits for the line `Frame app is running`
 6. `register_data_response_handler(..., [0x11, 0x12, 0x13, 0x14], handler)`
 7. `send_message(0x23, ...)` — the wall clock for the top bar
@@ -1697,7 +1697,7 @@ the Lua side and the message codes are identical there.
 ## Static checks
 
 ```bash
-./check.sh
+scripts/check.sh
 ```
 
 Catches syntax errors and non-ASCII bytes without needing the glasses, which

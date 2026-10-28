@@ -148,7 +148,7 @@ brighter panel costs more. Not measured.
   read the battery, disconnect, leave the glasses untouched for 30+ minutes,
   reconnect and read again (several readings, averaged). Tapping wakes them.
 - Whether the waking tap reaches `tap_callback`.
-  [`utils/test_deep_sleep.py`](../utils/test_deep_sleep.py) exists for this,
+  [`scripts/test_deep_sleep.py`](../scripts/test_deep_sleep.py) exists for this,
   but no result is recorded yet.
 - Drain with the menu or Tilt open (display on, 100 Hz loop).
 
