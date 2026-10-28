@@ -64,10 +64,11 @@ void main() {
       'main.lua',
     ]);
     expect(files.last.$2, contains(RegExp(r"device\s*=\s*'halo'")));
-    // a module with a Halo part goes up -- the empty part itself not --
-    // and one without does not
-    expect(names, contains('about.lua'));
-    expect(names, isNot(contains('about.halo.lua')));
+    // a module with a Halo part goes up -- an empty part itself not, one
+    // with something in it too -- and one without does not
+    expect(names, contains('stopwatch.lua'));
+    expect(names, isNot(contains('stopwatch.halo.lua')));
+    expect(names, containsAll(['about.lua', 'about.halo.lua']));
     expect(names, isNot(contains('reader.lua')));
     // Frame-only parts of the app stay off
     expect(names, isNot(contains('glaz_blink.frame.lua')));
