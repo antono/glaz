@@ -1,0 +1,1 @@
+../../../../../apps/photo/photo.lua
