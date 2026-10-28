@@ -3,11 +3,16 @@
 # tests saw are kept as an artifact, for the docs and for a look at what
 # a failing test saw.
 #
-# Runs on every push and pull request that touches the Lua or the tests.
+# Runs once for each change: on a pull request that touches the Lua or the
+# tests, and again only when it lands on main. A push to any other branch
+# runs nothing: its pull request does, and pushing to a branch with one
+# open ran the same tests twice. A newer push to a pull request cancels
+# its run under way; each commit on main keeps its own.
 name: tests
 
 on:
   push:
+    branches: [main]
     paths:
       - 'glaz*.lua'
       - 'app/**'
@@ -38,11 +43,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lua:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # check.sh wants lua and luac 5.4 by those names
       - name: Lua 5.4
@@ -57,7 +66,7 @@ jobs:
       - name: Static checks
         run: ./check.sh
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
           cache: pip
@@ -74,7 +83,7 @@ jobs:
         if: always()
         run: python utils/screenshots.py -o screens/apps
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: screens

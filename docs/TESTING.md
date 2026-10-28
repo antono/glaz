@@ -122,9 +122,10 @@ The tests save more, the screens along the way (`SHOTS=dir`), in
 
 ## CI
 
-`.github/workflows/tests.yml` runs `check.sh` and the tests on every push
-and pull request that touches the Lua or the tests, and keeps the screens
-(both the tests' and `screens`') as the `screens` artifact of the run.
+`.github/workflows/tests.yml` runs `check.sh` and the tests once for each
+change that touches the Lua or the tests: on its pull request, and again
+when it lands on main. It keeps the screens (both the tests' and
+`screens`') as the `screens` artifact of the run.
 
 ## When the firmware changes
 
