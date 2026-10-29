@@ -97,7 +97,7 @@ const forTranslate = 2;
 // REC_START's fourth byte: the sound is for the Tuner
 const forTuner = 3;
 
-// REC_START's fourth byte: the sound is for Fact check
+// REC_START's fourth byte: the sound is for Factchecker
 const forFactcheck = 4;
 
 // PHOTO_FROM's byte: the photo is Translate's to read, not to keep

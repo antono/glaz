@@ -1,5 +1,5 @@
 -- Menu module: a fact checker. ASCII only, see docs/PROTOCOL.md,
--- "Fact check". The text it shows is UTF-8: the font has Cyrillic.
+-- "Factchecker". The text it shows is UTF-8: the font has Cyrillic.
 --
 --   on entry, it listens: the conversation, everyone in it
 --   tilt        -- the list: the cursor up to a fact / down to the
@@ -9,7 +9,7 @@
 --   double tap  -- an open fact: back to the list; the list: leave
 --
 -- Listening is Recorder's streaming with a fourth byte in REC_START, 4,
--- so the phone hands the sound to its Fact check service
+-- so the phone hands the sound to its Factchecker service
 -- (flutter-glaz/lib/services/factcheck.dart). It transcribes as it comes;
 -- a tap cuts it there, and the agent pulls the claims out of the piece
 -- and checks each. FACTS asks, '>BBI2': op, id -- 0 the wearer left, 1
@@ -31,7 +31,7 @@
 -- bottom row.
 local _M = {}
 
-_M.label = 'Fact check'
+_M.label = 'Factchecker'
 _M.mode = 'app'
 _M.quiet = true           -- draw() is the screen; tick() text is not shown
 _M.rec = false            -- true while listening: red dot in the top bar
@@ -42,7 +42,7 @@ local FACTS     = 0x01    -- '>BBI2': op, id
 local FOR_FACTCHECK = 4   -- REC_START's fourth byte
 
 local RATE = 8000
-local BITS = 16           -- or 8; Glaz > Menu > Fact check
+local BITS = 16           -- or 8; Glaz > Menu > Factchecker
 local MAX_LISTEN = 1800   -- s; then it pauses by itself
 local ROWS = 4            -- rows of facts; the fifth is the bottom row
 local RETRY = 5           -- s without the list before asking again

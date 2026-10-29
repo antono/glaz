@@ -63,12 +63,14 @@ class ScriptAgent implements Agent {
   String claims = '[]';
   final checks = <String, String>{};
   final asked = <List<AgentMessage>>[];
+  final waits = <Duration?>[];
   final waiting = <String, Completer<String>>{};
   Object? fail;
 
   @override
-  Future<String> ask(List<AgentMessage> messages) async {
+  Future<String> ask(List<AgentMessage> messages, {Duration? wait}) async {
     asked.add(messages);
+    waits.add(wait);
     if (fail != null) throw fail!;
     final user = messages.last.content;
     if (messages.first.content == claimsPrompt) return claims;
@@ -99,7 +101,7 @@ void main() {
     fc = FactCheckService(link, settings, transcriber, agent: (_) => agent);
   });
 
-  /// What went to the glasses' Fact check, in order.
+  /// What went to the glasses' Factchecker, in order.
   List<String> calls() => [
     for (final (code, text) in link.sent)
       if (code == moduleCall && text.startsWith('factcheck\n'))
@@ -181,6 +183,27 @@ void main() {
     expect(lastCall(), 'f:0\n1|M|A one\n2|T|B two');
   });
 
+  test('the claims are asked for at once, the checks may take time', () async {
+    agent.claims = '[${claim('C is 137', 'C 137')}]';
+    agent.checks['C is 137'] = check('true', 'It is.');
+    fc.onMessage([recStart, 8, 8, forFactcheck]);
+    fc.onMessage(say('c'));
+    fc.onMessage([facts, 1, 0, 0]);
+    await pumpEventQueue();
+    expect(agent.asked, hasLength(2));
+    // the claims: quickly, no tools, with the agent's own limit
+    expect(agent.asked[0].first.content, startsWith('This is the quick step'));
+    expect(agent.asked[0].first.content, contains('Do not use any tools'));
+    expect(agent.waits[0], isNull);
+    // a check: slowly, with longer to answer
+    expect(agent.asked[1].first.content, startsWith('This is the slow step'));
+    expect(agent.waits[1], FactCheckService.checkWait);
+    expect(
+      FactCheckService.checkWait,
+      greaterThan(ChatCompletionsAgent.timeout),
+    );
+  });
+
   test('a fact opened: d:, again when its check comes', () async {
     agent.claims = '[${claim('Water boils at 137 C', 'Boils 137')}]';
     fc.onMessage([recStart, 8, 8, forFactcheck]);
@@ -255,7 +278,7 @@ void main() {
       await pumpEventQueue();
       expect(agent.asked, hasLength(n));
 
-      // nothing to the glasses: it would start Fact check in the
+      // nothing to the glasses: it would start Factchecker in the
       // background, in place of the app there
       link.sent.clear();
       agent.release('Y is 137', check('true', 'So it is.'));
@@ -298,7 +321,11 @@ void main() {
   test('what goes wrong: no agent, no recognition, agent errors', () async {
     fc = FactCheckService(link, settings, transcriber, agent: (_) => null);
     fc.onMessage([recStart, 8, 8, forFactcheck]);
-    expect(lastCall(), 'e:Set up the agent: Glaz > Menu > Assistant');
+    expect(lastCall(), 'e:Set up the AI agent: Glaz > More > Services');
+    settings.setService('agent', false); // the AI agent service off
+    fc.onMessage([recStart, 8, 8, forFactcheck]);
+    expect(lastCall(), 'e:The AI agent is off: Glaz > More > Services');
+    settings.setService('agent', true);
     expect(fc.listening, isFalse);
 
     fc = FactCheckService(link, settings, null, agent: (_) => agent);
@@ -308,7 +335,7 @@ void main() {
     settings.setService('factcheck', false);
     fc = FactCheckService(link, settings, transcriber, agent: (_) => agent);
     fc.onMessage([recStart, 8, 8, forFactcheck]);
-    expect(lastCall(), startsWith('e:Fact check is off'));
+    expect(lastCall(), startsWith('e:Factchecker is off'));
     settings.setService('factcheck', true);
 
     agent.fail = AgentError('no answer in 120 s');
@@ -340,7 +367,7 @@ void main() {
     expect(fc.listening, isFalse);
   });
 
-  test('the assistant drops its question on Fact check\'s sound', () {
+  test('the assistant drops its question on Factchecker\'s sound', () {
     final a = AssistantService(link, settings, transcriber);
     a.onMessage([recStart, 8, 8, forAssistant]);
     expect(a.state, AssistantState.listening);

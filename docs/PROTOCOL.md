@@ -441,11 +441,11 @@ Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 | `0x0C` | `TERM` | `[0x0C, 1, cols, rows]` / `[0x0C, 0]` / `[0x0C, 2, seq]` | Terminal: start a shell this size, stop, frame `seq` taken — see [Terminal](#terminal) |
 | `0x07` | photo chunk | `[0x07, jpeg bytes...]` | part of a photo (Camera module) |
 | `0x08` | photo end | `[0x08]` | last chunk; the photo is complete |
-| `0x1F` | `REC_START` | `[0x1F, bits, rate / 1000, for]` | Recorder starts a recording — see [Recorder](#recorder); `for` = `1`: the Assistant listening, see [Assistant](#assistant); `2`: Translate listening, see [Translate](#translate); `3`: the Tuner listening, see [Tuner](#tuner); `4`: Fact check listening, see [Fact check](#fact-check). Any `for` but `0` (or none) is not a recording |
+| `0x1F` | `REC_START` | `[0x1F, bits, rate / 1000, for]` | Recorder starts a recording — see [Recorder](#recorder); `for` = `1`: the Assistant listening, see [Assistant](#assistant); `2`: Translate listening, see [Translate](#translate); `3`: the Tuner listening, see [Tuner](#tuner); `4`: Factchecker listening, see [Factchecker](#factchecker). Any `for` but `0` (or none) is not a recording |
 | `0x02` | `SCALE_GET` | `[0x02, n]` | Scales wants scale `n` (0-based); the phone answers with `MODULE_CALL` `scales` -- see [SCALES.md](SCALES.md) |
 | `0x03` | `TUNER` | `[0x03, 1, mic]` / `[0x03, 0]` | Tuner: listen, with the phone's microphone (`mic` 0) or the glasses' (1); stop -- see [Tuner](#tuner) |
 | `0x04` | `ASSIST` | `[0x04, op, id (2)]` | Assistant lists the chats (`1`), goes on with chat `id` (`2`) or starts a new one (`3`) -- see [Assistant](#assistant) |
-| `0x01` | `FACTS` | `[0x01, op, id (2)]` | Fact check: the wearer left (`0`), check since the last cut (`1`), open fact `id` (`2`), the list again (`3`) -- see [Fact check](#fact-check) |
+| `0x01` | `FACTS` | `[0x01, op, id (2)]` | Factchecker: the wearer left (`0`), check since the last cut (`1`), open fact `id` (`2`), the list again (`3`) -- see [Factchecker](#factchecker) |
 | `0x10` | `REC_DROP` | `[0x10]` | Assistant was left mid-question (a double tap): forget it, ask nothing, drop an answer on its way — see [Assistant](#assistant) |
 | `0x05` | audio chunk | `[0x05, samples...]` | part of a recording |
 | `0x06` | audio end | `[0x06, samples...]` | last part; the recording is complete |
@@ -722,9 +722,10 @@ link did not take shows as `lost N KB` while listening.
 
 The phone (`flutter-glaz/lib/services/assistant.dart`) transcribes it as it
 comes, with ML Kit as for recordings but in a language of its own (Glaz >
-Menu > Assistant; the recordings' until one is picked), and asks the agent: any server with
+Menu > Assistant; the recordings' until one is picked), and asks the AI agent: any server with
 the OpenAI chat completions API -- Hermes Agent's API server on the user's
-tailnet, model `hermes-agent` -- set in Glaz > Menu > Assistant. The phone
+tailnet, model `hermes-agent` -- set in Glaz > More > Services, AI agent,
+which Factchecker asks too; switched off there, neither asks. The phone
 keeps the chats, the newest 50, in its own folder (`assistant/chats.json`)
 and lists them under Glaz > Menu > Assistant, Chats; a tap opens one to
 read and to go on with in writing, and the glasses' next question goes to
@@ -814,12 +815,12 @@ the glasses' screen only (`android/.../Voice.kt`).
 wearer went elsewhere meanwhile. An answer to a question that was asked
 again in between is dropped.
 
-### Fact check
+### Factchecker
 
-Fact check (`apps/factcheck/factcheck.lua`, [its README](../apps/factcheck/README.md))
+Factchecker (`apps/factcheck/factcheck.lua`, [its README](../apps/factcheck/README.md))
 checks the facts in a conversation. It listens from the moment it opens:
 `REC_START` with a fourth byte `4`, then `AUDIO` packets as Recorder's,
-16-bit unless Glaz > Menu > Fact check says 8, and never an `AUDIO_END`:
+16-bit unless Glaz > Menu > Factchecker says 8, and never an `AUDIO_END`:
 the sound has no end, only cuts. It stops when the wearer leaves, the
 link goes (back, it listens again), or after 30 minutes.
 
@@ -834,11 +835,14 @@ The glasses ask with `FACTS` (`0x01`), `>BBI2`: op, id --
 
 The phone (`flutter-glaz/lib/services/factcheck.dart`) transcribes the
 sound as it comes, with ML Kit in the Assistant's language, a new
-transcription from every cut. At a cut it asks the Assistant's agent for
+transcription from every cut. At a cut it asks the AI agent for
 the checkable claims in the piece (JSON, each with a short form for the
 glasses), then asks it to check each, in parallel, searching the web: a
 verdict -- true, false, partly, unknown -- a short summary and its
-sources. Unknown is what it says without a source, rather than guess. The
+sources. The prompts tell the agent which is which: pulling the claims out
+is the quick step, the wearer waiting, to be answered at once from the
+text alone, with no tools; a check is the slow step, the claim already on
+the glasses, and may take up to 5 minutes (the agent's own limit is 120 s). Unknown is what it says without a source, rather than guess. The
 sessions are kept on the phone with their sources, in the Assistant's
 folder (`assistant/factchecks.json`).
 
@@ -846,7 +850,7 @@ folder (`assistant/factchecks.json`).
 packet that failed; the phone tells them apart by length -- an answer is
 one byte, `FACTS` always four (`flutter-glaz/lib/frame/link.dart`).
 
-It answers with `MODULE_CALL` `factcheck`, and only while Fact check is
+It answers with `MODULE_CALL` `factcheck`, and only while Factchecker is
 open on the glasses -- from `REC_START` or op 2 or 3 until op 0, another
 app's `REC_START`, or the link down: to a module that is not running a
 `MODULE_CALL` starts it in the background, in place of the app there:
@@ -861,7 +865,7 @@ app's `REC_START`, or the link down: to a module that is not running a
 The glasses show the facts with a mark and a colour each: `+` true green,
 `x` false red, `~` partly yellow, `?` unknown grey, `.` being checked
 white; the bottom row, under the newest fact, is both the status and the
-button that cuts. A `MODULE_CALL` that comes while Fact check is not
+button that cuts. A `MODULE_CALL` that comes while Factchecker is not
 running starts it in the background, where it does nothing: it listens
 only when the wearer opened it.
 

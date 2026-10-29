@@ -1,9 +1,9 @@
-"""Fact check (apps/factcheck/factcheck.lua) on Frame, the only glasses that
+"""Factchecker (apps/factcheck/factcheck.lua) on Frame, the only glasses that
 have it: it listens from the start, the sound streamed to the phone; a tap
 on the bottom row cuts the conversation there for the phone to check; the
 facts the phone sends back listed with a mark and a colour by verdict, one
 opened to read its check; notes that go by themselves; the link lost and
-back; leaving tells the phone (docs/PROTOCOL.md, "Fact check").
+back; leaving tells the phone (docs/PROTOCOL.md, "Factchecker").
 """
 import struct
 
@@ -28,7 +28,7 @@ def facts(op, ident=0):
 
 
 def opened(g, listed=LIST):
-    """Fact check from the menu, listening, the phone's facts on screen."""
+    """Factchecker from the menu, listening, the phone's facts on screen."""
     g.open_app("factcheck")
     if listed is not None:
         g.call("factcheck", listed)

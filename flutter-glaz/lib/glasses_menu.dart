@@ -209,11 +209,11 @@ const glassesMenu = <MenuSection>[
     ),
     GlassesModule(
       'factcheck',
-      'Fact check',
+      'Factchecker',
       ModuleKind.app,
       Icons.fact_check,
       'Listens to the conversation; a tap checks the claims said since '
-          'the last, with the agent: true green, false red, partly '
+          'the last, with the AI agent: true green, false red, partly '
           'yellow. Tap a fact to read why.',
       settings: [
         ModuleSetting.choice(

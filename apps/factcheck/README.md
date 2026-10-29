@@ -1,4 +1,4 @@
-# Fact check
+# Factchecker
 
 A fact checker for a conversation. Open it and it listens; when you hear a
 claim worth checking, tap. The phone takes what was said since the last
@@ -65,9 +65,9 @@ hold. With nothing checked yet, the rows say what to do.
 **Listening.** It listens from the moment it opens, until it is left or
 after 30 minutes (`paused (30 min)`; a tap listens again); the red dot in
 the top bar shows it (`_M.rec`). The sound is Recorder's streaming:
-`REC_START` with a fourth byte `4` (for Fact check), then `AUDIO`
+`REC_START` with a fourth byte `4` (for Factchecker), then `AUDIO`
 packets; there is no `AUDIO_END`, the sound has no end, only cuts. 8 kHz,
-16-bit unless Glaz > Menu > Fact check says 8. While listening `busy()`
+16-bit unless Glaz > Menu > Factchecker says 8. While listening `busy()`
 is true, so `APP_TIMEOUT` (60 s without input) does not close it. The
 link lost stops the microphone (`no phone`); back, it listens again and
 asks for the list.
@@ -83,13 +83,15 @@ nothing: it does not listen unless the wearer opened it.
 The phone ([factcheck.dart](../../flutter-glaz/lib/services/factcheck.dart))
 transcribes the sound with ML Kit as it comes, in the Assistant's
 language, a new transcription from every cut. At a cut it asks the
-Assistant's agent (Hermes Agent, [HERMES.md](../../docs/HERMES.md)) for
-the checkable claims in the piece, then checks each, in parallel, on the
-web; it keeps the sessions with their sources. All of it, with the wire
-format, is in [PROTOCOL.md, Fact check](../../docs/PROTOCOL.md#fact-check).
+AI agent (Hermes Agent, [HERMES.md](../../docs/HERMES.md)) for
+the checkable claims in the piece -- at once, the prompt says, with no
+tools: the wearer is waiting -- then checks each, in parallel, on the
+web, taking up to 5 minutes; it keeps the sessions with their sources. All of it, with the wire
+format, is in [PROTOCOL.md, Factchecker](../../docs/PROTOCOL.md#factchecker).
 
-**Settings** (Glaz > Menu > Fact check, on the phone): `bits` (8 or 16).
-The agent and the language are the Assistant's.
+**Settings** (Glaz > Menu > Factchecker, on the phone): `bits` (8 or 16).
+The agent is the AI agent service's (Glaz > More > Services), which
+Assistant shares; the page links to it. The language is the Assistant's.
 
 ## Files
 

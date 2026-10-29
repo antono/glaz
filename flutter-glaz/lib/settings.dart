@@ -64,9 +64,10 @@ class Settings extends ChangeNotifier {
   String get speechLanguage => _prefs.getString('speech.language') ?? 'auto';
   set speechLanguage(String tag) => _set('speech.language', tag);
 
-  /// The assistant's agent (services/assistant.dart): an OpenAI-compatible
-  /// server -- Hermes Agent's API server -- its key and its model. Phone
-  /// only: none of it goes to the glasses.
+  /// The AI agent (services/agent.dart, the 'agent' service), which
+  /// Assistant and Factchecker ask: an OpenAI-compatible server -- Hermes
+  /// Agent's API server -- its key and its model. Phone only: none of it
+  /// goes to the glasses.
   String get agentUrl => _prefs.getString('agent.url') ?? '';
   set agentUrl(String url) => _set('agent.url', url.trim());
   String get agentKey => _prefs.getString('agent.key') ?? '';

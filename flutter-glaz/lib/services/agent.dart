@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import '../settings.dart';
+
 /// One message of a conversation, as chat APIs take them.
 class AgentMessage {
   const AgentMessage(this.role, this.content, {this.images = const []});
@@ -44,10 +46,27 @@ class AgentError implements Exception {
   String toString() => message;
 }
 
+/// The AI agent the phone's apps ask -- Assistant, Factchecker -- as set
+/// in Glaz > More > Services, AI agent; null when it is off or not set up
+/// ([noAgent] says which).
+Agent? agentFrom(Settings s) => !s.serviceOn('agent') || s.agentUrl.isEmpty
+    ? null
+    : ChatCompletionsAgent(
+        url: s.agentUrl,
+        key: s.agentKey,
+        model: s.agentModel,
+      );
+
+/// Why [agentFrom] gave none, for the glasses.
+String noAgent(Settings s) => s.serviceOn('agent')
+    ? 'Set up the AI agent: Glaz > More > Services'
+    : 'The AI agent is off: Glaz > More > Services';
+
 /// What the assistant asks: anything that takes a conversation and answers
-/// it with text.
+/// it with text. [wait]: how long an answer may take, when not the agent's
+/// own.
 abstract class Agent {
-  Future<String> ask(List<AgentMessage> messages);
+  Future<String> ask(List<AgentMessage> messages, {Duration? wait});
 }
 
 /// An OpenAI-compatible chat completions endpoint: Hermes Agent's API
@@ -83,7 +102,8 @@ class ChatCompletionsAgent implements Agent {
   }
 
   @override
-  Future<String> ask(List<AgentMessage> messages) async {
+  Future<String> ask(List<AgentMessage> messages, {Duration? wait}) async {
+    final limit = wait ?? timeout;
     final http.Response r;
     try {
       r = await _client
@@ -98,9 +118,9 @@ class ChatCompletionsAgent implements Agent {
               'messages': [for (final m in messages) m.toJson()],
             }),
           )
-          .timeout(timeout);
+          .timeout(limit);
     } on TimeoutException {
-      throw AgentError('no answer in ${timeout.inSeconds} s');
+      throw AgentError('no answer in ${limit.inSeconds} s');
     } catch (e) {
       throw AgentError('cannot reach the agent: $e');
     }

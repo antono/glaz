@@ -23,7 +23,7 @@ enum Verdict {
 
   const Verdict(this.code, this.label);
 
-  /// Its letter on the wire (docs/PROTOCOL.md, "Fact check").
+  /// Its letter on the wire (docs/PROTOCOL.md, "Factchecker").
   final String code;
   final String label;
 
@@ -118,7 +118,7 @@ class FactSegment {
   );
 }
 
-/// One go of Fact check on the glasses: from opening it to leaving.
+/// One go of Factchecker on the glasses: from opening it to leaving.
 class FactSession {
   FactSession(this.id, {DateTime? at}) : at = at ?? DateTime.now();
   final int id;
@@ -219,6 +219,7 @@ List<(String, String)> parseClaims(String reply) {
 
 /// What the agent is told to pull the claims out of what was said.
 const claimsPrompt = '''
+This is the quick step: the wearer is waiting for it on their glasses. Answer at once, from the text below alone. Do not use any tools, do not search or look anything up, do not plan: the checking comes later, one claim at a time, and that may take as long as it needs.
 You pull checkable factual claims out of a conversation, heard through smart glasses and transcribed by speech recognition: words may be misheard, and there is no punctuation or speaker names.
 Answer with JSON only, no other text: an array of objects {"claim": the claim in full, as a sentence that stands on its own, "short": the claim in at most 22 characters}. Both in the language of the speech.
 Only claims of fact that can be checked: numbers, dates, events, records, what is so about the world. Not opinions, plans, feelings, questions or small talk. Each claim once.
@@ -227,11 +228,12 @@ If there are none, answer [].''';
 /// What the agent is told to check a claim with; [now] the date it is.
 String checkPrompt(DateTime now) =>
     '''
+This is the slow step: the claim is on the wearer's glasses already, marked as being checked, and they can wait for the verdict. Take the time you need, within a few minutes.
 You check a factual claim heard in a conversation. Today is ${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}.
 Search the web for it and read what you find. Answer with JSON only, no other text: {"verdict": "true", "false", "partly" or "unknown", "summary": at most three short sentences on what is so, in the language of the claim, "sources": [the URLs you based it on]}.
 Say "unknown" when you found no source for it: never guess.''';
 
-/// Fact check (docs/PROTOCOL.md, "Fact check"): the glasses' Fact check
+/// Factchecker (docs/PROTOCOL.md, "Factchecker"): the glasses' Factchecker
 /// streams everything said around the wearer; at each tap the phone takes
 /// what was said since the last, has the agent pull the claims out of it
 /// and check each one, and sends the glasses the list, coloured by verdict.
@@ -242,7 +244,7 @@ class FactCheckService extends ChangeNotifier {
     this.transcriber, {
     Agent? Function(Settings)? agent,
     this.dir,
-  }) : _agentFor = agent ?? AssistantService.defaultAgent {
+  }) : _agentFor = agent ?? agentFrom {
     link.events.listen(onMessage);
     link.addListener(() {
       if (!link.connected) {
@@ -267,6 +269,11 @@ class FactCheckService extends ChangeNotifier {
 
   /// The newest this many sessions are kept.
   static const sessionsKept = 30;
+
+  /// How long a check may take: the claim is on the glasses meanwhile.
+  /// Pulling the claims out has the agent's own limit, and the prompt
+  /// asks for it at once.
+  static const checkWait = Duration(minutes: 5);
 
   /// The most sent to the glasses at once, in bytes.
   static const maxBytes = 900;
@@ -297,7 +304,7 @@ class FactCheckService extends ChangeNotifier {
   /// The fact open on the glasses, sent again when its check comes.
   int? _opened;
 
-  /// Fact check is open on the glasses. Not open, nothing is sent: a
+  /// Factchecker is open on the glasses. Not open, nothing is sent: a
   /// MODULE_CALL would start it in the background, in place of the app
   /// that is there (Recorder recording, say).
   bool _onGlasses = false;
@@ -373,7 +380,7 @@ class FactCheckService extends ChangeNotifier {
       case audioChunk:
         _add(m.sublist(1));
       case audioEnd:
-        // not sent by Fact check: the sound stopped, what came is checked
+        // not sent by Factchecker: the sound stopped, what came is checked
         if (!listening) return;
         _add(m.sublist(1));
         _cut(next: false);
@@ -382,12 +389,12 @@ class FactCheckService extends ChangeNotifier {
     }
   }
 
-  /// The glasses' Fact check: left, cut, open a fact, the list again
-  /// (`FACTS`, docs/PROTOCOL.md, "Fact check").
+  /// The glasses' Factchecker: left, cut, open a fact, the list again
+  /// (`FACTS`, docs/PROTOCOL.md, "Factchecker").
   void _onFacts(List<int> m) {
     final op = m.length > 1 ? m[1] : -1;
     final id = m.length > 3 ? m[2] << 8 | m[3] : 0;
-    // a cut comes only from Fact check open; the list or a fact asked for
+    // a cut comes only from Factchecker open; the list or a fact asked for
     // say it is
     if (op == 0) _onGlasses = false;
     if (op == 2 || op == 3) _onGlasses = true;
@@ -416,7 +423,7 @@ class FactCheckService extends ChangeNotifier {
     current = FactSession(_nextSession++);
     _sendList();
     if (!settings.serviceOn('factcheck')) {
-      _call('e:Fact check is off: Glaz > More > Services');
+      _call('e:Factchecker is off: Glaz > More > Services');
       return;
     }
     final t = transcriber;
@@ -425,7 +432,7 @@ class FactCheckService extends ChangeNotifier {
       return;
     }
     if (_agentFor(settings) == null) {
-      _call('e:Set up the agent: Glaz > Menu > Assistant');
+      _call('e:${noAgent(settings)}');
       return;
     }
     _bits = bits;
@@ -507,7 +514,7 @@ class FactCheckService extends ChangeNotifier {
 
     final agent = _agentFor(settings);
     if (agent == null) {
-      _call('e:Set up the agent: Glaz > Menu > Assistant', session);
+      _call('e:${noAgent(settings)}', session);
       return;
     }
     List<(String, String)> claims;
@@ -552,7 +559,7 @@ class FactCheckService extends ChangeNotifier {
         await agent.ask([
           AgentMessage('system', checkPrompt(DateTime.now())),
           AgentMessage('user', fact.claim),
-        ]),
+        ], wait: checkWait),
       );
       fact
         ..verdict = v
@@ -658,7 +665,7 @@ class FactCheckService extends ChangeNotifier {
     _call(glassesList());
   }
 
-  /// To Fact check on the glasses: only seen while it is on screen. What
+  /// To Factchecker on the glasses: only seen while it is on screen. What
   /// is for [session] no longer there is not sent.
   void _call(String arg, [FactSession? session]) {
     if (!_onGlasses || (session != null && session != current)) return;

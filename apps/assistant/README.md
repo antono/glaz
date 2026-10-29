@@ -83,10 +83,11 @@ the newest 50 chats, runs the commands in the answer (`@open`,
 in headphones only. All of it, with the wire format, is in
 [PROTOCOL.md, Assistant](../../docs/PROTOCOL.md#assistant).
 
-**Settings** (Glaz > Menu > Assistant, on the phone): the server, the
-language heard, `bits` (8 or 16), reading answers aloud, and whether
-the agent may use the photos and recordings. The glasses read only
-`bits`.
+**Settings** (Glaz > Menu > Assistant, on the phone): the language
+heard, `bits` (8 or 16), reading answers aloud, and whether the agent may
+use the photos and recordings. The glasses read only `bits`. The agent
+itself -- server, key, model -- is the AI agent service's (Glaz > More >
+Services), which Factchecker shares; the page links to it.
 
 ## Files
 

@@ -285,7 +285,7 @@ class AssistantService extends ChangeNotifier {
     this.queries,
     this.voice,
     this.dir,
-  }) : _agentFor = agent ?? defaultAgent {
+  }) : _agentFor = agent ?? agentFrom {
     link.events.listen(onMessage);
     link.addListener(() {
       if (!link.connected) _drop();
@@ -317,14 +317,6 @@ class AssistantService extends ChangeNotifier {
   /// Rounds of queries in one answer, at most: an agent that keeps asking
   /// gets its last answer shown.
   static const maxRounds = 3;
-
-  static Agent? defaultAgent(Settings s) => s.agentUrl.isEmpty
-      ? null
-      : ChatCompletionsAgent(
-          url: s.agentUrl,
-          key: s.agentKey,
-          model: s.agentModel,
-        );
 
   /// A chat goes on while questions come within [forget] of each other,
   /// or of picking it on the phone; the agent is sent the last [keep]
@@ -706,7 +698,7 @@ class AssistantService extends ChangeNotifier {
 
     final agent = _agentFor(settings);
     if (agent == null) {
-      _fail(t, turn, 'Set up the agent: Glaz > Menu > Assistant');
+      _fail(t, turn, noAgent(settings));
       return;
     }
 

@@ -5,6 +5,7 @@ import '../services/factcheck.dart';
 import '../services/photos.dart';
 import '../services/services.dart';
 import '../theme.dart';
+import 'agent_screen.dart';
 
 /// A verdict's colour, as on the glasses.
 Color verdictColor(Verdict v) => switch (v) {
@@ -23,8 +24,8 @@ IconData _verdictIcon(Verdict v) => switch (v) {
   Verdict.unknown => Icons.help_outline,
 };
 
-/// The way in to the fact checks kept on the phone: on Fact check's page
-/// in the Menu tab, under its settings for the glasses.
+/// The agent it asks, and the way in to the checks kept on the phone: on
+/// Factchecker's page in the Menu tab, under its settings for the glasses.
 class FactChecks extends StatelessWidget {
   const FactChecks({super.key});
 
@@ -36,16 +37,17 @@ class FactChecks extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const SizedBox(height: 24),
+        const AgentLink(),
         Padding(
           padding: const EdgeInsets.fromLTRB(4, 24, 4, 8),
-          child: Text('Fact checks', style: text.titleMedium),
+          child: Text('Checks', style: text.titleMedium),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
           child: Text(
-            "It asks the assistant's agent and hears in its language "
-            '(Glaz > Menu > Assistant): the agent pulls the claims out of '
-            'what was said and checks each on the web.',
+            'The AI agent pulls the claims out of what was said and checks '
+            "each on the web; speech is heard in the Assistant's language.",
             style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
           ),
         ),
@@ -55,7 +57,7 @@ class FactChecks extends StatelessWidget {
             listenable: factcheck,
             builder: (context, _) => ListTile(
               leading: const Icon(Icons.fact_check, color: FrameColors.skyBlue),
-              title: const Text('Fact checks'),
+              title: const Text('Checks'),
               subtitle: Text(
                 factcheck.sessions.isEmpty
                     ? 'None yet'
@@ -76,7 +78,7 @@ class FactChecks extends StatelessWidget {
   }
 }
 
-/// The sessions of Fact check, newest first.
+/// The sessions of Factchecker, newest first.
 class FactCheckScreen extends StatelessWidget {
   const FactCheckScreen({super.key});
 
@@ -84,7 +86,7 @@ class FactCheckScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final factcheck = Services.instance.factcheck;
     return Scaffold(
-      appBar: AppBar(title: const Text('Fact checks')),
+      appBar: AppBar(title: const Text('Factchecker')),
       body: ListenableBuilder(
         listenable: factcheck,
         builder: (context, _) {
@@ -93,7 +95,7 @@ class FactCheckScreen extends StatelessWidget {
               child: Padding(
                 padding: EdgeInsets.all(24),
                 child: Text(
-                  'Nothing checked yet. Open Fact check on the glasses and '
+                  'Nothing checked yet. Open Factchecker on the glasses and '
                   'tap when something worth checking was said.',
                   textAlign: TextAlign.center,
                 ),

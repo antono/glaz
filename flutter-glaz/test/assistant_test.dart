@@ -46,7 +46,7 @@ class FakeAgent implements Agent {
   final asked = <List<AgentMessage>>[];
 
   @override
-  Future<String> ask(List<AgentMessage> messages) async {
+  Future<String> ask(List<AgentMessage> messages, {Duration? wait}) async {
     asked.add(messages);
     return replies.isNotEmpty ? replies.removeAt(0) : reply;
   }
@@ -306,10 +306,10 @@ void main() {
         link,
         settings,
         FakeTranscriber(),
-        agent: AssistantService.defaultAgent,
+        agent: agentFrom,
       );
       await assistant.ask('hi');
-      expect(last(appOpen), contains('\nE|Set up the agent'));
+      expect(last(appOpen), contains('\nE|Set up the AI agent: Glaz\nE|> More > Services'));
     });
 
     test('set takes only known settings and options', () async {

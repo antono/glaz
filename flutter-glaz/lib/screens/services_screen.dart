@@ -5,6 +5,7 @@ import '../glasses_menu.dart';
 import '../services/location.dart';
 import '../services/service_list.dart';
 import '../services/services.dart';
+import 'agent_screen.dart';
 
 /// What the phone does for Lua apps on the glasses.
 class ServicesScreen extends StatelessWidget {
@@ -68,6 +69,8 @@ class ServicesScreen extends StatelessWidget {
             ],
           ),
         ),
+        // its settings, which Assistant and Factchecker share
+        if (s.settings.serviceOn('agent')) const AgentSettings(),
         if (s.notifications.supported) ...[
           const SizedBox(height: 16),
           Align(
@@ -213,6 +216,10 @@ class ServicesScreen extends StatelessWidget {
 
   static String _subtitle(Services s, GlazService service) {
     switch (service.id) {
+      case 'agent':
+        return s.settings.agentUrl.isEmpty
+            ? 'Not set up yet: below'
+            : '${service.description}: ${AgentLink.state(true, s.settings.agentUrl)}';
       case 'keys':
         return _keysForeground(s)
             ? 'Only with Glaz on screen: turn it on in Accessibility '
