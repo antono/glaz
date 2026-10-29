@@ -109,6 +109,10 @@ local function drain()
     if not ok or s == nil or s == '' then return end
     done = done + #s
     if not send(string.char(AUDIO) .. s) then lost = lost + #s end
+    -- as Recorder's: two seconds of sound is 32 KB of strings, a quarter
+    -- of the heap, unless each goes as it is sent
+    s = nil
+    collectgarbage('step')
   end
 end
 
