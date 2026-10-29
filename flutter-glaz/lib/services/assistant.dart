@@ -286,7 +286,7 @@ class AssistantService extends ChangeNotifier {
     this.queries,
     this.voice,
     this.dir,
-  }) : _agentFor = agent ?? defaultAgent {
+  }) : _agentFor = agent ?? ((s) => agentFrom(s, who: 'Assistant')) {
     link.events.listen(onMessage);
     link.addListener(() {
       if (!link.connected) _drop();
@@ -318,14 +318,6 @@ class AssistantService extends ChangeNotifier {
   /// Rounds of queries in one answer, at most: an agent that keeps asking
   /// gets its last answer shown.
   static const maxRounds = 3;
-
-  static Agent? defaultAgent(Settings s) => s.agentUrl.isEmpty
-      ? null
-      : ChatCompletionsAgent(
-          url: s.agentUrl,
-          key: s.agentKey,
-          model: s.agentModel,
-        );
 
   /// A chat goes on while questions come within [forget] of each other,
   /// or of picking it on the phone; the agent is sent the last [keep]
@@ -486,7 +478,7 @@ class AssistantService extends ChangeNotifier {
   int _rate = 8000;
   int _bits = 8;
 
-  bool get _on => settings.serviceOn('assistant');
+  bool get _on => settings.serviceOn('agent');
 
   @visibleForTesting
   void onMessage(List<int> m) {
@@ -645,7 +637,7 @@ class AssistantService extends ChangeNotifier {
     _drop();
     _turn++;
     if (!_on) {
-      _show('e:', 'The assistant is off: Glaz > More > Services');
+      _show('e:', noAgent(settings));
       return;
     }
     final t = transcriber;
@@ -722,7 +714,7 @@ class AssistantService extends ChangeNotifier {
 
     final agent = _agentFor(settings);
     if (agent == null) {
-      _fail(t, turn, 'Set up the agent: Glaz > Menu > Assistant');
+      _fail(t, turn, noAgent(settings));
       return;
     }
 

@@ -115,8 +115,8 @@ Tailscale, put Hermes behind a reverse proxy with an HTTPS certificate.
 
 ## 3. Set up glaz
 
-On the phone, open **Menu > Assistant** (the Menu tab, then Assistant) and
-fill in **Agent**:
+On the phone, open **More > Services** and tap **AI agent** (its switch
+is on by default). Its page has:
 
 | Field | Value |
 | --- | --- |
@@ -124,9 +124,15 @@ fill in **Agent**:
 | Key | `API_SERVER_KEY` from `~/.hermes/.env` |
 | Model | `hermes-agent` |
 
-Everything here stays on the phone; none of it goes to the glasses. On the
-same page, pick the language you will ask in, and whether answers are read
-aloud (headphones only).
+Everything here stays on the phone; none of it goes to the glasses. Both
+Assistant and Factchecker ask this agent, and have no switches of their
+own: switching AI agent off stops both. Their pages in the Menu tab show
+it in a row, **AI agent**, which opens this same page. Under the settings
+it lists the requests, the newest 50: which app asked, when, how long the
+answer took, and its start or what went wrong -- the first place to look
+when the glasses wait in vain. On
+**Menu > Assistant**, pick the language you will ask in, and whether
+answers are read aloud (headphones only).
 
 Then on the glasses: **Apps > Assistant**, tap, ask, tap again.
 

@@ -7,8 +7,10 @@ import '../frame/parts.dart';
 import '../settings.dart';
 import '../term/hosts.dart';
 import 'agent_files.dart';
+import 'agent_history.dart';
 import 'app_check.dart';
 import 'assistant.dart';
+import 'factcheck.dart';
 import 'flipper.dart';
 import 'flipper_remote.dart';
 import 'gemini.dart';
@@ -57,6 +59,7 @@ class Services {
     this.tuner,
     this.parts,
     this.scales,
+    this.factcheck,
   ) : hold = LinkHold(link, settings, flipperRemote);
 
   final Settings settings;
@@ -84,6 +87,7 @@ class Services {
   final AppCheck appCheck;
   final TunerService tuner;
   final ScalesService scales;
+  final FactCheckService factcheck;
 
   /// Which apps each pair of glasses has (docs/DEVICES.md).
   final GlassesParts parts;
@@ -112,6 +116,7 @@ class Services {
     final hosts = TermHosts(s, DeviceSecrets());
     final keys = KeyRemote(link, s);
     final lua = GlassesLua(link);
+    final assistantAt = assistantDir ?? await assistantRoot();
     final services = Services._(
       s,
       link,
@@ -129,7 +134,7 @@ class Services {
         Transcriber.platform,
         queries: GlazFiles(link, s, photos, recordings, transcripts),
         voice: Voice.platform,
-        dir: assistantDir ?? await assistantRoot(),
+        dir: assistantAt,
       ),
       TranslateService(
         link,
@@ -148,9 +153,14 @@ class Services {
       TunerService(link, s),
       await GlassesParts.load(rootBundle),
       ScalesService(link),
+      FactCheckService(link, s, Transcriber.platform, dir: assistantAt),
     );
     await services.reader.load();
     await services.assistant.load();
+    await services.factcheck.load();
+    await AgentHistory.instance.attach(
+      File('${assistantAt.path}/agent_history.json'),
+    );
     LuaBridge(s, services.lua);
     SettingsSync(link, s);
     services.keys.attach();

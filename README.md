@@ -67,6 +67,10 @@ The menu has these apps:
 - **Apps**
   - **Assistant**: ask a question out loud and read the answer on the
     glasses. The answer is also read aloud, but only through headphones.
+  - **Factchecker**: listens to a conversation; tap when you hear a
+    claim, and an AI agent checks what was said since the last tap. The
+    claims come back as a list: true in green, false in red, partly true
+    in yellow, unknown in grey. Tap one to read why, with its sources.
   - **Translate**: what the other person says, translated, as it is
     said. The phone hears it and translates it on its own, with no
     Internet once the languages are downloaded. New lines scroll in by
@@ -113,8 +117,13 @@ iOS and macOS builds are in the code but need Xcode.
   extended firmware (see below).
 - **Photos and recordings**, sorted by date, with transcripts of the
   recordings.
-- **Assistant**: works with any server that speaks the OpenAI chat API.
-  The assistant can open apps on the glasses for you.
+- **AI agent**: one agent for Assistant and Factchecker, any server
+  that speaks the OpenAI chat API (Hermes Agent, say), set once in
+  Services, with a history of what it was asked and how long it took.
+- **Assistant**: asks the AI agent. The assistant can open apps on the
+  glasses for you.
+- **Factchecker**: past sessions, each claim with its verdict, why, and
+  links to the sources.
 - **Translate**: the languages to translate from and into, and whether
   the original text is shown too.
 - **Remote**: control the glasses from the phone screen.

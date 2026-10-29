@@ -4,6 +4,7 @@ import '../glasses_menu.dart';
 import '../services/services.dart';
 import '../theme.dart';
 import 'assistant_screen.dart';
+import 'factcheck_screen.dart';
 import 'gemini_screen.dart';
 import 'reader_screen.dart';
 
@@ -94,6 +95,8 @@ class ModuleSettingsScreen extends StatelessWidget {
             ],
             // the phone's side of the assistant: its agent, its language
             if (module.id == 'assistant') const AssistantSettings(),
+            // what it checked, kept on the phone
+            if (module.id == 'factcheck') const FactChecks(),
             // the texts it reads, kept on the phone
             if (module.id == 'reader') const ReaderLibrary(),
             // its home page: the bookmarks, kept on the phone
