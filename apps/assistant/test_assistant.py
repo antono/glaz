@@ -1,7 +1,8 @@
 """Assistant (apps/assistant/assistant.lua) on Frame, the only glasses that have
 it: the chats the phone keeps, listed and picked; a tap listens, the
 microphone's sound streamed to the phone, the next tap asks; the chat the
-phone sends back drawn as a coloured log; a double tap drops the question;
+phone sends back drawn as a coloured log, four lines at a time, the next
+four asked for as the view moves; a double tap drops the question;
 what the phone sends that is wrong or comes too late; the phone's remote,
 the minute an idle list stays up, a link or microphone that fails
 (docs/PROTOCOL.md, "Assistant").
@@ -19,11 +20,42 @@ ASSIST, AUDIO, AUDIO_END = 0x04, 0x05, 0x06
 REC_DROP, REC_START = 0x10, 0x1F
 
 CHATS = "c:7\n9|Weather today\n7|Dinner ideas\n3|Old one"
-CHAT = "t:0\nQ|What is 137 times 2\nA|274"
+CHAT = "t:0:2:1\nQ|What is 137 times 2\nA|274"
 
 
-def assist(op, ident=0):
-    return struct.pack(">BBH", ASSIST, op, ident)   # Lua's >BBI2
+def assist(op, ident=0, start=0):
+    return struct.pack(">BBHH", ASSIST, op, ident, start)   # Lua's >BBI2I2
+
+
+def window(lines, start=0, busy=0):
+    """The chat's lines from line start (0: the newest) as the phone sends
+    them (AssistantService.onGlasses): four at most."""
+    tail = max(1, len(lines) - 3)
+    start = tail if start <= 0 or start > tail else start
+    shown = "".join("\n" + l for l in lines[start - 1:start + 3])
+    return f"t:{busy}:{len(lines)}:{start}{shown}"
+
+
+def asked(g):
+    """The lines the glasses asked for last (ASSIST op 4), their start."""
+    reqs = [m for m in g.sent(ASSIST) if m[1] == 4]
+    return struct.unpack(">H", reqs[-1][4:6])[0] if reqs else None
+
+
+def serve(g, lines, busy=0):
+    """The phone answering the window the glasses asked for, if any."""
+    start = asked(g)
+    if start is not None:
+        g.clear_sent()
+        g.call("assistant", window(lines, start, busy))
+
+
+def kb(g):
+    """The Lua heap in use, after a full collection, in KB."""
+    g.send(LUA_EVAL, b"\x07" + b"collectgarbage('collect') "
+           b"print(collectgarbage('count'))")
+    g.advance(0.2)
+    return float(g.joined(LUA_RESULT)[-1][1].lstrip(b"+").split()[0])
 
 
 def opened(g, chats=CHATS):
@@ -459,7 +491,7 @@ def test_a_tap_before_the_chats_came_listens_without_a_new_chat(glasses):
 def test_a_chat_is_drawn_coloured_by_kind(glasses):
     listening(glasses)
     glasses.tap(1)
-    glasses.call("assistant", "t:0\nQ|What do I see\nT|* Took a photo"
+    glasses.call("assistant", "t:0:4:1\nQ|What do I see\nT|* Took a photo"
                  "\nC|@open weather\nA|A cat, 137 cm away")
     assert color_of(glasses, "What do I see") == "SKYBLUE"
     assert color_of(glasses, "* Took a photo") == "ORANGE"
@@ -473,7 +505,7 @@ def test_a_chat_is_drawn_coloured_by_kind(glasses):
 def test_busy_shows_thinking_until_the_answer(glasses):
     listening(glasses)
     glasses.tap(1)
-    glasses.call("assistant", "t:1\nQ|What is 137 times 2")
+    glasses.call("assistant", "t:1:1:1\nQ|What is 137 times 2")
     assert "thinking.." in glasses.screen_text()
     glasses.call("assistant", CHAT)
     assert "thinking.." not in glasses.screen_text()
@@ -483,7 +515,7 @@ def test_busy_shows_thinking_until_the_answer(glasses):
 def test_cyrillic_text_is_shown(glasses):
     listening(glasses)
     glasses.tap(1)
-    glasses.call("assistant", "t:0\nQ|Привет\nA|Здравствуй")
+    glasses.call("assistant", "t:0:2:1\nQ|Привет\nA|Здравствуй")
     assert "Привет" in glasses.screen_text()
     assert "Здравствуй" in glasses.screen_text()
     glasses.assert_ok()
@@ -492,32 +524,105 @@ def test_cyrillic_text_is_shown(glasses):
 def test_a_long_chat_keeps_to_its_end_and_tilts_page_back(glasses):
     listening(glasses)
     glasses.tap(1)
-    lines = "\n".join(f"A|line {i}" for i in range(1, 11))
-    glasses.call("assistant", "t:0\n" + lines)
+    lines = [f"A|line {i}" for i in range(1, 11)]
+    glasses.call("assistant", window(lines))
     text = glasses.screen_text()
     assert "line 10" in text and "line 7" in text and "line 6" not in text
     assert "^" not in text
+    glasses.clear_sent()
     glasses.tilt(-1)                             # three rows back
+    assert asked(glasses) == 4
+    # what it had stays where it is until the rest comes
+    assert "line 7" in glasses.screen_text()
+    serve(glasses, lines)
     text = glasses.screen_text()
     assert "line 4" in text and "line 7" in text and "line 8" not in text
     assert "tap = ask  ^" in text
     # off the end, a new line does not pull the view along
-    glasses.call("assistant", "t:0\n" + lines + "\nA|line 11")
+    lines.append("A|line 11")
+    glasses.call("assistant", window(lines, 4))
     assert "line 4" in glasses.screen_text()
     for _ in range(3):
         glasses.tilt(-1)
+        serve(glasses, lines)
     assert "line 1" in glasses.screen_text()     # the start stays
     for _ in range(4):
         glasses.tilt(1)
+        serve(glasses, lines)
     text = glasses.screen_text()
     assert "line 11" in text and "^" not in text
+    assert [m for m in glasses.sent(ASSIST)] == []
     glasses.assert_ok()
+
+
+def test_holds_only_the_lines_on_screen(glasses):
+    """A message of the phone is four lines whatever the chat's length,
+    and memory after paging through 137 lines is what it was after
+    four."""
+    listening(glasses)
+    glasses.tap(1)
+    lines = [f"{'QA'[i % 2]}|line {i} of a chat long enough" for i in
+             range(1, 138)]
+    glasses.call("assistant", window(lines[:4]))
+    glasses.tilt(-1)                             # the same: nothing asked
+    before = kb(glasses)
+    glasses.call("assistant", window(lines))
+    for _ in range(50):
+        glasses.tilt(-1)
+        serve(glasses, lines)
+    assert "line 1 of" in glasses.screen_text()
+    after = kb(glasses)
+    assert after - before < 4                    # KB
+    glasses.assert_ok()
+
+
+def test_a_window_for_a_view_since_left_asks_again(glasses):
+    listening(glasses)
+    glasses.tap(1)
+    lines = [f"A|line {i}" for i in range(1, 11)]
+    glasses.call("assistant", window(lines))
+    glasses.tilt(-1)
+    glasses.call("assistant", window(lines))     # the newest: not on screen
+    assert "line 4" not in glasses.screen_text()
+    glasses.clear_sent()
+    glasses.advance(6)                           # past RETRY
+    assert asked(glasses) == 4
+    serve(glasses, lines)
+    assert "line 4" in glasses.screen_text()
+    glasses.clear_sent()
+    glasses.advance(6)
+    assert asked(glasses) is None                # came: not asked again
+
+
+def test_a_chat_shorter_than_the_view_follows_again(glasses):
+    listening(glasses)
+    glasses.tap(1)
+    lines = [f"A|line {i}" for i in range(1, 11)]
+    glasses.call("assistant", window(lines))
+    glasses.tilt(-1)
+    serve(glasses, lines)
+    glasses.call("assistant", window(lines[:2]))
+    text = glasses.screen_text()
+    assert "line 1" in text and "line 2" in text and "^" not in text
+
+
+def test_errors_keep_to_the_last_four_lines(glasses):
+    listening(glasses)
+    glasses.tap(1)
+    glasses.call("assistant", CHAT)
+    glasses.call("assistant", "e:" + "\n".join(
+        f"error {i}" for i in range(1, 8)))
+    text = glasses.screen_text()
+    assert "error 7" in text and "error 4" in text and "error 3" not in text
+    assert "274" not in text
+    glasses.call("assistant", CHAT)              # the chat again: gone
+    assert "error" not in glasses.screen_text()
 
 
 def test_empty_lines_are_not_drawn(glasses):
     listening(glasses)
     glasses.tap(1)
-    glasses.call("assistant", "t:0\nQ|137\nA|")
+    glasses.call("assistant", "t:0:2:1\nQ|137\nA|")
     assert [t.text for t in glasses.texts() if t.text == ""] == []
     assert "137" in glasses.screen_text()
 
@@ -538,7 +643,7 @@ def test_an_error_shows_in_red_and_stops_listening(glasses):
 def test_an_error_after_a_chat_goes_under_it_and_ends_thinking(glasses):
     listening(glasses)
     glasses.tap(1)
-    glasses.call("assistant", "t:1\nQ|What is 137 times 2")
+    glasses.call("assistant", "t:1:1:1\nQ|What is 137 times 2")
     glasses.call("assistant", "e:HTTP 503")
     text = glasses.screen_text()
     assert text.index("What is 137 times 2") < text.index("HTTP 503")
@@ -549,7 +654,7 @@ def test_an_error_after_a_chat_goes_under_it_and_ends_thinking(glasses):
 
 def test_the_chat_while_listening_keeps_listening(glasses):
     listening(glasses)
-    glasses.call("assistant", "t:0\nQ|What is 137")
+    glasses.call("assistant", "t:0:1:1\nQ|What is 137")
     assert glasses.emu._mic_on
     assert "What is 137" in glasses.screen_text()
     assert "listening" in glasses.screen_text()
@@ -570,9 +675,10 @@ def test_tilts_in_a_short_chat_stay_put(glasses):
 def test_a_long_chat_scrolled_back_is_shot(glasses):
     listening(glasses)
     glasses.tap(1)
-    glasses.call("assistant", "t:0\n" + "\n".join(
-        f"{'QA'[i % 2]}|line {i}" for i in range(1, 9)))
+    chat = [f"{'QA'[i % 2]}|line {i}" for i in range(1, 9)]
+    glasses.call("assistant", window(chat))
     glasses.tilt(-1)
+    serve(glasses, chat)
     assert "line 2" in glasses.screen_text()
     glasses.screenshot("assistant-scrolled")
 
@@ -709,7 +815,8 @@ def test_not_called_when_not_running(glasses):
 
 @pytest.mark.parametrize("arg", [
     "c:", "c:abc", "c:7\nno bar here", "c:7\n|", "t:", "t:x\nQ|137",
-    "t:1\nnot a line", "e:", "zzz", "", ":", "x:137",
+    "t:1\nnot a line", "t:1:2\nQ|137", "t:0:3:137\nQ|137",
+    "t:0:0:0", "t:0:1:1\nnot a line", "e:", "zzz", "", ":", "x:137",
 ])
 def test_malformed_arguments_do_no_harm(glasses, arg):
     opened(glasses)
@@ -718,4 +825,31 @@ def test_malformed_arguments_do_no_harm(glasses, arg):
     glasses.call("assistant", arg)
     glasses.advance(1)
     assert "Assistant" in glasses.screen_text()
+    glasses.assert_ok()
+
+
+# ---------------------------------------------------------------- memory
+
+def peak_while_streaming(g, seconds):
+    """The most Lua heap in use while seconds of sound are sent, above what
+    it was before, in KB: each packet should go as it is sent
+    (docs/PROTOCOL.md, "Memory on the glasses")."""
+    lua(g, "peak = 0\n"
+           "local real = frame.bluetooth.send\n"
+           "frame.bluetooth.send = function(d)\n"
+           "  peak = math.max(peak, collectgarbage('count'))\n"
+           "  return real(d)\n"
+           "end")
+    base = kb(g)
+    g.emu.mic_data.extend(b"\x01\x37" * 8000 * seconds)
+    g.advance(seconds + 1)
+    g.send(LUA_EVAL, b"\x07print(peak)")
+    g.advance(0.2)
+    return float(g.joined(LUA_RESULT)[-1][1].lstrip(b"+").split()[0]) - base
+
+
+def test_streamed_sound_is_let_go_of_packet_by_packet(glasses):
+    listening(glasses)
+    # 4 s is 64 KB: 77 KB at its peak before the steps, 14 KB with them
+    assert peak_while_streaming(glasses, 4) < 24     # KB
     glasses.assert_ok()

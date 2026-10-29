@@ -168,7 +168,7 @@ void main() {
         expect(textWidth(log[i].text), lessThanOrEqualTo(TranslateLog.width));
       }
       final w = log.window(0, 16, follow: false);
-      expect(utf8.encode(w).length, lessThanOrEqualTo(900));
+      expect(utf8.encode(w).length, lessThanOrEqualTo(300));
       expect(w, startsWith('w:1:0:${log.length}:0\n'));
       final tail = log.window(0, 4, follow: true);
       expect(tail, startsWith('w:1:${log.length - 4}:${log.length}:1\n'));

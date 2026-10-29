@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -526,11 +527,13 @@ class AssistantService extends ChangeNotifier {
     }
   }
 
-  /// The glasses' Assistant lists the chats, goes on with one, or starts
-  /// a new one (`ASSIST`, docs/PROTOCOL.md, "Assistant").
+  /// The glasses' Assistant lists the chats, goes on with one, starts a
+  /// new one, or asks for the lines of the one it shows (`ASSIST`,
+  /// docs/PROTOCOL.md, "Assistant").
   void _onAssist(List<int> m) {
     final op = m.length > 1 ? m[1] : 0;
     final id = m.length > 3 ? m[2] << 8 | m[3] : 0;
+    final from = m.length > 5 ? m[4] << 8 | m[5] : 0;
     switch (op) {
       case 1:
         link.callModule('assistant', 'c:${glassesList()}');
@@ -541,9 +544,15 @@ class AssistantService extends ChangeNotifier {
           return;
         }
         open(chat);
+        _glassesView(chat, 0);
         link.callModule('assistant', onGlasses(chat));
       case 3:
         newChat();
+      case 4:
+        final chat = current;
+        if (chat == null) return;
+        _glassesView(chat, from);
+        link.callModule('assistant', onGlasses(chat, from: from));
     }
   }
 
@@ -563,47 +572,51 @@ class AssistantService extends ChangeNotifier {
     return out.toString();
   }
 
-  /// The most of a chat sent to the glasses at once, in bytes.
-  static const maxBytes = 900;
+  /// The chat's lines the glasses show at once: their screen's rows.
+  static const glassesRows = 4;
 
-  /// [chat] for the glasses' screen: `t:<busy>`, then its newest lines,
-  /// `<kind>|<text>` each, cut to the screen, as many as fit in [maxBytes]
-  /// -- Q the questions, T the tool calls, A the answers, C the commands
-  /// run, E what went wrong (docs/PROTOCOL.md, "Assistant").
-  String onGlasses(AssistantChat chat) {
+  /// The chat the glasses show, and the line their view starts at, as
+  /// they last asked; 0: the newest, followed.
+  AssistantChat? _glassesChat;
+  int _glassesFrom = 0;
+
+  void _glassesView(AssistantChat chat, int from) {
+    _glassesChat = chat;
+    _glassesFrom = from;
+  }
+
+  /// [chat] as the glasses' screen shows it, all its lines, `<kind>|<text>`
+  /// each, cut to the screen -- Q the questions, T the tool calls, A the
+  /// answers, C the commands run, E what went wrong.
+  @visibleForTesting
+  List<String> glassesLines(AssistantChat chat) => [
+    for (final t in chat.turns) ...[
+      for (final l in _wrap(t.question)) 'Q|$l',
+      for (final q in t.queries)
+        for (final l in _wrap('* ${q.label}${q.result == null ? ' ..' : ''}'))
+          'T|$l',
+      if (t.error != null)
+        for (final l in _wrap(t.error!)) 'E|$l'
+      else ...[
+        if (t.answer != null)
+          for (final l in _wrap(t.answer!)) 'A|$l',
+        for (final c in t.commands) 'C|${_wrap('$c').first}',
+      ],
+    ],
+  ];
+
+  /// A window of [chat] for the glasses: `t:<busy>:<total>:<from>`, then
+  /// at most [glassesRows] of its lines from line [from] (from 1; 0 the
+  /// newest), a screen's worth: the glasses hold no more of it
+  /// (docs/PROTOCOL.md, "Assistant" and "Memory on the glasses").
+  String onGlasses(AssistantChat chat, {int from = 0}) {
     final busy = state == AssistantState.thinking && chat == current;
-    final lines = <String>[];
-    var bytes = 4;
-    for (final t in chat.turns.reversed) {
-      final turn = [
-        for (final l in _wrap(t.question)) 'Q|$l',
-        for (final q in t.queries)
-          for (final l in _wrap('* ${q.label}${q.result == null ? ' ..' : ''}'))
-            'T|$l',
-        if (t.error != null)
-          for (final l in _wrap(t.error!)) 'E|$l'
-        else ...[
-          if (t.answer != null)
-            for (final l in _wrap(t.answer!)) 'A|$l',
-          for (final c in t.commands) 'C|${_wrap('$c').first}',
-        ],
-      ];
-      // whole turns, but the newest one as much of its end as fits
-      final size = turn.fold(0, (n, l) => n + utf8.encode(l).length + 1);
-      if (bytes + size > maxBytes) {
-        if (lines.isEmpty) {
-          while (turn.isNotEmpty && bytes < maxBytes) {
-            final l = turn.removeLast();
-            bytes += utf8.encode(l).length + 1;
-            if (bytes <= maxBytes) lines.insert(0, l);
-          }
-        }
-        break;
-      }
-      lines.insertAll(0, turn);
-      bytes += size;
-    }
-    return 't:${busy ? 1 : 0}${lines.map((l) => '\n$l').join()}';
+    final lines = glassesLines(chat);
+    final tail = max(1, lines.length - glassesRows + 1);
+    final start = from <= 0 || from > tail ? tail : from;
+    final shown = lines.skip(start - 1).take(glassesRows);
+    return 't:${busy ? 1 : 0}:${lines.length}:$start'
+        '${shown.map((l) => '\n$l').join()}';
   }
 
   static List<String> _wrap(String text) {
@@ -616,7 +629,10 @@ class AssistantService extends ChangeNotifier {
   void _toGlasses({bool open = false}) {
     final chat = current;
     if (chat == null) return;
-    final arg = onGlasses(chat);
+    // put on screen, or another chat: the newest lines; else the view the
+    // glasses have
+    if (open || chat != _glassesChat) _glassesView(chat, 0);
+    final arg = onGlasses(chat, from: _glassesFrom);
     if (open) {
       link.openModule('assistant', arg);
     } else {
