@@ -71,7 +71,10 @@ past them asks the phone for the words from there. A `TEXT_GET` with count
 leaving, if the module was on screen.
 
 The phone answers with `MODULE_CALL` `reader` and
-`t:from:total:text:words`. A text number other than the one held means the
+`t:from:total:text:words`, at most 300 bytes of words, fewer than asked
+for when they do not fit: the glasses ask for the rest as they near its
+end ([PROTOCOL.md, Memory on the
+glasses](../../docs/PROTOCOL.md#memory-on-the-glasses)). A text number other than the one held means the
 phone now reads another text: the glasses drop their words and start
 there. `APP_OPEN` `reader` with `new` (the phone's Read on glasses) starts
 again from the phone's place. The whole exchange is in

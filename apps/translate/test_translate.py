@@ -1029,3 +1029,26 @@ def test_the_longest_status_fits_the_screen():
     for c in status:
         x += glyphs[ord(c)][0] + 4
     assert x - 4 <= WIDTH
+
+
+# ---------------------------------------------------------------- memory
+
+def test_streamed_sound_is_let_go_of_packet_by_packet(glasses):
+    """The most Lua heap in use while 4 s of sound are sent, 64 KB, stays
+    near what it was: each packet goes as it is sent (docs/PROTOCOL.md,
+    "Memory on the glasses")."""
+    voice(glasses)
+    lua(glasses, "peak = 0\n"
+                 "local real = frame.bluetooth.send\n"
+                 "frame.bluetooth.send = function(d)\n"
+                 "  peak = math.max(peak, collectgarbage('count'))\n"
+                 "  return real(d)\n"
+                 "end")
+    base = float(lua(glasses, "collectgarbage('collect') "
+                              "print(collectgarbage('count'))")[1:].split()[0])
+    glasses.emu.mic_data.extend(b"\x01\x37" * 8000 * 4)
+    glasses.advance(5)
+    peak = float(lua(glasses, "print(peak)")[1:].split()[0])
+    # 77 KB above it at its peak before the steps, 14 KB with them
+    assert peak - base < 24                      # KB
+    glasses.assert_ok()

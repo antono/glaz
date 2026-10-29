@@ -444,7 +444,7 @@ Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 | `0x1F` | `REC_START` | `[0x1F, bits, rate / 1000, for]` | Recorder starts a recording — see [Recorder](#recorder); `for` = `1`: the Assistant listening, see [Assistant](#assistant); `2`: Translate listening, see [Translate](#translate); `3`: the Tuner listening, see [Tuner](#tuner). Any `for` but `0` (or none) is not a recording |
 | `0x02` | `SCALE_GET` | `[0x02, n]` | Scales wants scale `n` (0-based); the phone answers with `MODULE_CALL` `scales` -- see [SCALES.md](SCALES.md) |
 | `0x03` | `TUNER` | `[0x03, 1, mic]` / `[0x03, 0]` | Tuner: listen, with the phone's microphone (`mic` 0) or the glasses' (1); stop -- see [Tuner](#tuner) |
-| `0x04` | `ASSIST` | `[0x04, op, id (2)]` | Assistant lists the chats (`1`), goes on with chat `id` (`2`) or starts a new one (`3`) -- see [Assistant](#assistant) |
+| `0x04` | `ASSIST` | `[0x04, op, id (2), from (2)]` | Assistant lists the chats (`1`), goes on with chat `id` (`2`), starts a new one (`3`) or asks for the chat's lines from line `from` (`4`) -- see [Assistant](#assistant) |
 | `0x10` | `REC_DROP` | `[0x10]` | Assistant was left mid-question (a double tap): forget it, ask nothing, drop an answer on its way — see [Assistant](#assistant) |
 | `0x05` | audio chunk | `[0x05, samples...]` | part of a recording |
 | `0x06` | audio end | `[0x06, samples...]` | last part; the recording is complete |
@@ -769,19 +769,20 @@ module takes in `start()` or `remote()`:
 | Argument | Means |
 | --- | --- |
 | `stop` | stop listening and ask (`MODULE_CALL`) |
-| `t:busy` | the current chat, then `\nkind\|text` a line: its newest lines, cut to the screen, whole turns, 900 bytes at most; `busy` `1` while the agent thinks. `kind`: `Q` a question, `T` a tool call (`* Took a photo with the glasses`, ` ..` while it runs), `A` the answer, `C` a command run, `E` went wrong. Sent as the question is heard and as each tool call starts and ends (`MODULE_CALL`, only seen with Assistant on screen), and with the answer (`APP_OPEN`) |
-| `e:text` | went wrong outside a chat: nothing heard, the assistant off |
+| `t:busy:total:from` | a window of the current chat: then `\nkind\|text` a line, at most four of its lines from line `from` (from 1), cut to the screen, a few hundred bytes; `total` the lines in the chat; `busy` `1` while the agent thinks. `kind`: `Q` a question, `T` a tool call (`* Took a photo with the glasses`, ` ..` while it runs), `A` the answer, `C` a command run, `E` went wrong. Sent for `ASSIST` `2` and `4`, as the question is heard and as each tool call starts and ends (`MODULE_CALL`, only seen with Assistant on screen), and with the answer (`APP_OPEN`): the window the glasses last asked for, the newest four for `APP_OPEN` or another chat |
+| `e:text` | went wrong outside a chat: nothing heard, the assistant off; red under the chat's lines, its last four lines kept |
 | `listen` | listen again |
 | `c:live` | the chats, then `\nid\|title` each, newest 12, titles cut to a row; `live` the id of the chat still going on (asked or picked within ten minutes), `0` for none (`MODULE_CALL`) |
 
 **Chats on the glasses.** Opened from the menu, Assistant first lists the
 chats: `New chat`, then the phone's chats, newest first, the cursor on the
 one still going on, else on `New chat`. It asks with `ASSIST` (`0x04`),
-`>BBI2`: op, id -- `1` the list (again every 5 s until it comes), `2` go
-on with chat `id`: the phone makes it the current chat and answers `t:`
-with it, and the next tap asks in it; `3` a new
+`>BBI2I2`: op, id, from -- `1` the list (again every 5 s until it comes),
+`2` go on with chat `id`: the phone makes it the current chat and answers
+`t:` with its newest lines, and the next tap asks in it; `3` a new
 chat, sent just before `REC_START` when the wearer taps `New chat`, so
-that tap listens at once. Opened by the phone with an argument, Assistant
+that tap listens at once; `4` the current chat's lines from line `from`
+(`0` the newest, followed), again every 5 s until they come. Opened by the phone with an argument, Assistant
 skips the list. A double tap anywhere but the list goes back to it, asked
 for again; a `t:` or `e:` that comes while the list is up is for a
 question dropped on the way and is thrown away.
@@ -790,10 +791,17 @@ A chat on the glasses is a log, four rows and a status row under them
 (`listening 5s`, `thinking..`, `tap = ask`), drawn in colours by kind:
 questions sky blue, tool calls orange, answers white, commands grey,
 errors red. It keeps to its end as lines come; a tilt goes a screen back
-or on, `^` in the status row while not at the end. Text is what the font
-has, Cyrillic included, in lines of at most 26 characters. With an
-`@open` the answer is not shown: the app it opened covers it. A tap asks
-again, in the same chat.
+or on, `^` in the status row while not at the end. The phone keeps the
+chat and the glasses only the four lines on screen (see [Memory on the
+glasses](#memory-on-the-glasses)): a tilt asks for the four from the new
+first row with `ASSIST` `4`, the lines still on screen staying where they
+are until those come. A window for another view than the one on screen
+-- the newest lines, after the wearer went back -- is dropped and the
+one on screen asked for. Before 2026-10-29 the phone sent the newest
+lines, up to 900 bytes, in every `t:`, and the glasses kept all of it.
+Text is what the font has, Cyrillic included, in lines of at most 26
+characters. With an `@open` the answer is not shown: the app it opened
+covers it. A tap asks again, in the same chat.
 
 The system prompt tells the agent that "what do I see" means `@photo`,
 the glasses' camera -- never its own screen or tools -- and, with Photos
@@ -889,7 +897,7 @@ The phone answers with `MODULE_CALL` `translate` and one of:
 
 | Argument | Means |
 | --- | --- |
-| `w:<sess>:<from>:<total>:<f>` then `\n<K>\|<text>` per line | lines from number `from`, at most `count` (16), as many as fit in 900 bytes; `total` counts the partial line too; `f` `1` a tail answer or push, `0` an answer to op 1. An empty log is `w:1:0:0:1` |
+| `w:<sess>:<from>:<total>:<f>` then `\n<K>\|<text>` per line | lines from number `from`, at most `count` (16), as many as fit in 300 bytes (900 before 2026-10-29); `total` counts the partial line too; `f` `1` a tail answer or push, `0` an answer to op 1. An empty log is `w:1:0:0:1` |
 | `n:<sess>:<total>` | how many lines there are, while open and not following |
 | `s:<text>` | the status row's text, 30 characters at most; empty clears it |
 | `x:<text>` | as `s:`, and the phone no longer hears: the glasses stop the microphone, as a pause does |
@@ -937,7 +945,9 @@ lines loses its oldest 1000 and starts a new session.
 log winning (under 3 a second); an `n:` at most once a second; `s:` only
 when it changes. Answers to requests go at once. A line is at most about
 123 bytes (58 narrow Cyrillic glyphs of two bytes, and `K|\n`), so the
-four-line tail always fits in 900. `link.dart` keeps its 200 ms between
+four-line tail fits in the 300 bytes the phone sends at most (before
+2026-10-29, 900); a window asked for that comes short of the screen, the
+glasses ask again for the screen's lines alone. `link.dart` keeps its 200 ms between
 messages of one code and waits for each packet's ack.
 
 **Nothing unasked.** The phone sends Translate nothing unless the glasses
@@ -1055,8 +1065,9 @@ memory than a sentence.
 
 The phone answers with `MODULE_CALL` `reader` and
 `t:from:total:text:words`: the words from number `from`, one space
-between them, as many of `count` as fit in 900 bytes, how many the text
-has, and its number. `t:0:0:0:` means there is no text.
+between them, as many of `count` as fit in 300 bytes (900 before
+2026-10-29), how many the text has, and its number; the glasses ask for
+the rest as they near the end of what they have. `t:0:0:0:` means there is no text.
 
 **Another text.** The number is the text's id in the library, kept
 across restarts (`id % 255 + 1`). When the user marks another text, the
