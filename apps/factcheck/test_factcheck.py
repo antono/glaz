@@ -140,7 +140,9 @@ def test_listening_keeps_it_open_past_the_minute(glasses):
 
 def test_pauses_by_itself_after_half_an_hour(glasses):
     opened(glasses)
-    glasses.advance(1801)                        # past MAX_LISTEN
+    for _ in range(30):                          # a minute at a time: each
+        glasses.advance(60)                      # advance() waits 30 s at most
+    glasses.advance(1)                           # past MAX_LISTEN
     assert not glasses.emu._mic_on
     text = glasses.screen_text()
     assert "paused (30 min)" in text
