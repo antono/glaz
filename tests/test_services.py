@@ -193,6 +193,20 @@ def test_a_long_answer_is_cut_at_8_kb_and_sent_in_packets(glasses):
     glasses.assert_ok()
 
 
+def test_a_request_that_runs_out_of_memory_is_still_answered(frame):
+    glasses = frame
+    # 137 KB is more than the app has on Frame: Lua's error, and the app
+    # goes on (Halo's emulator has no limit)
+    glasses.clear_sent()
+    glasses.send(LUA_EVAL, b"\x07#string.rep('x', 137 * 1024)")
+    glasses.advance(0.5)
+    assert glasses.joined(LUA_RESULT) == [(7, b"-not enough memory")]
+    glasses.send(LUA_EVAL, b"\x081 + 1")
+    glasses.advance(0.5)
+    assert glasses.joined(LUA_RESULT)[-1] == (8, b"+2")
+    glasses.assert_ok()
+
+
 def test_an_empty_console_request_is_ignored(glasses):
     glasses.clear_sent()
     glasses.send(LUA_EVAL, b"")
@@ -424,9 +438,18 @@ def test_answers_nobody_asked_for_are_dropped(probed):
 
 
 def test_request_ids_run_to_255_and_wrap(probed):
+    # answered as they go, as the phone does: 260 waiting at once would be
+    # more than the app has room for on Frame
     probed.clear_sent()
-    lua(probed, "for i = 1, 260 do probe.host.http('GET', 'x') end",
-        settle=1.0)
+    for _ in range(5):
+        lua(probed, "probe.ids = {} for i = 1, 52 do "
+                    "probe.ids[i] = probe.host.http('GET', 'x') end",
+            settle=1.0)
+        for ident in map(int, lua(probed, "table.concat(probe.ids, ' ')")
+                         [2:-1].split()):
+            probed.send(NET_RESPONSE, response(ident, 200))
+        lua(probed, "for _, id in ipairs(probe.ids) do "
+                    "probe.host.result(id) end probe.ids = nil")
     ids = [i for i, _ in probed.joined(NET_REQUEST)]
     assert len(ids) == 260
     start = ids[0]

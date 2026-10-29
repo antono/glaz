@@ -20,6 +20,11 @@ PHOTO_FROM, CHUNK, END = 0x1A, 0x07, 0x08
 PACKET = 242          # max_length() 243, less the code, made even
 TOP_Y, ROW_H = 65, 55
 STATUS_Y = TOP_Y + ROW_H * 4
+# Translate, the camera library and glaz_photo take some 40 KB here, as
+# source with its debug information and 64-bit pointers, and the photo
+# finds no room; on Frame they are bytecode, 32-bit, and smaller
+# (docs/TESTING.md, "Memory")
+PHOTO_HEAP = pytest.mark.heap(16)
 
 
 def asks(g) -> list[tuple]:
@@ -618,6 +623,7 @@ def test_photo_asks_for_the_tail_and_does_not_listen(glasses):
     glasses.assert_ok()
 
 
+@PHOTO_HEAP
 def test_a_tap_in_photo_sends_a_photo_to_read(glasses):
     photo_mode(glasses)
     window(glasses, 1, 0, 0, 1)
@@ -654,6 +660,7 @@ def test_the_mode_picked_is_kept(glasses):
     glasses.assert_ok()
 
 
+@PHOTO_HEAP
 def test_a_camera_that_fails_says_so(frame):
     photo_mode(frame)
     window(frame, 1, 0, 0, 1)
@@ -863,6 +870,7 @@ def test_another_app_opened_while_listening_ends_it(glasses):
     glasses.assert_ok()
 
 
+@PHOTO_HEAP
 def test_photo_left_alone_closes_and_the_camera_sleeps(glasses):
     photo_mode(glasses)
     window(glasses, 1, 0, 0, 1)
