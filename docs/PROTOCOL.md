@@ -1310,7 +1310,9 @@ Lua console) -- the REPL is blocked then, so `glaz.lua` runs it, in
 - The Lua is tried with `return ` in front first, so an expression answers
   with its value: `frame.battery_level()` gives `100`. What it `print()`s
   comes first, one line each, then each value it returns; a table shows
-  its first 40 entries, one level deep. The answer stops at 8 KB.
+  its first 40 entries, one level deep. The answer stops at 8 KB, and a
+  long string is cut before it is quoted, so a value far longer still
+  fits. Lua that runs the heap out is answered `-not enough memory`.
 - It runs in the app's globals: `frame.*`, the libraries, and the globals
   of earlier requests, which stay. The app's own locals are out of reach.
   It runs on the main loop, which waits for it; Lua that never ends hangs
