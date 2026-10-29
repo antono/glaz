@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../services/agent_history.dart';
+import '../services/photos.dart';
 import '../services/services.dart';
 import '../theme.dart';
 
-/// The AI agent's settings: its server, key and model. In Glaz > More >
-/// Services under the AI agent's switch, and on a page of its own from
-/// Assistant's and Factchecker's pages. Phone only: none of it goes to
-/// the glasses.
+/// The AI agent's settings: its server, key and model. On its page
+/// ([AgentScreen]), from Glaz > More > Services and from Assistant's and
+/// Factchecker's pages. Phone only: none of it goes to the glasses.
 class AgentSettings extends StatefulWidget {
   const AgentSettings({super.key});
 
@@ -103,7 +104,7 @@ class _AgentSettingsState extends State<AgentSettings> {
   }
 }
 
-/// The AI agent's settings on a page of their own.
+/// The AI agent's page: its settings, then what it was asked.
 class AgentScreen extends StatelessWidget {
   const AgentScreen({super.key});
 
@@ -112,7 +113,108 @@ class AgentScreen extends StatelessWidget {
     appBar: AppBar(title: const Text('AI agent')),
     body: ListView(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      children: const [AgentSettings()],
+      children: [const AgentSettings(), AgentRequests(AgentHistory.instance)],
+    ),
+  );
+}
+
+/// What the AI agent was asked, newest first: who asked, when, how long it
+/// took, and the start of the answer or what went wrong; a tap shows all
+/// that is kept of it.
+class AgentRequests extends StatelessWidget {
+  const AgentRequests(this.history, {super.key});
+  final AgentHistory history;
+
+  static String took(AgentCall c) {
+    final t = c.took;
+    if (t == null) return 'waiting..';
+    return t.inSeconds >= 1 ? '${t.inSeconds} s' : '${t.inMilliseconds} ms';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    return ListenableBuilder(
+      listenable: history,
+      builder: (context, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 24, 0, 8),
+            child: Row(
+              children: [
+                Expanded(child: Text('Requests', style: text.titleMedium)),
+                if (history.calls.isNotEmpty)
+                  TextButton(
+                    onPressed: history.clear,
+                    child: const Text('Clear'),
+                  ),
+              ],
+            ),
+          ),
+          if (history.calls.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
+              child: Text(
+                'Nothing asked yet. Assistant and Factchecker requests are '
+                'listed here, the newest ${AgentHistory.kept}.',
+                style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+              ),
+            )
+          else
+            Card(
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  for (final c in history.calls)
+                    ListTile(
+                      leading: Icon(
+                        !c.done
+                            ? Icons.hourglass_empty
+                            : c.error == null
+                            ? Icons.check_circle_outline
+                            : Icons.error_outline,
+                        color: c.done && c.error != null
+                            ? scheme.error
+                            : scheme.primary,
+                      ),
+                      title: Text(
+                        '${c.who.isEmpty ? 'Agent' : c.who} · '
+                        '${stampLabel(c.at)} · ${took(c)}',
+                      ),
+                      subtitle: Text(
+                        '${c.asked}\n'
+                        '${c.error ?? c.answer ?? ''}',
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      onTap: () => _show(context, c),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _show(BuildContext context, AgentCall c) => showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('${c.who.isEmpty ? 'Agent' : c.who} · ${took(c)}'),
+      content: SingleChildScrollView(
+        child: SelectableText(
+          'Asked:\n${c.asked}\n\n'
+          '${c.error != null ? 'Went wrong:\n${c.error}' : 'Answered:\n${c.answer ?? '..'}'}',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
     ),
   );
 }

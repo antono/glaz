@@ -50,27 +50,41 @@ class ServicesScreen extends StatelessWidget {
           child: Column(
             children: [
               for (final service in services)
-                SwitchListTile(
-                  title: Row(
-                    children: [
-                      Text(service.label),
-                      if (!service.ready) ...[
-                        const SizedBox(width: 8),
-                        const _Badge('Planned'),
+                if (service.id == 'agent')
+                  // its page holds its settings and what it was asked
+                  ListTile(
+                    title: Text(service.label),
+                    subtitle: Text(_subtitle(s, service)),
+                    trailing: Switch(
+                      value: s.settings.serviceOn(service.id),
+                      onChanged: (v) => _toggle(context, s, service.id, v),
+                    ),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const AgentScreen(),
+                      ),
+                    ),
+                  )
+                else
+                  SwitchListTile(
+                    title: Row(
+                      children: [
+                        Text(service.label),
+                        if (!service.ready) ...[
+                          const SizedBox(width: 8),
+                          const _Badge('Planned'),
+                        ],
                       ],
-                    ],
+                    ),
+                    subtitle: Text(_subtitle(s, service)),
+                    value: service.ready && s.settings.serviceOn(service.id),
+                    onChanged: service.ready
+                        ? (v) => _toggle(context, s, service.id, v)
+                        : null,
                   ),
-                  subtitle: Text(_subtitle(s, service)),
-                  value: service.ready && s.settings.serviceOn(service.id),
-                  onChanged: service.ready
-                      ? (v) => _toggle(context, s, service.id, v)
-                      : null,
-                ),
             ],
           ),
         ),
-        // its settings, which Assistant and Factchecker share
-        if (s.settings.serviceOn('agent')) const AgentSettings(),
         if (s.notifications.supported) ...[
           const SizedBox(height: 16),
           Align(
@@ -218,8 +232,9 @@ class ServicesScreen extends StatelessWidget {
     switch (service.id) {
       case 'agent':
         return s.settings.agentUrl.isEmpty
-            ? 'Not set up yet: below'
-            : '${service.description}: ${AgentLink.state(true, s.settings.agentUrl)}';
+            ? 'Not set up yet: tap to set it up'
+            : 'Assistant and Factchecker ask '
+                  '${AgentLink.state(true, s.settings.agentUrl)}';
       case 'keys':
         return _keysForeground(s)
             ? 'Only with Glaz on screen: turn it on in Accessibility '

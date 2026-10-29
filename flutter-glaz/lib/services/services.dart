@@ -7,6 +7,7 @@ import '../frame/parts.dart';
 import '../settings.dart';
 import '../term/hosts.dart';
 import 'agent_files.dart';
+import 'agent_history.dart';
 import 'app_check.dart';
 import 'assistant.dart';
 import 'factcheck.dart';
@@ -157,6 +158,9 @@ class Services {
     await services.reader.load();
     await services.assistant.load();
     await services.factcheck.load();
+    await AgentHistory.instance.attach(
+      File('${assistantAt.path}/agent_history.json'),
+    );
     LuaBridge(s, services.lua);
     SettingsSync(link, s);
     services.keys.attach();

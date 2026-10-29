@@ -285,7 +285,7 @@ class AssistantService extends ChangeNotifier {
     this.queries,
     this.voice,
     this.dir,
-  }) : _agentFor = agent ?? agentFrom {
+  }) : _agentFor = agent ?? ((s) => agentFrom(s, who: 'Assistant')) {
     link.events.listen(onMessage);
     link.addListener(() {
       if (!link.connected) _drop();
@@ -477,7 +477,7 @@ class AssistantService extends ChangeNotifier {
   int _rate = 8000;
   int _bits = 8;
 
-  bool get _on => settings.serviceOn('assistant');
+  bool get _on => settings.serviceOn('agent');
 
   @visibleForTesting
   void onMessage(List<int> m) {
@@ -621,7 +621,7 @@ class AssistantService extends ChangeNotifier {
     _drop();
     _turn++;
     if (!_on) {
-      _show('e:', 'The assistant is off: Glaz > More > Services');
+      _show('e:', noAgent(settings));
       return;
     }
     final t = transcriber;

@@ -66,17 +66,31 @@ hold. With nothing checked yet, the rows say what to do.
 after 30 minutes (`paused (30 min)`; a tap listens again); the red dot in
 the top bar shows it (`_M.rec`). The sound is Recorder's streaming:
 `REC_START` with a fourth byte `4` (for Factchecker), then `AUDIO`
-packets; there is no `AUDIO_END`, the sound has no end, only cuts. 8 kHz,
+packets, each let go of as it is sent (`collectgarbage('step')`, as
+Recorder's: two seconds of sound is 32 KB); there is no `AUDIO_END`, the
+sound has no end, only cuts. 8 kHz,
 16-bit unless Glaz > Menu > Factchecker says 8. While listening `busy()`
 is true, so `APP_TIMEOUT` (60 s without input) does not close it. The
 link lost stops the microphone (`no phone`); back, it listens again and
 asks for the list.
 
-**What it asks of the phone.** `FACTS` (`0x01`, `>BBI2`: op, id): `3`
-the list (on opening, again every 5 s until it comes, and when the link
-is back), `1` check since the last cut, `2` open fact `id`, `0` the wearer
-left. The phone answers through `remote()` (`MODULE_CALL`): `f:` the
-facts, `d:` one fact's check, `e:` an error, `n:` a note. A `MODULE_CALL`
+**Four rows at a time.** The phone keeps the session; the glasses hold
+only what their screen shows -- four facts, or four lines of a check --
+and ask for the next four as a tilt moves the view, `..` in a row until
+they come ([PROTOCOL.md, Memory on the glasses](../../docs/PROTOCOL.md#memory-on-the-glasses)).
+A session an hour long costs them no more memory than a minute's
+(`test_a_long_session_takes_no_more_memory`). Opened again within 10
+minutes -- after leaving for a moment, or after the glasses' app
+restarted -- it goes on with the same session, its facts still there.
+
+**What it asks of the phone.** `FACTS` (`0x01`, `>BBI2I2`: op, a, b):
+`3` the facts from number `a`, `0` the newest, followed (on opening, as
+the view moves, when the link is back); `2` fact `a`'s check from its
+line `b`; `1` check since the last cut; `0` the wearer left. An ask not
+answered in 5 s goes again. The phone answers through `remote()`
+(`MODULE_CALL`): `f:` a window of facts, `d:` a window of one fact's
+check, `e:` an error, `n:` a note; it sends the window again as it
+changes. A `MODULE_CALL`
 to it while it is not running starts it in the background, which does
 nothing: it does not listen unless the wearer opened it.
 

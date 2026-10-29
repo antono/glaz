@@ -117,7 +117,7 @@ void main() {
 
   test('a new session: an empty list, then listening', () {
     fc.onMessage([recStart, 16, 8, forFactcheck]);
-    expect(calls(), ['f:0']);
+    expect(calls(), ['f:0:0:1']);
     expect(fc.listening, isTrue);
     expect(transcriber.starts, 1);
   });
@@ -139,7 +139,7 @@ void main() {
       // a new transcription for what follows, the cut pending
       expect(transcriber.starts, 2);
       expect(fc.listening, isTrue);
-      expect(lastCall(), 'f:1');
+      expect(lastCall(), 'f:1:0:1');
       fc.onMessage(say('next part'));
       await pumpEventQueue();
 
@@ -147,7 +147,7 @@ void main() {
       expect(asked.first.content, claimsPrompt);
       expect(asked.last.content, 'the tower is 137 metres');
       expect(agent.asked[1].last.content, 'The Eiffel Tower is 137 m tall');
-      expect(lastCall(), 'f:0\n1|F|Eiffel 137 m');
+      expect(lastCall(), 'f:0:1:1\n1|F|Eiffel 137 m');
       final f = fc.current!.facts.single;
       expect(f.verdict, Verdict.wrong);
       expect(f.sources, ['https://en.wikipedia.org/wiki/Eiffel_Tower']);
@@ -159,7 +159,7 @@ void main() {
       await pumpEventQueue();
       expect(agent.asked.last.last.content, 'next part');
       expect(calls().reversed.take(2), [
-        'f:0\n1|F|Eiffel 137 m',
+        'f:0:1:1\n1|F|Eiffel 137 m',
         'n:No facts in that',
       ]);
       expect(fc.sessions, [fc.current]);
@@ -173,14 +173,14 @@ void main() {
     fc.onMessage([facts, 1, 0, 0]);
     await pumpEventQueue();
     expect(agent.waiting.keys, ['A is 1', 'B is 2']);
-    expect(lastCall(), 'f:0\n1|P|A one\n2|P|B two');
+    expect(lastCall(), 'f:0:2:1\n1|P|A one\n2|P|B two');
 
     agent.release('B is 2', check('true', 'Yes.'));
     await pumpEventQueue();
-    expect(lastCall(), 'f:0\n1|P|A one\n2|T|B two');
+    expect(lastCall(), 'f:0:2:1\n1|P|A one\n2|T|B two');
     agent.release('A is 1', check('partly', 'Almost.'));
     await pumpEventQueue();
-    expect(lastCall(), 'f:0\n1|M|A one\n2|T|B two');
+    expect(lastCall(), 'f:0:2:1\n1|M|A one\n2|T|B two');
   });
 
   test('the claims are asked for at once, the checks may take time', () async {
@@ -211,8 +211,8 @@ void main() {
     fc.onMessage([facts, 1, 0, 0]);
     await pumpEventQueue();
 
-    fc.onMessage([facts, 2, 0, 1]);
-    expect(lastCall(), 'd:1:P\nCHECKING..\nWater boils at 137 C');
+    fc.onMessage([facts, 2, 0, 1, 0, 1]);
+    expect(lastCall(), 'd:1:P:2:1\nCHECKING..\nWater boils at 137 C');
 
     agent.release(
       'Water boils at 137 C',
@@ -225,10 +225,20 @@ void main() {
     );
     await pumpEventQueue();
     expect(calls().reversed.take(2).toList().reversed, [
-      'f:0\n1|F|Boils 137',
-      'd:1:F\nFALSE\nWater boils at 137 C\nAt sea level it boils at\n100 C.\n'
-          'britannica.com\nwikipedia.org\nbbc.co.uk',
+      'f:0:1:1\n1|F|Boils 137',
+      // four lines, what the screen shows, of seven
+      'd:1:F:7:1\nFALSE\nWater boils at 137 C\nAt sea level it boils at\n'
+          '100 C.',
     ]);
+
+    // tilted on: the next lines, the last four at most
+    fc.onMessage([facts, 2, 0, 1, 0, 4]);
+    expect(
+      lastCall(),
+      'd:1:F:7:4\n100 C.\nbritannica.com\nwikipedia.org\nbbc.co.uk',
+    );
+    fc.onMessage([facts, 2, 0, 1, 0, 137]);
+    expect(lastCall(), startsWith('d:1:F:7:4\n'));
 
     fc.onMessage([facts, 2, 0, 9]);
     expect(lastCall(), 'e:This fact is gone');
@@ -236,7 +246,7 @@ void main() {
 
   test('the list again on op 3', () async {
     fc.onMessage([facts, 3, 0, 0]);
-    expect(lastCall(), 'f:0');
+    expect(lastCall(), 'f:0:0:1');
     agent.claims = '[${claim('X', 'x')}]';
     agent.checks['X'] = check('unknown', 'No source.');
     fc.onMessage([recStart, 8, 8, forFactcheck]);
@@ -245,7 +255,7 @@ void main() {
     await pumpEventQueue();
     link.sent.clear();
     fc.onMessage([facts, 3, 0, 0]);
-    expect(calls(), ['f:0\n1|U|x']);
+    expect(calls(), ['f:0:1:1\n1|U|x']);
   });
 
   test(
@@ -306,14 +316,14 @@ void main() {
     await pumpEventQueue();
     expect(calls(), isEmpty);
     fc.onMessage([facts, 3, 0, 0]); // opened again: the list
-    expect(calls(), ['f:0\n1|T|z']);
+    expect(calls(), ['f:0:1:1\n1|T|z']);
   });
 
   test('nothing heard: a note, nothing asked', () async {
     fc.onMessage([recStart, 8, 8, forFactcheck]);
     fc.onMessage([facts, 1, 0, 0]);
     await pumpEventQueue();
-    expect(calls(), ['f:0', 'f:1', 'n:Nothing heard', 'f:0']);
+    expect(calls(), ['f:0:0:1', 'f:1:0:1', 'n:Nothing heard', 'f:0:0:1']);
     expect(agent.asked, isEmpty);
     expect(fc.sessions, isEmpty);
   });
@@ -332,18 +342,20 @@ void main() {
     fc.onMessage([recStart, 8, 8, forFactcheck]);
     expect(lastCall(), 'e:No speech recognition on this phone');
 
-    settings.setService('factcheck', false);
+    // the AI agent switched off: no listening, though an agent is there
+    settings.setService('agent', false);
     fc = FactCheckService(link, settings, transcriber, agent: (_) => agent);
     fc.onMessage([recStart, 8, 8, forFactcheck]);
-    expect(lastCall(), startsWith('e:Factchecker is off'));
-    settings.setService('factcheck', true);
+    expect(lastCall(), 'e:The AI agent is off: Glaz > More > Services');
+    expect(fc.listening, isFalse);
+    settings.setService('agent', true);
 
     agent.fail = AgentError('no answer in 120 s');
     fc.onMessage([recStart, 8, 8, forFactcheck]);
     fc.onMessage(say('z'));
     fc.onMessage([facts, 1, 0, 0]);
     await pumpEventQueue();
-    expect(calls().reversed.take(2), ['f:0', 'e:no answer in 120 s']);
+    expect(calls().reversed.take(2), ['f:0:0:1', 'e:no answer in 120 s']);
   });
 
   test('a check gone wrong is unknown, with why', () async {
@@ -354,7 +366,7 @@ void main() {
     fc.onMessage(say('p q'));
     fc.onMessage([facts, 1, 0, 0]);
     await pumpEventQueue();
-    expect(lastCall(), 'f:0\n1|U|p\n2|U|q');
+    expect(lastCall(), 'f:0:2:1\n1|U|p\n2|U|q');
     expect(
       fc.current!.facts.first.summary,
       'The agent answered something else',
@@ -419,31 +431,84 @@ void main() {
       expect(FactCheckService.glassesShort('a|b\nc'), 'a b c');
     });
 
-    test('the list keeps the newest that fit in 900 bytes', () {
+    test('the list: four facts at a time, from where the glasses look', () {
       final s = fc.current = FactSession(1);
       for (var i = 0; i < 137; i++) {
-        s.facts.add(Fact(i + 1, 'claim $i', 'Short claim number $i'));
+        s.facts.add(Fact(i + 1, 'claim $i', 'Короткое утверждение $i'));
       }
-      final list = fc.glassesList();
-      expect(utf8.encode(list).length, lessThanOrEqualTo(900));
-      final lines = list.split('\n');
-      expect(lines.first, 'f:0');
-      expect(lines.last, '137|P|Short claim number 136');
-      final ids = [for (final l in lines.skip(1)) int.parse(l.split('|')[0])];
-      expect(ids, List.generate(ids.length, (i) => 138 - ids.length + i));
+      String ids(String list) =>
+          [for (final l in list.split('\n').skip(1)) l.split('|')[0]].join(' ');
+
+      // the newest, as the glasses follow them
+      final tail = fc.glassesList();
+      expect(tail.split('\n').first, 'f:0:137:134');
+      expect(ids(tail), '134 135 136 137');
+      // from a number: that and the three after it
+      expect(ids(fc.glassesList(null, 1)), '1 2 3 4');
+      expect(ids(fc.glassesList(null, 137)), '134 135 136 137');
+      for (final from in [0, 1, 70, 137]) {
+        expect(
+          utf8.encode(fc.glassesList(null, from)).length,
+          lessThanOrEqualTo(FactCheckService.maxBytes),
+        );
+      }
     });
 
-    test('a fact is cut to 900 bytes, in the language heard', () {
+    test('the glasses window is sent again as it changes', () async {
+      final names = ['A', 'B', 'C', 'D', 'E', 'F'];
+      agent.claims =
+          '[${names.map((n) => claim(n, n.toLowerCase())).join(', ')}]';
+      fc.onMessage([recStart, 8, 8, forFactcheck]);
+      fc.onMessage(say('a to f'));
+      fc.onMessage([facts, 1, 0, 0]);
+      await pumpEventQueue();
+      // the newest four, followed
+      expect(lastCall(), 'f:0:6:3\n3|P|c\n4|P|d\n5|P|e\n6|P|f');
+      fc.onMessage([facts, 3, 0, 1, 0, 0]); // scrolled to the first
+      expect(lastCall(), 'f:0:6:1\n1|P|a\n2|P|b\n3|P|c\n4|P|d');
+      agent.release('B', check('true', 'Yes.'));
+      await pumpEventQueue();
+      expect(lastCall(), 'f:0:6:1\n1|P|a\n2|T|b\n3|P|c\n4|P|d');
+      fc.onMessage([facts, 3, 0, 0, 0, 0]); // the newest again
+      expect(lastCall(), 'f:0:6:3\n3|P|c\n4|P|d\n5|P|e\n6|P|f');
+    });
+
+    test('a check: four lines at a time, in the language heard', () {
       settings.assistantLanguage = 'ru-RU';
       final f = Fact(7, 'Утверждение', 'у')
         ..verdict = Verdict.right
         ..summary = 'Очень длинное объяснение ' * 80;
       final d = fc.glassesFact(f);
-      expect(utf8.encode(d).length, lessThanOrEqualTo(900));
-      expect(d, startsWith('d:7:T\nПРАВДА\nУтверждение\nОчень'));
-      for (final l in d.split('\n').skip(1)) {
+      expect(
+        utf8.encode(d).length,
+        lessThanOrEqualTo(FactCheckService.maxBytes),
+      );
+      final head = d.split('\n').first.split(':');
+      expect(head.take(3), ['d', '7', 'T']);
+      final total = int.parse(head[3]);
+      expect(total, greaterThan(FactCheckService.rows));
+      expect(d, startsWith('d:7:T:$total:1\nПРАВДА\nУтверждение\nОчень'));
+      expect(d.split('\n'), hasLength(1 + FactCheckService.rows));
+      final later = fc.glassesFact(f, from: 3);
+      expect(later.split('\n')[1], startsWith('Очень'));
+      for (final l in later.split('\n').skip(1)) {
         expect(l.length, lessThanOrEqualTo(26));
       }
+    });
+
+    test('opened again soon, the same session goes on', () async {
+      agent.claims = '[${claim('C', 'c')}]';
+      agent.checks['C'] = check('true', 'Yes.');
+      fc.onMessage([recStart, 8, 8, forFactcheck]);
+      fc.onMessage(say('c'));
+      fc.onMessage([facts, 1, 0, 0]);
+      await pumpEventQueue();
+      final first = fc.current;
+      fc.onMessage([facts, 0, 0, 0]); // left, or the glasses restarted
+      link.sent.clear();
+      fc.onMessage([recStart, 8, 8, forFactcheck]);
+      expect(fc.current, same(first));
+      expect(calls().first, 'f:0:1:1\n1|T|c');
     });
   });
 }

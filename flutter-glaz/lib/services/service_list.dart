@@ -38,21 +38,8 @@ const services = [
   GlazService(
     'agent',
     'AI agent',
-    'Your agent, which Assistant and Factchecker ask: any server with the '
-        'OpenAI chat API',
-    true,
-  ),
-  GlazService(
-    'assistant',
-    'Assistant',
-    "Answers what you ask the glasses' Assistant, with the AI agent",
-    true,
-  ),
-  GlazService(
-    'factcheck',
-    'Factchecker',
-    "Checks the facts said around you, with the AI agent, for the "
-        "glasses' Factchecker",
+    "Your agent, for the glasses' Assistant and Factchecker: any server "
+        'with the OpenAI chat API',
     true,
   ),
   GlazService(

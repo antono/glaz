@@ -244,7 +244,7 @@ class FactCheckService extends ChangeNotifier {
     this.transcriber, {
     Agent? Function(Settings)? agent,
     this.dir,
-  }) : _agentFor = agent ?? agentFrom {
+  }) : _agentFor = agent ?? ((s) => agentFrom(s, who: 'Factchecker')) {
     link.events.listen(onMessage);
     link.addListener(() {
       if (!link.connected) {
@@ -275,8 +275,17 @@ class FactCheckService extends ChangeNotifier {
   /// asks for it at once.
   static const checkWait = Duration(minutes: 5);
 
-  /// The most sent to the glasses at once, in bytes.
-  static const maxBytes = 900;
+  /// Facts, or lines of a check, sent to the glasses at once: what their
+  /// screen shows. They hold no more, and ask for the next as they move.
+  static const rows = 4;
+
+  /// The most sent to the glasses at once, in bytes: rows of Cyrillic fit.
+  static const maxBytes = 300;
+
+  /// Opened again within this of the last thing heard or checked, the
+  /// glasses go on with the same session: after leaving for a moment, or
+  /// after their app restarted.
+  static const goOn = Duration(minutes: 10);
 
   /// Every session kept with something heard in it, newest first.
   final sessions = <FactSession>[];
@@ -301,8 +310,17 @@ class FactCheckService extends ChangeNotifier {
   int _rate = 8000;
   int _bits = 8;
 
-  /// The fact open on the glasses, sent again when its check comes.
+  /// The fact open on the glasses, sent again when its check comes, and
+  /// its line on their first row.
   int? _opened;
+  int _openedFrom = 1;
+
+  /// The facts on the glasses' screen: from this number, 0 the newest.
+  /// Sent again as they change.
+  int _window = 0;
+
+  /// When the current session last heard or checked something.
+  DateTime _lastAt = DateTime(0);
 
   /// Factchecker is open on the glasses. Not open, nothing is sent: a
   /// MODULE_CALL would start it in the background, in place of the app
@@ -394,6 +412,7 @@ class FactCheckService extends ChangeNotifier {
   void _onFacts(List<int> m) {
     final op = m.length > 1 ? m[1] : -1;
     final id = m.length > 3 ? m[2] << 8 | m[3] : 0;
+    final from = m.length > 5 ? m[4] << 8 | m[5] : 0;
     // a cut comes only from Factchecker open; the list or a fact asked for
     // say it is
     if (op == 0) _onGlasses = false;
@@ -409,9 +428,15 @@ class FactCheckService extends ChangeNotifier {
         if (listening) _cut(next: true);
       case 2:
         _opened = id;
+        _openedFrom = from < 1 ? 1 : from;
         final fact = current?.fact(id);
-        _call(fact == null ? 'e:This fact is gone' : glassesFact(fact));
+        _call(
+          fact == null
+              ? 'e:This fact is gone'
+              : glassesFact(fact, from: _openedFrom),
+        );
       case 3:
+        _window = id;
         _sendList();
     }
   }
@@ -420,10 +445,17 @@ class FactCheckService extends ChangeNotifier {
     _drop();
     _opened = null;
     _onGlasses = true;
-    current = FactSession(_nextSession++);
+    _window = 0;
+    // a session left a moment ago goes on: the glasses' app may have
+    // restarted, and the wearer finds the facts again
+    final now = DateTime.now();
+    if (current == null || now.difference(_lastAt) > goOn) {
+      current = FactSession(_nextSession++);
+    }
+    _lastAt = now;
     _sendList();
-    if (!settings.serviceOn('factcheck')) {
-      _call('e:Factchecker is off: Glaz > More > Services');
+    if (!settings.serviceOn('agent')) {
+      _call('e:${noAgent(settings)}');
       return;
     }
     final t = transcriber;
@@ -471,6 +503,7 @@ class FactCheckService extends ChangeNotifier {
     _transcription = null;
     if (next && transcriber != null) _listen(transcriber!);
     session.pending++;
+    _lastAt = DateTime.now();
     notifyListeners();
     _sendList(session);
     _check(session, tr, feed).whenComplete(() {
@@ -582,28 +615,32 @@ class FactCheckService extends ChangeNotifier {
     notifyListeners();
     _save();
     _sendList(session);
+    if (session == current) _lastAt = DateTime.now();
     if (session == current && _opened == fact.id) {
-      _call(glassesFact(fact), session);
+      _call(glassesFact(fact, from: _openedFrom), session);
     }
   }
 
-  /// The facts as the glasses list them: `f:<pending>`, then
-  /// `\n<id>|<verdict>|<short>` each, oldest first, the newest that fit in
-  /// [maxBytes].
-  @visibleForTesting
-  String glassesList([FactSession? session]) {
+  /// The facts on the glasses' screen: `f:<pending>:<total>:<from>`,
+  /// then `\n<id>|<verdict>|<short>` each, [rows] at most from number
+  /// [from] (1 the oldest; 0 the newest, as the glasses follow them), no
+  /// more than [maxBytes].
+  String glassesList([FactSession? session, int? from]) {
     final s = session ?? current;
-    final head = 'f:${s?.pending ?? 0}';
-    final lines = <String>[];
-    var bytes = utf8.encode(head).length;
-    for (final f in (s?.facts ?? const <Fact>[]).reversed) {
+    final facts = s?.facts ?? const <Fact>[];
+    final tail = facts.length > rows ? facts.length - rows + 1 : 1;
+    final want = from ?? _window;
+    final start = want == 0 ? tail : want.clamp(1, tail);
+    final out = StringBuffer('f:${s?.pending ?? 0}:${facts.length}:$start');
+    var bytes = utf8.encode(out.toString()).length;
+    for (final f in facts.skip(start - 1).take(rows)) {
       final line = '\n${f.id}|${f.verdict.code}|${glassesShort(f.short)}';
       final n = utf8.encode(line).length;
       if (bytes + n > maxBytes) break;
       bytes += n;
-      lines.insert(0, line);
+      out.write(line);
     }
-    return '$head${lines.join()}';
+    return out.toString();
   }
 
   /// [short] cut to a row of the list: the glasses put a mark and a space
@@ -613,20 +650,27 @@ class FactCheckService extends ChangeNotifier {
     return s.length > 22 ? '${s.substring(0, 20)}..' : s;
   }
 
-  /// [fact] for the glasses: `d:<id>:<verdict>`, then the verdict word, the
-  /// claim, the summary and the sources' sites, in lines cut to the screen,
-  /// as many as fit in [maxBytes].
+  /// [fact]'s check on the glasses' screen:
+  /// `d:<id>:<verdict>:<total>:<from>`, then [rows] lines at most from line
+  /// [from] of the verdict word, the claim, the summary and the sources'
+  /// sites, cut to the screen, `<total>` lines in all, no more than
+  /// [maxBytes].
   @visibleForTesting
-  String glassesFact(Fact fact) {
+  String glassesFact(Fact fact, {int from = 1}) {
     final text = [
       fact.verdict.word(settings.assistantLanguage),
       fact.claim,
       if (fact.summary.isNotEmpty) fact.summary,
       for (final s in fact.sources.map(site).toSet().take(3)) s,
     ].join('\n');
-    final out = StringBuffer('d:${fact.id}:${fact.verdict.code}');
-    var bytes = out.length;
-    for (final l in wrapForGlasses(text, maxLines: 60).split('\n')) {
+    final all = wrapForGlasses(text, maxLines: 60).split('\n');
+    final last = all.length > rows ? all.length - rows + 1 : 1;
+    final start = from.clamp(1, last);
+    final out = StringBuffer(
+      'd:${fact.id}:${fact.verdict.code}:${all.length}:$start',
+    );
+    var bytes = utf8.encode(out.toString()).length;
+    for (final l in all.skip(start - 1).take(rows)) {
       final n = utf8.encode(l).length + 1;
       if (bytes + n > maxBytes) break;
       bytes += n;

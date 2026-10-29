@@ -1,8 +1,9 @@
 """Factchecker (apps/factcheck/factcheck.lua) on Frame, the only glasses that
 have it: it listens from the start, the sound streamed to the phone; a tap
 on the bottom row cuts the conversation there for the phone to check; the
-facts the phone sends back listed with a mark and a colour by verdict, one
-opened to read its check; notes that go by themselves; the link lost and
+facts the phone keeps shown four at a time, each window asked for as the
+view moves, with a mark and a colour by verdict; one opened to read its
+check, four lines at a time; notes that go by themselves; the link lost and
 back; leaving tells the phone (docs/PROTOCOL.md, "Factchecker").
 """
 import struct
@@ -16,23 +17,58 @@ pytestmark = pytest.mark.module("factcheck")
 # Glasses -> phone (apps/factcheck/factcheck.lua)
 FACTS, AUDIO, AUDIO_END = 0x01, 0x05, 0x06
 REC_DROP, REC_START = 0x10, 0x1F
+ROWS = 4
 
-LIST = ("f:0\n1|T|Water boils at 100 C\n2|F|Minsk has 137k people"
-        "\n3|M|Coffee dehydrates\n4|P|Everest is 8849 m")
-CHECK = ("d:2:F\nFALSE\nMinsk has 137 thousand\npeople.\n"
-         "About 2 million live in\nMinsk.\nbelstat.gov.by")
-
-
-def facts(op, ident=0):
-    return struct.pack(">BBH", FACTS, op, ident)   # Lua's >BBI2
+FOUR = [("T", "Water boils at 100 C"), ("F", "Minsk has 137k people"),
+        ("M", "Coffee dehydrates"), ("P", "Everest is 8849 m")]
+CHECK = ["FALSE", "Minsk has 137 thousand", "people.",
+         "About 2 million live in", "Minsk.", "belstat.gov.by"]
 
 
-def opened(g, listed=LIST):
+def facts(op, a=0, b=0):
+    return struct.pack(">BBHH", FACTS, op, a, b)   # Lua's >BBI2I2
+
+
+def window(session, start, pending=0):
+    """The phone's f: for facts [(v, text), ...] from number start, 0 the
+    newest, as services/factcheck.dart makes it."""
+    tail = max(1, len(session) - ROWS + 1)
+    start = tail if start == 0 else min(max(start, 1), tail)
+    rows = "".join(f"\n{i}|{v}|{t}" for i, (v, t)
+                   in enumerate(session[start - 1:start - 1 + ROWS], start))
+    return f"f:{pending}:{len(session)}:{start}{rows}"
+
+
+def check_window(ident, v, lines, start):
+    last = max(1, len(lines) - ROWS + 1)
+    start = min(max(start, 1), last)
+    body = "".join(f"\n{l}" for l in lines[start - 1:start - 1 + ROWS])
+    return f"d:{ident}:{v}:{len(lines)}:{start}{body}"
+
+
+def asked(g, op):
+    """The last FACTS the glasses sent with op: (a, b)."""
+    for m in reversed(g.sent(FACTS)):
+        if m[1] == op:
+            return struct.unpack(">HH", m[2:6])
+    return None
+
+
+def answer(g, session, pending=0):
+    """The phone answers the glasses' last ask for the list."""
+    g.call("factcheck", window(session, asked(g, 3)[0], pending))
+
+
+def opened(g, session=FOUR):
     """Factchecker from the menu, listening, the phone's facts on screen."""
     g.open_app("factcheck")
-    if listed is not None:
-        g.call("factcheck", listed)
+    if session is not None:
+        answer(g, session)
     return g
+
+
+def numbered(n):
+    return [("T", f"Fact {i}") for i in range(1, n + 1)]
 
 
 def color_of(g, text):
@@ -127,7 +163,7 @@ def test_a_tap_on_the_bottom_row_cuts_and_shows_it_at_once(glasses):
     assert glasses.emu._mic_on                   # it goes on listening
     assert not glasses.sent(AUDIO_END)
     assert "reading..  tap = check" in glasses.screen_text()
-    glasses.call("factcheck", "f:0" + LIST[3:])  # the phone has read it
+    glasses.call("factcheck", window(FOUR, 0))   # the phone has read it
     assert "reading.." not in glasses.screen_text()
     glasses.assert_ok()
 
@@ -139,7 +175,8 @@ def test_the_facts_are_marked_and_coloured_by_verdict(glasses):
                         ("~ Coffee dehydrates", "YELLOW"),
                         (". Everest is 8849 m", "WHITE")):
         assert color_of(glasses, text) == color
-    glasses.call("factcheck", LIST + "\n5|U|Cats sleep 16 h")
+    five = FOUR + [("U", "Cats sleep 16 h")]
+    glasses.call("factcheck", window(five, 0))
     assert color_of(glasses, "? Cats sleep 16 h") == "GREY"
     glasses.tilt(-1)
     glasses.tilt(-1)
@@ -147,53 +184,85 @@ def test_the_facts_are_marked_and_coloured_by_verdict(glasses):
     glasses.assert_ok()
 
 
-def test_the_list_shows_the_newest_with_the_cursor_below(glasses):
-    many = "f:0" + "".join(f"\n{i}|T|Fact {i}" for i in range(1, 8))
-    opened(glasses, many)
+def test_opening_asks_for_the_newest_four_only(glasses):
+    glasses.clear_sent()
+    opened(glasses, numbered(137))
+    assert asked(glasses, 3) == (0, 0)           # the newest, followed
     text = glasses.screen_text()
-    assert "Fact 1" not in text and "+ Fact 4" in text and "+ Fact 7" in text
+    assert "Fact 133" not in text
+    for i in (134, 135, 136, 137):
+        assert f"+ Fact {i}" in text
     assert cursor_row(glasses).endswith("tap = check")
     assert color_of(glasses, cursor_row(glasses)) == "YELLOW"
     glasses.assert_ok()
 
 
-def test_tilts_move_up_the_facts_and_back_down(glasses):
-    many = "f:0" + "".join(f"\n{i}|T|Fact {i}" for i in range(1, 8))
-    opened(glasses, many)
-    glasses.tilt(-1)
-    assert cursor_row(glasses) == "+ Fact 7"
+def test_tilting_up_asks_for_the_facts_above(glasses):
+    session = numbered(137)
+    opened(glasses, session)
     for _ in range(4):
         glasses.tilt(-1)
-    assert cursor_row(glasses) == "+ Fact 3"     # scrolled up to it
-    assert "Fact 7" not in glasses.screen_text()
+    assert cursor_row(glasses) == "+ Fact 134"
+    glasses.clear_sent()
+    glasses.tilt(-1)                             # off the top of the window
+    assert asked(glasses, 3) == (133, 0)
+    assert cursor_row(glasses) == ".."           # not here yet
+    answer(glasses, session)
+    assert cursor_row(glasses) == "+ Fact 133"
+    assert "Fact 137" not in glasses.screen_text()
+    glasses.assert_ok()
+
+
+def test_tilting_back_down_follows_the_newest_again(glasses):
+    session = numbered(137)
+    opened(glasses, session)
+    for _ in range(5):
+        glasses.tilt(-1)
+    answer(glasses, session)
     for _ in range(5):
         glasses.tilt(1)
+    assert asked(glasses, 3) == (0, 0)
+    answer(glasses, session)
     assert cursor_row(glasses).endswith("tap = check")
+    assert "+ Fact 137" in glasses.screen_text()
     glasses.tilt(1)                              # no further
     assert cursor_row(glasses).endswith("tap = check")
     glasses.assert_ok()
 
 
-def test_the_cursor_stays_on_its_fact_as_the_list_changes(glasses):
+def test_a_window_for_a_view_since_left_is_ignored(glasses):
+    session = numbered(137)
+    opened(glasses, session)
+    for _ in range(5):
+        glasses.tilt(-1)
+    glasses.call("factcheck", window(session, 0))   # the tail, too late
+    assert cursor_row(glasses) == ".."
+    answer(glasses, session)
+    assert cursor_row(glasses) == "+ Fact 133"
+
+
+def test_the_cursor_stays_on_its_fact_as_the_list_grows(glasses):
     opened(glasses)
     glasses.tilt(-1)
     glasses.tilt(-1)
     assert cursor_row(glasses) == "~ Coffee dehydrates"
-    glasses.call("factcheck", LIST + "\n5|P|Cats sleep 16 h")
+    five = FOUR + [("P", "Cats sleep 16 h")]
+    glasses.call("factcheck", window(five, 1))   # its window, sent again
     assert cursor_row(glasses) == "~ Coffee dehydrates"
     glasses.assert_ok()
 
 
 def test_new_facts_follow_with_the_cursor_below(glasses):
     opened(glasses)
-    glasses.call("factcheck", LIST + "\n5|P|Cats sleep 16 h")
+    five = FOUR + [("P", "Cats sleep 16 h")]
+    glasses.call("factcheck", window(five, 0))
     text = glasses.screen_text()
     assert ". Cats sleep 16 h" in text and "Water boils" not in text
     assert cursor_row(glasses).endswith("tap = check")
 
 
 def test_tilts_with_no_facts_do_nothing(glasses):
-    opened(glasses, "f:0")
+    opened(glasses, [])
     glasses.tilt(-1)
     assert cursor_row(glasses).endswith("tap = check")
     glasses.assert_ok()
@@ -209,11 +278,12 @@ def test_a_tap_on_a_fact_opens_its_check(glasses):
     assert cursor_row(glasses) == "x Minsk has 137k people"
     glasses.clear_sent()
     glasses.tap(1)
-    assert glasses.sent(FACTS) == [facts(2, 2)]
+    assert glasses.sent(FACTS) == [facts(2, 2, 1)]
     assert "loading.." in glasses.screen_text()
-    glasses.call("factcheck", CHECK)
+    glasses.call("factcheck", check_window(2, "F", CHECK, 1))
     text = glasses.screen_text()
     assert "FALSE" in text and "Minsk has 137 thousand" in text
+    assert "Minsk." not in text                  # four lines only
     assert color_of(glasses, "FALSE") == "RED"
     assert color_of(glasses, "people.") == "WHITE"
     assert "tap = back  v" in text
@@ -221,18 +291,24 @@ def test_a_tap_on_a_fact_opens_its_check(glasses):
     glasses.assert_ok()
 
 
-def test_a_check_scrolls_by_a_screen(glasses):
+def test_a_check_asks_for_the_next_lines_as_it_scrolls(glasses):
     opened(glasses)
     for _ in range(3):
         glasses.tilt(-1)
     glasses.tap(1)
-    glasses.call("factcheck", CHECK)
+    glasses.call("factcheck", check_window(2, "F", CHECK, 1))
+    glasses.clear_sent()
     glasses.tilt(1)
+    assert glasses.sent(FACTS) == [facts(2, 2, 3)]   # a screen on, 3 rows
+    assert "loading.." in glasses.screen_text()
+    glasses.call("factcheck", check_window(2, "F", CHECK, 3))
     text = glasses.screen_text()
     assert "FALSE" not in text and "belstat.gov.by" in text
     assert "tap = back  ^" in text
     glasses.tilt(-1)
-    assert "FALSE" in glasses.screen_text()
+    assert glasses.sent(FACTS)[-1] == facts(2, 2, 1)
+    glasses.call("factcheck", check_window(2, "F", CHECK, 1))
+    assert color_of(glasses, "FALSE") == "RED"
     glasses.assert_ok()
 
 
@@ -241,7 +317,7 @@ def test_a_check_for_another_fact_is_ignored(glasses):
     for _ in range(3):
         glasses.tilt(-1)
     glasses.tap(1)
-    glasses.call("factcheck", "d:3:M\nPARTLY TRUE")
+    glasses.call("factcheck", check_window(3, "M", ["PARTLY TRUE"], 1))
     assert "PARTLY TRUE" not in glasses.screen_text()
     assert "loading.." in glasses.screen_text()
 
@@ -250,8 +326,12 @@ def test_tap_or_double_tap_goes_back_to_the_list(glasses):
     opened(glasses)
     glasses.tilt(-1)
     glasses.tap(1)
-    glasses.call("factcheck", "d:4:P\nCHECKING..\nEverest is 8849 m")
+    glasses.call("factcheck",
+                 check_window(4, "P", ["CHECKING..", "Everest is 8849 m"], 1))
+    glasses.clear_sent()
     glasses.tap(1)
+    assert asked(glasses, 3) == (1, 0)           # its window again
+    answer(glasses, FOUR)
     assert cursor_row(glasses) == ". Everest is 8849 m"
     glasses.tap(1)
     glasses.clear_sent()
@@ -259,6 +339,36 @@ def test_tap_or_double_tap_goes_back_to_the_list(glasses):
     assert not glasses.sent(APP_STOP)            # back, not out
     assert cursor_row(glasses) == ". Everest is 8849 m"
     assert glasses.emu._mic_on
+    glasses.assert_ok()
+
+
+def kb(glasses):
+    """The Lua heap in use, after a full collection, in KB."""
+    glasses.send(0x30, b"\x07" + b"collectgarbage('collect') "
+                 b"print(collectgarbage('count'))")
+    glasses.advance(0.2)
+    return float(glasses.joined(0x09)[-1][1].lstrip(b"+").split()[0])
+
+
+def test_a_long_session_takes_no_more_memory(glasses):
+    """The glasses hold four facts whatever the phone has: memory after
+    paging through 137 is what it was after the first four."""
+    def kb():
+        return globals()["kb"](glasses)
+
+    session = numbered(137)
+    opened(glasses, session[:4])
+    glasses.tilt(-1)
+    before = kb()
+    glasses.tilt(1)
+    opened_at = kb()
+    for _ in range(140):
+        glasses.tilt(-1)
+        if asked(glasses, 3)[0] != 0:
+            answer(glasses, session)
+    assert cursor_row(glasses) == "+ Fact 1"
+    after = kb()
+    assert after - min(before, opened_at) < 4    # KB
     glasses.assert_ok()
 
 
@@ -283,7 +393,7 @@ def test_an_error_is_red(glasses):
 
 def test_a_late_answer_does_not_start_it_listening(glasses):
     glasses.clear_sent()
-    glasses.call("factcheck", LIST)              # not running
+    glasses.call("factcheck", window(FOUR, 0))   # not running
     assert not glasses.emu._mic_on
     assert not glasses.sent(REC_START)
     assert not glasses.sent(FACTS)
@@ -317,7 +427,7 @@ def test_asks_for_the_list_again_until_it_comes(glasses):
     assert not glasses.sent(FACTS)
     glasses.advance(3)                           # past RETRY, 5 s
     assert glasses.sent(FACTS) == [facts(3)]
-    glasses.call("factcheck", "f:0")
+    glasses.call("factcheck", window([], 0))
     glasses.clear_sent()
     glasses.advance(13.7)
     assert not glasses.sent(FACTS)

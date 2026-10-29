@@ -12,14 +12,19 @@
 -- so the phone hands the sound to its Factchecker service
 -- (flutter-glaz/lib/services/factcheck.dart). It transcribes as it comes;
 -- a tap cuts it there, and the agent pulls the claims out of the piece
--- and checks each. FACTS asks, '>BBI2': op, id -- 0 the wearer left, 1
--- check since the last cut, 2 open fact <id>, 3 the list again. The
--- phone answers through remote(arg):
+-- and checks each. The phone keeps it all; the glasses hold what is on
+-- screen, four rows, and ask for the next four as the view moves: a long
+-- session costs them no more memory than a short one. FACTS asks,
+-- '>BBI2I2': op, a, b -- 0 the wearer left, 1 check since the last cut,
+-- 2 fact <a>'s check from its line <b>, 3 the facts from number <a>
+-- (oldest first, from 1; 0 the newest, followed). The phone answers, and
+-- sends the window again as it changes, through remote(arg):
 --
---   'f:<pending>' then '\n<id>|<v>|<text>' per fact, oldest first --
---         <pending> the pieces still being read; v: P checking, T true,
---         F false, M partly, U unknown
---   'd:<id>:<v>' then '\n<line>' per line -- fact <id>'s check
+--   'f:<pending>:<total>:<from>' then '\n<id>|<v>|<text>' per fact, at
+--         most four from number <from> -- <pending> the pieces still
+--         being read; v: P checking, T true, F false, M partly, U unknown
+--   'd:<id>:<v>:<total>:<from>' then '\n<line>' per line, at most four
+--         from line <from> of fact <id>'s check, <total> lines long
 --   'e:<text>'  -- went wrong: red in the status row
 --   'n:<text>'  -- a note: grey in the status row
 --
@@ -38,14 +43,14 @@ _M.rec = false            -- true while listening: red dot in the top bar
 
 local REC_START = 0x1F
 local AUDIO     = 0x05
-local FACTS     = 0x01    -- '>BBI2': op, id
+local FACTS     = 0x01    -- '>BBI2I2': op, a, b
 local FOR_FACTCHECK = 4   -- REC_START's fourth byte
 
 local RATE = 8000
 local BITS = 16           -- or 8; Glaz > Menu > Factchecker
 local MAX_LISTEN = 1800   -- s; then it pauses by itself
 local ROWS = 4            -- rows of facts; the fifth is the bottom row
-local RETRY = 5           -- s without the list before asking again
+local RETRY = 5           -- s without an answer before asking again
 local NOTE_TIME = 5       -- s a note shows; the link's and pauses stay
 
 -- Layout, as Assistant's: rows under the top bar, the cursor left of the
@@ -67,17 +72,21 @@ local per_second = 0      -- bytes of sound a second
 local lost = 0            -- bytes the link did not take
 local want = false        -- the wearer wants it listening
 local down = false        -- the link was seen down
-local facts = nil         -- { {id, v, text}, ... } once the phone says
+local total = nil         -- facts in the session; nil until the phone says
+local rows = {}           -- the facts on screen: number -> {id, v, text}
 local pending = 0         -- pieces the phone is still reading
 local sel = 0             -- the fact under the cursor; 0 the bottom row
 local top = 1             -- the fact on the first row
 local open = nil          -- the fact open, its id; nil in the list
-local lines = {}          -- the open fact's check, a line each
+local lines = {}          -- its check on screen: line number -> text
+local ltotal = 0          -- lines in the check; 0 until the phone says
 local verdict = 'P'       -- its v: the first line's colour
 local ltop = 1            -- its line on the first row
 local note, red = '', false
 local note_at = 0         -- utc() the note came
-local asked_at = nil      -- utc() the list was asked for
+local asked = nil         -- the request not yet answered, {op, a, b}
+local tailing = false     -- the list asked for is the newest, followed
+local asked_at = 0        -- utc() it was sent
 
 local function txt(text, x, y, color)
   frame.display.text(text, x, y, { color = color })
@@ -95,9 +104,15 @@ local function send(packet)
   return false
 end
 
-local function ask(op, id)
+local function ask(op, a, b)
   return frame.bluetooth.is_connected()
-    and send(string.pack('>BBI2', FACTS, op, id or 0))
+    and send(string.pack('>BBI2I2', FACTS, op, a or 0, b or 0))
+end
+
+-- A window asked for: asked again after RETRY until it comes.
+local function want_window(op, a, b)
+  asked, asked_at = { op, a, b }, frame.time.utc()
+  ask(op, a, b)
 end
 
 -- As Recorder's: at most two seconds' worth a call.
@@ -108,6 +123,10 @@ local function drain()
     if not ok or s == nil or s == '' then return end
     done = done + #s
     if not send(string.char(AUDIO) .. s) then lost = lost + #s end
+    -- as Recorder's: two seconds of sound is 32 KB of strings, a quarter
+    -- of the heap, unless each goes as it is sent
+    s = nil
+    collectgarbage('step')
   end
 end
 
@@ -148,25 +167,41 @@ local function listen()
   _M.rec = true
 end
 
-local function ask_list()
-  asked_at = ask(3) and frame.time.utc() or nil
+local function tail_top()
+  return math.max(1, (total or 0) - ROWS + 1)
 end
 
--- The cursor's fact on screen; on the bottom row, the newest facts.
+-- The facts on screen, asked for: the newest while the cursor is on the
+-- bottom row, else from the first row.
+local function ask_list()
+  tailing = sel == 0
+  want_window(3, tailing and 0 or top, 0)
+end
+
+-- The cursor's fact on screen; on the bottom row, the newest facts. A
+-- view moved asks for its facts.
 local function scroll()
-  local n = facts and #facts or 0
+  local was = top
   if sel == 0 then
-    top = math.max(1, n - ROWS + 1)
+    top = tail_top()
   elseif sel < top then
     top = sel
   elseif sel > top + ROWS - 1 then
     top = sel - ROWS + 1
   end
+  if top ~= was then
+    rows = {}
+    ask_list()
+  elseif tailing ~= (sel == 0) then
+    -- the same rows, but followed or not: the phone is told
+    ask_list()
+  end
 end
 
 local function state_str()
-  return table.concat({ tostring(open), sel, top, ltop, #lines, pending,
-                        facts and #facts or -1, note, tostring(red),
+  return table.concat({ tostring(open), sel, top, ltop, ltotal, pending,
+                        total or -1, tostring(rows[top] ~= nil),
+                        tostring(lines[ltop] ~= nil), note, tostring(red),
                         tostring(started ~= nil), lost // 1024,
                         since and math.floor(frame.time.utc() - since)
                         or '-' }, '|')
@@ -175,28 +210,46 @@ end
 local function take(arg)
   local kind, text = string.match(arg, '^(%a):(.*)$')
   if kind == 'f' then
-    local p, body = string.match(text, '^(%d+)\n?(.*)$')
+    local p, n, from, body =
+      string.match(text, '^(%d+):(%d+):(%d+)\n?(.*)$')
     if not p then return end
-    -- the cursor stays on its fact, which may have moved
-    local at = sel > 0 and facts and facts[sel] and facts[sel][1]
-    facts, pending, sel = {}, tonumber(p), 0
-    for id, v, t in string.gmatch(body, '(%d+)|(%a)|([^\n]*)') do
-      facts[#facts + 1] = { tonumber(id), v, t }
-      if tonumber(id) == at then sel = #facts end
+    pending, total, from = tonumber(p), tonumber(n), tonumber(from)
+    -- facts are only added: the cursor's number stays its fact
+    if sel > total then sel = 0 end
+    if sel == 0 then top = tail_top() end
+    if from ~= top then
+      -- for a view since left; none asked for: the view is asked again
+      if not asked then ask_list() end
+      return
     end
-    scroll()
+    rows = {}
+    local i = from
+    for id, v, t in string.gmatch(body, '(%d+)|(%a)|([^\n]*)') do
+      rows[i] = { tonumber(id), v, t }
+      i = i + 1
+    end
+    if asked and asked[1] == 3 then asked = nil end
   elseif kind == 'd' then
-    local id, v, body = string.match(text, '^(%d+):(%a)\n?(.*)$')
-    if not id or tonumber(id) ~= open then return end
-    lines, ltop, verdict = {}, 1, v
-    for l in string.gmatch(body, '[^\n]+') do lines[#lines + 1] = l end
+    local id, v, n, from, body =
+      string.match(text, '^(%d+):(%a):(%d+):(%d+)\n?(.*)$')
+    if not id or tonumber(id) ~= open or tonumber(from) ~= ltop then
+      return
+    end
+    lines, ltotal, verdict = {}, tonumber(n), v
+    local i = ltop
+    for l in string.gmatch(body, '[^\n]+') do
+      lines[i] = l
+      i = i + 1
+    end
+    if asked and asked[1] == 2 then asked = nil end
   elseif kind == 'e' or kind == 'n' then
     say(text, kind == 'e')
   end
 end
 
 function _M.start(info)
-  facts, pending, sel, top, open, lines = nil, 0, 0, 1, nil, {}
+  total, rows, pending, sel, top = nil, {}, 0, 0, 1
+  open, lines, ltotal, asked = nil, {}, 0, nil
   note, red, since, down = '', false, nil, false
   -- a MODULE_CALL to it while not running: a late answer, not the wearer
   want = not (info and info.background)
@@ -231,8 +284,8 @@ function _M.tick()
   if note ~= '' and not STAY[note] and now - note_at > NOTE_TIME then
     note, red = '', false
   end
-  if up and not facts and (not asked_at or now - asked_at > RETRY) then
-    ask_list()
+  if up and asked and now - asked_at > RETRY then
+    want_window(asked[1], asked[2], asked[3])
   end
   return state_str()
 end
@@ -245,10 +298,11 @@ end
 
 function _M.on_tap()
   if open then
-    open, lines = nil, {}
-  elseif sel > 0 and facts and facts[sel] then
-    open, lines, ltop = facts[sel][1], {}, 1
-    ask(2, open)
+    open, lines, ltotal = nil, {}, 0
+    ask_list()
+  elseif sel > 0 and rows[sel] then
+    open, lines, ltotal, ltop = rows[sel][1], {}, 0, 1
+    want_window(2, open, 1)
   elseif started then
     -- seen at once: the phone's list says so later
     if ask(1) then note, red, pending = '', false, pending + 1 end
@@ -261,15 +315,20 @@ end
 
 function _M.on_roll(dir)
   if open then
+    if ltotal == 0 then return nil end
+    local was = ltop
     ltop = math.max(1, math.min(ltop + dir * (ROWS - 1),
-                                math.max(1, #lines - ROWS + 1)))
+                                math.max(1, ltotal - ROWS + 1)))
+    if ltop == was then return nil end
+    lines = {}
+    want_window(2, open, ltop)
     return state_str()
   end
-  if not facts or #facts == 0 then return nil end
+  if not total or total == 0 then return nil end
   -- the bottom row is under the newest fact
-  local pos = sel == 0 and #facts + 1 or sel
-  pos = math.max(1, math.min(pos + dir, #facts + 1))
-  sel = pos > #facts and 0 or pos
+  local pos = sel == 0 and total + 1 or sel
+  pos = math.max(1, math.min(pos + dir, total + 1))
+  sel = pos > total and 0 or pos
   scroll()
   return state_str()
 end
@@ -277,7 +336,8 @@ end
 -- An open fact: back to the list; the list: false, the app leaves.
 function _M.on_back()
   if not open then return false end
-  open, lines = nil, {}
+  open, lines, ltotal = nil, {}, 0
+  ask_list()
   return state_str()
 end
 
@@ -298,7 +358,7 @@ end
 
 function _M.draw()
   if open then
-    if #lines == 0 then txt('loading..', LEFT_X, TOP_Y, 'GREY') end
+    if not lines[ltop] then txt('loading..', LEFT_X, TOP_Y, 'GREY') end
     for r = 0, ROWS - 1 do
       local i = ltop + r
       if lines[i] then
@@ -307,21 +367,26 @@ function _M.draw()
       end
     end
     txt('tap = back' .. (ltop > 1 and '  ^' or '') ..
-        (ltop + ROWS <= #lines and '  v' or ''), LEFT_X, BOTTOM_Y, 'GREY')
+        (ltop + ROWS <= ltotal and '  v' or ''), LEFT_X, BOTTOM_Y, 'GREY')
     return
   end
-  if not facts or #facts == 0 then
+  if not total or total == 0 then
     txt(started and 'Tap when you hear' or 'Not listening', TEXT_X, TOP_Y,
         'GREY')
     if started then
       txt('a claim to check', TEXT_X, TOP_Y + ROW_H, 'GREY')
     end
   else
-    for i = top, math.min(top + ROWS - 1, #facts) do
+    for i = top, math.min(top + ROWS - 1, total) do
       local y = TOP_Y + ROW_H * (i - top)
+      local f = rows[i]
       if i == sel then txt('>', LEFT_X, y, 'YELLOW') end
-      txt((MARKS[facts[i][2]] or ' ') .. ' ' .. facts[i][3], TEXT_X, y,
-          COLORS[facts[i][2]] or 'WHITE')
+      if f then
+        txt((MARKS[f[2]] or ' ') .. ' ' .. f[3], TEXT_X, y,
+            COLORS[f[2]] or 'WHITE')
+      else
+        txt('..', TEXT_X, y, 'GREY')
+      end
     end
   end
   if sel == 0 then txt('>', LEFT_X, BOTTOM_Y, 'YELLOW') end
@@ -336,7 +401,7 @@ function _M.stop()
   hush()
   want = false
   if was then ask(0) end
-  facts, lines, open = nil, {}, nil
+  total, rows, lines, open, asked = nil, {}, {}, nil, nil
 end
 
 return _M

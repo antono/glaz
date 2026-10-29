@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import '../settings.dart';
+import 'agent_history.dart';
 
 /// One message of a conversation, as chat APIs take them.
 class AgentMessage {
@@ -48,13 +49,17 @@ class AgentError implements Exception {
 
 /// The AI agent the phone's apps ask -- Assistant, Factchecker -- as set
 /// in Glaz > More > Services, AI agent; null when it is off or not set up
-/// ([noAgent] says which).
-Agent? agentFrom(Settings s) => !s.serviceOn('agent') || s.agentUrl.isEmpty
+/// ([noAgent] says which). [who] asks: its requests are listed under
+/// that name in the agent's history (agent_history.dart).
+Agent? agentFrom(Settings s, {String who = ''}) =>
+    !s.serviceOn('agent') || s.agentUrl.isEmpty
     ? null
     : ChatCompletionsAgent(
         url: s.agentUrl,
         key: s.agentKey,
         model: s.agentModel,
+        who: who,
+        history: AgentHistory.instance,
       );
 
 /// Why [agentFrom] gave none, for the glasses.
@@ -78,8 +83,16 @@ class ChatCompletionsAgent implements Agent {
     required this.url,
     required this.key,
     required this.model,
+    this.who = '',
+    this.history,
     http.Client? client,
   }) : _client = client ?? http.Client();
+
+  /// The app asking, for [history].
+  final String who;
+
+  /// Where each request is noted, with its answer; none: not noted.
+  final AgentHistory? history;
 
   /// The server's address, with or without the trailing /v1:
   /// https://hermes.tail1234.ts.net or http://hermes.tail1234.ts.net:8642.
@@ -103,7 +116,22 @@ class ChatCompletionsAgent implements Agent {
 
   @override
   Future<String> ask(List<AgentMessage> messages, {Duration? wait}) async {
-    final limit = wait ?? timeout;
+    final asked = messages.lastWhere(
+      (m) => m.role == 'user',
+      orElse: () => const AgentMessage('user', ''),
+    );
+    final call = history?.start(who, asked.content);
+    try {
+      final answer = await _ask(messages, wait ?? timeout);
+      if (call != null) history!.end(call, answer: answer);
+      return answer;
+    } on AgentError catch (e) {
+      if (call != null) history!.end(call, error: e.message);
+      rethrow;
+    }
+  }
+
+  Future<String> _ask(List<AgentMessage> messages, Duration limit) async {
     final http.Response r;
     try {
       r = await _client

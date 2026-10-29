@@ -119,7 +119,7 @@ iOS and macOS builds are in the code but need Xcode.
   recordings.
 - **AI agent**: one agent for Assistant and Factchecker, any server
   that speaks the OpenAI chat API (Hermes Agent, say), set once in
-  Services.
+  Services, with a history of what it was asked and how long it took.
 - **Assistant**: asks the AI agent. The assistant can open apps on the
   glasses for you.
 - **Factchecker**: past sessions, each claim with its verdict, why, and
