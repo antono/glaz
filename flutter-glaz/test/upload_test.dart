@@ -120,6 +120,24 @@ void main() {
     }
   });
 
+  test('the assets link every app\'s Lua and nothing else', () {
+    // only the Lua: an app's README, screenshots and tests stay out of
+    // the app (tool/link_apps.sh makes the links)
+    Set<String> names(String dir, bool Function(FileSystemEntity) keep) => {
+      for (final f in Directory(
+        dir,
+      ).listSync(recursive: true, followLinks: false))
+        if (keep(f)) f.path.substring(dir.length),
+    };
+    final lua = names(
+      '../apps/',
+      (f) => f is File && f.path.endsWith('.lua') && !f.path.contains('/_'),
+    );
+    final linked = names('assets/lua/apps/', (f) => f is Link);
+    expect(linked, lua, reason: 'run tool/link_apps.sh');
+    expect(names('assets/lua/apps/', (f) => f is File), isEmpty);
+  });
+
   test('a part is told by its suffix', () {
     expect(partFor('reader.frame.lua'), GlassesModel.frame);
     expect(partFor('about.halo.lua'), GlassesModel.halo);
@@ -180,10 +198,7 @@ void main() {
       luacAsset('assets/lua/apps/photo/photo.lua'),
       'assets/luac/apps.photo.photo.luac',
     );
-    expect(
-      luacAsset('assets/lua/glaz/glaz.lua'),
-      'assets/luac/glaz.glaz.luac',
-    );
+    expect(luacAsset('assets/lua/glaz/glaz.lua'), 'assets/luac/glaz.glaz.luac');
     expect(
       luacAsset('assets/lua/lib/data.min.lua'),
       'assets/luac/lib.data.min.luac',

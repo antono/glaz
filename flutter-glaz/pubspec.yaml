@@ -4,7 +4,7 @@ publish_to: 'none'
 
 # Shown in the About tab too: keep lib/screens/about_screen.dart in step
 # (test/version_test.dart checks it).
-version: 4.13.0+76
+version: 4.13.0+77
 
 environment:
   sdk: ^3.13.3
@@ -47,9 +47,11 @@ flutter:
     - assets/logo/logo.png
     # What Upload sends to the glasses. glaz/ and apps/
     # are links to the repository's own files, so the app always carries the
-    # Lua it was built next to; lib/ holds the frame_msg libraries. Flutter
-    # takes a folder's files but not its subfolders', so every app is listed
-    # (test/upload_test.dart holds to it).
+    # Lua it was built next to; lib/ holds the frame_msg libraries. apps/
+    # links each app's Lua file by file (tool/link_apps.sh), leaving its
+    # README, screenshots and tests out. Flutter takes a folder's files but
+    # not its subfolders', so every app is listed (test/upload_test.dart
+    # holds to both).
     - assets/lua/glaz/
     - assets/lua/apps/about/
     - assets/lua/apps/assistant/

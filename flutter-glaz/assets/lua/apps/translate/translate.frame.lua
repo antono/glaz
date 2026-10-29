@@ -1,0 +1,1 @@
+../../../../../apps/translate/translate.frame.lua
