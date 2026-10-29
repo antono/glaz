@@ -64,7 +64,12 @@ fourth byte `2` (for Translate), `AUDIO` packets, `AUDIO_END` on a
 pause. 8 kHz, 16-bit unless the `bits` setting says 8. While listening
 `_M.rec` is true (the red dot) and `busy()` keeps `APP_TIMEOUT` from
 closing it; it pauses by itself after 30 minutes. One direction only:
-the other speaker, into the wearer's language.
+the other speaker, into the wearer's language. Each packet is let go of
+as it is sent (`s = nil; collectgarbage('step')`): two seconds of sound
+held at once is a quarter of the heap ([PROTOCOL.md, Memory on the
+glasses](../../docs/PROTOCOL.md#memory-on-the-glasses)). The phone's
+windows of the log are at most 300 bytes; one that comes short of the
+screen, the glasses ask again for the screen's lines alone.
 
 **Photo.** A tap takes a photo as the phone's remote does
 ([glaz_photo.frame.lua](../../glaz/glaz_photo.frame.lua)): 720 px,

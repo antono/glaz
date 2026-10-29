@@ -241,13 +241,15 @@ class TranslateLog {
   /// MODULE_CALL's argument for apps/translate/translate.lua
   /// (docs/PROTOCOL.md, "Translate"): 'w:sess:from:total:f' and a line each
   /// from [from], at most [count] and [maxLines], as many as fit in
-  /// [maxBytes]. [follow]: the last [count], for the glasses following
+  /// [maxBytes], a screen's worth: a window that comes short, the glasses
+  /// ask again for the lines on screen alone (docs/PROTOCOL.md, "Memory on
+  /// the glasses"). [follow]: the last [count], for the glasses following
   /// the end.
   String window(
     int from,
     int count, {
     required bool follow,
-    int maxBytes = 900,
+    int maxBytes = 300,
     int maxLines = 16,
   }) {
     final total = length;

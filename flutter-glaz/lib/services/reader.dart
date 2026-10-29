@@ -129,8 +129,9 @@ class ReaderService extends ChangeNotifier {
   final Directory dir;
 
   /// At most this much text in one answer: a MODULE_CALL the glasses
-  /// put together in memory.
-  static const maxBytes = 900;
+  /// put together in memory, a few hundred bytes (docs/PROTOCOL.md,
+  /// "Memory on the glasses"); the glasses ask again for the rest.
+  static const maxBytes = 300;
 
   final _books = <Book>[];
   int _next = 1;

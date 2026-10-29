@@ -16,7 +16,7 @@ from PIL import Image
 
 import vclock
 from glasses import SHOTS
-from frame_emulator import BLOCK, BOOT_SECONDS, FrameEmulator
+from frame_emulator import BLOCK, BOOT_SECONDS, HEAP, FrameEmulator
 from frame_emulator.display import COLORS, HEIGHT, WIDTH, ycbcr
 from vclock import VirtualClock
 
@@ -1698,3 +1698,78 @@ def test_main_lua_starts_after_the_firmwares_boot(tmp_path):
     emu.settle()
     emu.stop()
     assert lines == [str(float(BOOT_SECONDS))]
+
+
+# ------------------------------------------------------------------ heap
+
+def test_lua_runs_out_of_memory_at_the_heap(boot):
+    # lua_State's LUA_ERRMEM: its message, with no position, about HEAP in
+    emu = boot("""
+        collectgarbage('collect')
+        local before = collectgarbage('count')
+        local t = {}
+        local ok, e = pcall(function()
+          for i = 1, 1e6 do t[i] = string.rep('x', 100) .. i end
+        end)
+        print(e, collectgarbage('count'))
+        t = nil
+        collectgarbage('collect')
+        print(collectgarbage('count') - before < 8)
+    """)
+    msg, kb = emu.lines[0].split("\t")
+    assert msg == "not enough memory"
+    assert HEAP / 1024 - 8 < float(kb) <= HEAP / 1024
+    assert emu.lines[1] == "true"         # and all of it back once let go
+
+
+def test_a_string_that_does_not_fit_is_lua_s_error(boot):
+    # what a frame.* function returns is pushed by the firmware: Lua's
+    # error there, not the emulator's crash
+    emu = boot("""
+        try(frame.fpga_read, 0x18, 300000)
+        print(#frame.fpga_read(0x18, 137))
+    """)
+    assert emu.lines == ["not enough memory", "137"]
+
+
+def test_the_firmware_s_malloc_does_not_collect(boot):
+    # system.c's fpga_read: malloc(), "not enough memory" where Lua's
+    # garbage is; Lua's own allocation collects it first (lmem.c)
+    emu = boot(f"""
+        collectgarbage('stop')
+        local i = 0
+        while collectgarbage('count') < {HEAP // 1024 - 2} do
+          i = i + 1
+          local junk = string.rep('x', 100) .. i
+        end
+        collectgarbage('restart')     -- not a collection: the garbage stays
+        try(frame.fpga_read, 0x18, 4096)
+        print(#string.rep('x', 4096))
+        print(#frame.fpga_read(0x18, 4096))
+    """)
+    assert emu.lines == ["not enough memory", "4096", "4096"]
+
+
+def test_the_receive_callback_runs_out_as_the_data_accumulator_does(boot):
+    # data.min.lua's callback catches the error and prints it: what real
+    # glasses printed when the phone's writes filled the heap
+    emu = boot("""
+        local kept = {}
+        frame.bluetooth.receive_callback(function(s)
+          local ok, e = pcall(function()
+            kept[#kept + 1] = string.rep(s, 40)
+          end)
+          if not ok then
+            print('Error in data accumulator: ' .. e)
+            kept = {}
+          end
+        end)
+        while true do frame.sleep(1) end
+    """)
+    for _ in range(100):
+        emu.receive(b"x" * 243)
+    emu.advance(1)
+    assert emu.lines and set(emu.lines) == {
+        "Error in data accumulator: not enough memory"}
+    assert emu.error is None
+
