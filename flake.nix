@@ -106,6 +106,17 @@
               $out/share/icons/hicolor/512x512/apps/glaz.png
           '';
 
+          # The launcher entry names its icon by path, not by theme name: a
+          # running GNOME Shell notices new icons in a theme by the mtime of
+          # its directories, and in a Nix profile those are always 1970, so
+          # a newly installed "glaz" stays unknown until the next login and
+          # the app switcher shows a blank icon.
+          preFixup = ''
+            substituteInPlace $out/share/applications/dev.glaz.glaz.desktop \
+              --replace-fail "Icon=glaz" \
+                "Icon=$out/share/icons/hicolor/512x512/apps/glaz.png"
+          '';
+
           meta = {
             description = "Companion app for the Brilliant Labs Frame smart glasses";
             mainProgram = "glaz";
