@@ -212,11 +212,15 @@ async def main():
     # later, every time (measured; cause not found). Instead: break the
     # running app, take main.lua out of the way, and only then reset -- into
     # a bare REPL with all memory free for the upload. The upload below
-    # writes main.lua back.
+    # writes main.lua back. The phone's record of what it uploaded goes too
+    # (glaz_sums.txt, flutter-glaz/lib/frame/upload.dart): these files are
+    # not what it says, and the phone's next upload then reads them all.
     await frame.connect(initialize=False)
     print("Connected.")
     await wait_for_repl(frame)
-    await frame.send_lua("pcall(frame.file.remove, 'main.lua');print('cleared')",
+    await frame.send_lua("pcall(frame.file.remove, 'main.lua');"
+                         "pcall(frame.file.remove, 'glaz_sums.txt');"
+                         "print('cleared')",
                          await_print=True)
     await frame.ble.send_reset_signal()
     await wait_for_repl(frame)

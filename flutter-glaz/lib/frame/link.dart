@@ -77,11 +77,14 @@ class FrameLink extends ChangeNotifier {
 
   /// A job that has the glasses to itself (Upload, Restart): its name, the
   /// step it is on, and how far along, 0..1 (null: unknown). [taskError] is
-  /// the last one's failure, cleared when the next starts.
+  /// the last one's failure, cleared when the next starts. [taskDone] is
+  /// what the last one did, when it says ('Upload: nothing changed, 8.8
+  /// s'), set by the job itself and cleared likewise.
   String? task;
   String taskStep = '';
   double? taskProgress;
   String? taskError;
+  String? taskDone;
 
   static const statusEvery = Duration(minutes: 1);
   Timer? _statusTimer;
@@ -803,6 +806,7 @@ class FrameLink extends ChangeNotifier {
     taskStep = '';
     taskProgress = null;
     taskError = null;
+    taskDone = null;
     notifyListeners();
     try {
       await job(device, (step, [progress]) {
@@ -816,6 +820,7 @@ class FrameLink extends ChangeNotifier {
       glazLog(LogKind.task, '$name: done');
     } catch (e) {
       taskError = '$e';
+      taskDone = null;
       glazLog(LogKind.task, '$name failed: $e', problem: true);
     } finally {
       task = null;

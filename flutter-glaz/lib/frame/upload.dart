@@ -170,6 +170,17 @@ void needBytecode(List<LuaFile> files, GlassesModel model) {
   }
 }
 
+/// What the last upload wrote, on the glasses: 'hash size name' a line,
+/// for each file ([checkHelper]). Not Lua, so Clearing old files leaves
+/// it; written once the files are all there.
+const sumsFile = 'glaz_sums.txt';
+
+/// [sumsFile]'s text for [files], all of them on the glasses now.
+String sums(List<LuaFile> files) => [
+  for (final f in files)
+    '${frameFileHash(uploadedBytes(f))} ${uploadedBytes(f).length} ${f.$1}',
+].join('\n');
+
 /// Where main.lua is put out of the way while an upload runs: a reset with
 /// a main.lua would start it. Moved back when it is still the right one.
 const mainKept = 'glaz_prev.lua';
@@ -203,6 +214,8 @@ int frameFileHash(List<int> bytes) {
 List<int> uploadedBytes(LuaFile f) =>
     f.$3 ?? f.$2.replaceAll('\r\n', '\n').codeUnits;
 
+/// Helpers on the glasses for the duration of an upload, as glaz_check.lua.
+///
 /// Says whether a file on the glasses is already what an upload would
 /// write: glaz_check(name, hash) prints 'same NAME' or 'diff NAME', and
 /// files that are the same go in glaz_keep, for Clearing old files to
@@ -210,9 +223,37 @@ List<int> uploadedBytes(LuaFile f) =>
 /// an upload. A read() that never ends -- the
 /// firmware's at the end of a file is not quite sure -- gives up and says
 /// diff after 4000 pieces.
+///
+/// Most files need no reading: [sumsFile], which the last upload wrote,
+/// says what each file got, and a file still of that size is taken to be
+/// what it says. It is read and removed on loading: an upload cut short
+/// leaves none, and every file is read again. Its main.lua is looked for
+/// as [mainKept], where the upload has put it.
 const checkHelper = r'''
 glaz_keep = {}
+-- glaz_sums.txt, 'hash size name' a line, and the files' sizes now
+local sums, sizes = {}, {}
+local ok, h = pcall(frame.file.open, 'glaz_sums.txt', 'read')
+if ok then
+  for _ = 1, 200 do
+    local l = h:read()
+    if not l then break end
+    local x, s, n = l:match('^(%d+) (%d+) (%S+)$')
+    if n then sums[n] = { tonumber(x), tonumber(s) } end
+  end
+  h:close()
+  pcall(frame.file.remove, 'glaz_sums.txt')
+end
+pcall(function()
+  for _, e in ipairs(frame.file.listdir('/')) do sizes[e.name] = e.size end
+end)
 function glaz_check(name, want)
+  local s = sums[name == 'glaz_prev.lua' and 'main.lua' or name]
+  if s and s[1] == want and sizes[name] == s[2] then
+    glaz_keep[name] = true
+    print('same ' .. name)
+    return
+  end
   local ok, h = pcall(frame.file.open, name, 'read')
   if not ok then print('diff ' .. name) return end
   local byte, x, n = string.byte, 0x811c9dc5, 0
@@ -245,6 +286,24 @@ function glaz_room(b)
     end
   end
   print('room ' .. f)
+end
+-- a file through the data channel, for uploadBytes: opens it, says
+-- 'recv NAME', and writes every packet that comes, saying 'got N' (bytes
+-- so far) after each, then 'wrote NAME' after the last
+function glaz_recv(name, size)
+  local f, got, ble = frame.file.open(name, 'w'), 0, frame.bluetooth
+  ble.receive_callback(function(d)
+    f:write(d)
+    got = got + #d
+    if got < size then
+      print('got ' .. got)
+    else
+      ble.receive_callback(nil)
+      f:close()
+      print('wrote ' .. name)
+    end
+  end)
+  print('recv ' .. name)
 end
 print('glaz_check ready')
 ''';
@@ -364,16 +423,83 @@ const unhook =
     'pcall(frame.imu.tap_callback,nil) '
     'pcall(frame.bluetooth.receive_callback,nil)';
 
+/// How long each step of an upload took, and how fast the files went up:
+/// logged when it ends, done or not, to see where the time goes.
+class UploadSteps {
+  final _clock = Stopwatch()..start();
+  final _took = <String, Duration>{};
+  String? _step;
+  var _since = Duration.zero;
+
+  /// Bytes written to the glasses, and how many files.
+  var bytes = 0;
+  var files = 0;
+
+  /// [step] starts now; the one before it ends.
+  void start(String step) {
+    final now = _clock.elapsed;
+    if (_step case final s?) {
+      _took[s] = (_took[s] ?? Duration.zero) + now - _since;
+    }
+    _step = step;
+    _since = now;
+  }
+
+  /// 'took 41.2 s: stopping 0.3 s, ..., writing 25.1 s (12 files, 137 KB,
+  /// 5.4 KB/s), starting 4.4 s'.
+  String summary() {
+    start(''); // closes the last step
+    String s(Duration d) => (d.inMilliseconds / 1000).toStringAsFixed(1);
+    final steps = [
+      for (final MapEntry(:key, :value) in _took.entries)
+        if (key.isNotEmpty)
+          key == 'writing' && bytes > 0
+              ? 'writing ${s(value)} s ($files files, ${bytes ~/ 1024} KB, '
+                    '${(bytes / 1024 / (value.inMilliseconds / 1000)).toStringAsFixed(1)} KB/s)'
+              : '$key ${s(value)} s',
+    ];
+    return 'took ${s(_clock.elapsed)} s: ${steps.join(', ')}';
+  }
+
+  /// What the upload did, for the person who started it: 'nothing
+  /// changed, 8.8 s', or '2 files written (14 KB), 12.1 s'.
+  String result() {
+    final took =
+        '${(_clock.elapsed.inMilliseconds / 1000).toStringAsFixed(1)} s';
+    if (files == 0) return 'nothing changed, $took';
+    final kb = bytes < 1024 ? '$bytes bytes' : '${bytes ~/ 1024} KB';
+    return '$files ${files == 1 ? 'file' : 'files'} written ($kb), $took';
+  }
+}
+
 /// Puts [files] (luaFiles) on the glasses, [model] being which they are:
-/// the picture on them while it runs is that model's.
-Future<void> uploadApp(
+/// the picture on them while it runs is that model's. Says what it did
+/// ([UploadSteps.result]).
+Future<String> uploadApp(
   BrilliantDevice device,
   List<LuaFile> files,
   void Function(String step, [double? progress]) report, {
   GlassesModel model = GlassesModel.frame,
 }) async {
+  final steps = UploadSteps();
+  try {
+    await _upload(device, files, report, steps, model);
+  } finally {
+    glazLog(LogKind.task, 'Upload: ${steps.summary()}');
+  }
+  return steps.result();
+}
+
+Future<void> _upload(
+  BrilliantDevice device,
+  List<LuaFile> files,
+  void Function(String step, [double? progress]) report,
+  UploadSteps steps,
+  GlassesModel model,
+) async {
   final repl = Repl(device);
 
+  steps.start('stopping');
   report('Stopping the app');
   await device.sendBreakSignal();
   await repl.ready();
@@ -384,6 +510,7 @@ Future<void> uploadApp(
     'cleared',
   );
 
+  steps.start('resetting');
   report('Resetting the glasses');
   await device.sendResetSignal();
   await repl.ready();
@@ -398,6 +525,7 @@ Future<void> uploadApp(
   // Only what changed goes up: the glasses hash each file they have and
   // say whether it is what this upload would write. Usually one or two
   // modules of two dozen are not.
+  steps.start('checking');
   report('Checking what changed');
   await picture.draw('Checking...', progress: 0);
   Set<String> same;
@@ -458,6 +586,7 @@ Future<void> uploadApp(
   // phone made them print two dozen lines at once, and lines printed
   // faster than the link sends are lost -- the end of the list never
   // arrived. Anything not Lua stays: settings.txt, say.
+  steps.start('clearing');
   report('Clearing old files');
   final cleared = await repl.lines(
     "local n=0 for _,e in ipairs(frame.file.listdir('/')) do "
@@ -491,6 +620,7 @@ Future<void> uploadApp(
   }
   final total = order.fold<int>(0, (n, f) => n + size(f));
   var done = 0;
+  steps.start('writing');
   for (final f in order) {
     final (name, text, code) = f;
     report('Uploading $name', done / total);
@@ -501,6 +631,8 @@ Future<void> uploadApp(
       await uploadBytes(device, name, code, meanwhile: picture.tick);
     }
     done += size(f);
+    steps.bytes = done;
+    steps.files++;
   }
   if (same.contains('main.lua')) {
     await repl.run(
@@ -508,7 +640,10 @@ Future<void> uploadApp(
       'restored',
     );
   }
+  // the next upload's check reads this rather than every file
+  await device.uploadScript(sumsFile, sums(files));
 
+  steps.start('starting');
   report('Starting the app', 1);
   await picture.draw('Starting...', progress: 1);
   await repl.start();
@@ -541,7 +676,8 @@ Future<void> _room(Repl repl, List<LuaFile> writes) async {
   );
   final room = int.tryParse(said.lastOrNull?.substring(5) ?? '') ?? -1;
   if (room < 0) return; // cannot tell: go ahead
-  final need = blocksFor(writes) + _spareBlocks * fileBlock;
+  // and a block for sumsFile, removed when the check read it
+  final need = blocksFor(writes) + (_spareBlocks + 1) * fileBlock;
   glazLog(
     LogKind.task,
     'Upload: needs ${need ~/ 1024} KB, the glasses have ${room ~/ 1024} KB',
@@ -580,31 +716,25 @@ Future<Set<String>> _unchanged(
   return same;
 }
 
-/// [bytes] in hex, two digits a byte, split into pieces of at most [max]
-/// digits (rounded down to whole bytes).
-List<String> hexPieces(List<int> bytes, int max) {
-  final per = max ~/ 2;
-  return [
-    for (var i = 0; i < bytes.length || i == 0; i += per)
-      [
-        for (final b in bytes.skip(i).take(per))
-          b.toRadixString(16).padLeft(2, '0'),
-      ].join(),
-  ];
-}
+/// [bytes] in packets of at most [max] bytes.
+List<List<int>> dataPieces(List<int> bytes, int max) => [
+  for (var i = 0; i < bytes.length; i += max)
+    bytes.sublist(i, i + max < bytes.length ? i + max : bytes.length),
+];
 
-/// Turns hex back into bytes, on the glasses, for [uploadBytes].
-const _unhex =
-    "function glaz_unhex(s) return (s:gsub('..',function(x) "
-    "return string.char(tonumber(x,16)) end)) end";
-
-/// Writes [bytes] to [name] on the glasses, as frame_ble's uploadScript
-/// does a script, but byte for byte: uploadScript sends text, and bytecode
-/// is not text (AGENTS.md: non-ASCII breaks it). Sent as hex, two
-/// characters a byte: escaping only the bytes that need it came to three
-/// and a third, as bytecode is mostly not printable.
+/// Writes [bytes] to [name] on the glasses, byte for byte: uploadScript
+/// sends text, and bytecode is not text (AGENTS.md: non-ASCII breaks it).
+/// Sent as they are over the data channel, a full packet each (about 240
+/// bytes), to glaz_recv ([checkHelper], which must be loaded): as hex
+/// through the REPL, a packet carried half as many, and the glasses
+/// decoded them in Lua.
 ///
-/// [meanwhile] is called between pieces, at most every [meanwhileEvery]:
+/// One packet at a time, each answered: the firmware keeps one data
+/// packet, and the next overwrites it (lua_bluetooth_data_interrupt in
+/// bluetooth.c). The callback runs while the REPL is idle -- frame.sleep()
+/// runs Lua all the while -- so the picture's writes go between packets.
+///
+/// [meanwhile] is called between packets, at most every [meanwhileEvery]:
 /// the upload's picture moves on (GlassesPicture.tick).
 Future<void> uploadBytes(
   BrilliantDevice device,
@@ -613,23 +743,44 @@ Future<void> uploadBytes(
   Future<void> Function()? meanwhile,
   Duration meanwhileEvery = const Duration(milliseconds: 300),
 }) async {
-  Future<void> run(String lua, String what) async {
-    final resp = await device.sendString("$lua;print('\x02')", log: false);
-    if (resp != '\x02') throw Exception('$what $name: $resp');
+  final repl = Repl(device);
+  if (bytes.isEmpty) {
+    await repl.run(
+      "frame.file.open('$name','w'):close() print('wrote $name')",
+      'wrote $name',
+    );
+    return;
   }
-
-  await run(_unhex, 'Error preparing');
-  await run("f=frame.file.open('$name','w')", 'Error opening');
-  // the command around a piece: f:write(glaz_unhex(''));print('\x02')
+  await repl.run("glaz_recv('$name',${bytes.length})", 'recv $name');
+  final pieces = dataPieces(bytes, device.maxDataLength!);
   final since = Stopwatch()..start();
-  for (final piece in hexPieces(bytes, device.maxStringLength! - 36)) {
-    await run("f:write(glaz_unhex('$piece'))", 'Error writing');
-    if (meanwhile != null && since.elapsed >= meanwhileEvery) {
-      await meanwhile();
-      since.reset();
+  var sent = 0;
+  try {
+    for (final piece in pieces) {
+      sent += piece.length;
+      final ack = sent < bytes.length ? 'got $sent' : 'wrote $name';
+      final heard = replLines(device)
+          .firstWhere((s) => s == ack || s.contains('error'))
+          .timeout(const Duration(seconds: 5));
+      await device.sendData(piece);
+      final said = await heard;
+      if (said != ack) throw Exception('Error writing $name: $said');
+      if (meanwhile != null &&
+          sent < bytes.length &&
+          since.elapsed >= meanwhileEvery) {
+        await meanwhile();
+        since.reset();
+      }
     }
+  } catch (_) {
+    // the file half written: let go of it and of the callback
+    await device.sendString(
+      'pcall(frame.bluetooth.receive_callback,nil)',
+      awaitResponse: false,
+      log: false,
+    );
+    rethrow;
   }
-  await run('f:close() glaz_unhex=nil', 'Error closing');
 }
 
 /// Stops the app and boots main.lua again, as host_test.py does on exit:

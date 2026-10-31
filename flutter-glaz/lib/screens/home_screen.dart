@@ -419,6 +419,12 @@ class _GlassesAppCard extends StatelessWidget {
                 ],
               ),
             ),
+          if (!link.busy && link.taskDone != null)
+            ListTile(
+              leading: const Icon(Icons.check_circle, color: FrameColors.green),
+              title: const Text('Done'),
+              subtitle: Text(link.taskDone!),
+            ),
           if (!link.busy && link.taskError != null)
             ListTile(
               leading: const Icon(Icons.error_outline, color: FrameColors.red),
@@ -510,6 +516,12 @@ class _GlassesAppCard extends StatelessWidget {
     );
     if (ok != true) return;
     await Services.instance.appCheck.upload();
+    // the card says it too, but may be scrolled away
+    final done = link.taskDone;
+    if (done != null && context.mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Done. $done')));
+    }
   }
 }
 

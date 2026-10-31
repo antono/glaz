@@ -295,22 +295,118 @@ $checks''');
         'room ${4096 + 2 * 4096}',
       ]);
     }, skip: hasLua ? false : 'no lua 5.4 on PATH');
+
+    test('the last upload\'s sums spare reading what has not changed', () {
+      final dir = Directory.systemTemp.createTempSync('glaz_sums');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      // on the glasses: a.lua as the sums say; b.lua the same text but its
+      // sums say otherwise; c.lua grown since; main.lua aside as mainKept
+      final a = 'print(137)'.codeUnits;
+      final c = 'print(1370)'.codeUnits;
+      File('${dir.path}/a.lua').writeAsStringSync('not what the sums say');
+      File('${dir.path}/b.lua').writeAsBytesSync(a);
+      File('${dir.path}/c.lua').writeAsBytesSync(c);
+      File('${dir.path}/$mainKept').writeAsStringSync('x');
+      final files = <LuaFile>[
+        ('a.lua', 'print(137)', null),
+        ('c.lua', 'print(137)', null),
+        ('main.lua', 'x', null),
+      ];
+      File('${dir.path}/$sumsFile')
+          .writeAsStringSync('${sums(files)}\n0 10 b.lua');
+      final h = frameFileHash(a);
+      File('${dir.path}/run.lua').writeAsStringSync('''
+frame = { file = {} }
+function frame.file.listdir()
+  return {
+    { name = 'a.lua', size = ${a.length}, type = 1 },
+    { name = 'b.lua', size = ${a.length}, type = 1 },
+    { name = 'c.lua', size = ${c.length}, type = 1 },
+    { name = '$mainKept', size = 1, type = 1 },
+  }
+end
+function frame.file.remove(name) assert(os.remove(name)) end
+function frame.file.open(name)
+  local f = assert(io.open(name, 'rb'))
+  return {
+    read = function() return f:read('l') end,
+    close = function() f:close() end,
+  }
+end
+$checkHelper
+glaz_check('a.lua', $h)
+glaz_check('b.lua', $h)
+glaz_check('c.lua', $h)
+glaz_check('$mainKept', ${frameFileHash('x'.codeUnits)})
+print(io.open('$sumsFile') and 'sums kept' or 'sums gone')
+''');
+      final out = Process.runSync('lua', [
+        'run.lua',
+      ], workingDirectory: dir.path);
+      expect(out.stderr, '');
+      expect('${out.stdout}'.trim().split('\n'), [
+        'glaz_check ready',
+        'same a.lua', // by its sums alone
+        'same b.lua', // read: its sums were wrong
+        'diff c.lua', // its size is not what the sums say
+        'same $mainKept',
+        'sums gone',
+      ]);
+    }, skip: hasLua ? false : 'no lua 5.4 on PATH');
+
+    test('glaz_recv writes what the data channel brings, saying so', () {
+      final dir = Directory.systemTemp.createTempSync('glaz_recv');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final bytes = [for (var i = 0; i < 300; i++) (i * 137) & 0xFF];
+      final pieces = dataPieces(bytes, 137);
+      String lua(List<int> p) => "'${p.map((b) => '\\$b').join()}'";
+      File('${dir.path}/run.lua').writeAsStringSync('''
+frame = { file = {}, bluetooth = {} }
+local cb
+function frame.bluetooth.receive_callback(f) cb = f end
+function frame.file.open(name, mode) return assert(io.open(name, 'wb')) end
+$checkHelper
+glaz_recv('out', ${bytes.length})
+${pieces.map((p) => 'cb(${lua(p)})').join('\n')}
+print(cb == nil and 'unhooked' or 'hooked')
+''');
+      final out = Process.runSync('lua', [
+        'run.lua',
+      ], workingDirectory: dir.path);
+      expect(out.stderr, '');
+      expect('${out.stdout}'.trim().split('\n'), [
+        'glaz_check ready',
+        'recv out',
+        'got 137',
+        'got 274',
+        'wrote out',
+        'unhooked',
+      ]);
+      expect(File('${dir.path}/out').readAsBytesSync(), bytes);
+    }, skip: hasLua ? false : 'no lua 5.4 on PATH');
   });
 
-  test('bytes go up as hex pieces that read back the same', () {
+  test('an upload says what it did', () {
+    final none = UploadSteps();
+    expect(none.result(), startsWith('nothing changed, '));
+    final some = UploadSteps()
+      ..files = 1
+      ..bytes = 137;
+    expect(some.result(), startsWith('1 file written (137 bytes), '));
+    final more = UploadSteps()
+      ..files = 3
+      ..bytes = 137 * 1024;
+    expect(more.result(), startsWith('3 files written (137 KB), '));
+  });
+
+  test('bytes go up in packets that read back the same', () {
     final bytes = [for (var i = 0; i < 256; i++) i, 137];
-    final pieces = hexPieces(bytes, 41);
+    final pieces = dataPieces(bytes, 41);
     for (final p in pieces) {
       expect(p.length, lessThanOrEqualTo(41));
-      expect(p.length.isEven, isTrue);
-      expect(RegExp(r'^[0-9a-f]*$').hasMatch(p), isTrue);
     }
-    final all = pieces.join();
-    expect([
-      for (var i = 0; i < all.length; i += 2)
-        int.parse(all.substring(i, i + 2), radix: 16),
-    ], bytes);
-    expect(hexPieces([], 40), ['']);
+    expect(pieces.expand((p) => p).toList(), bytes);
+    expect(dataPieces([], 40), isEmpty);
   });
 
   test('STATUS: battery and firmware', () {

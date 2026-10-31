@@ -271,7 +271,24 @@ Everything below follows from that.
     (FNV-1a over what `read()` gives, `glaz_check` in `upload.dart`) and
     compare it with what the upload would write; files that match stay,
     main.lua included (moved aside as `glaz_prev.lua` while the upload
-    runs). Text is compared as text, bytecode as bytecode.
+    runs). Text is compared as text, bytecode as bytecode. Most files are
+    not read at all: the last upload leaves `glaz_sums.txt` (hash, size
+    and name of every file), and a file still of the size it lists is
+    taken to be what it lists. The check reads it and removes it, and the
+    upload writes it again once every file is there, so one cut short
+    leaves none and the next reads every file. `host_test.py` removes it
+    too: what it uploads is not what the list says. Checking 21 files by
+    reading them took 5.7 s of an upload of 8.8 s.
+
+    Bytecode goes up over the data channel (`0x01` packets, `glaz_recv`
+    in `upload.dart`), a full packet of about 240 bytes each; before, it
+    went through the REPL as hex, about 100 bytes a packet, decoded on the
+    glasses in Lua. Still one packet at a time, each answered: the
+    firmware keeps a single data packet and a single REPL line, and the
+    next one overwrites it (`lua_bluetooth_data_interrupt` in
+    `bluetooth.c`, `lua_write_to_repl` in `luaport.c`). The Log says how
+    long each step of an upload took and how fast the files went
+    (`Upload: took ...`).
 12. **Many small `mono` sprites reboot the glasses.** Each
     `frame.display.text` glyph, `bitmap` or `mono` sprite is queued in the
     FPGA until `show()`. Measured with the first `mono` (a sprite a call),

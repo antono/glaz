@@ -112,7 +112,8 @@ class AppCheck extends ChangeNotifier {
     final sent = parts.sentTo(model, settings.installed);
     await link.runTask('Upload', (device, report) async {
       needBytecode(files, model);
-      await uploadApp(device, files, report, model: model);
+      link.taskDone =
+          'Upload: ${await uploadApp(device, files, report, model: model)}';
       // what the assistant may open (assistant.dart)
       settings.setUploaded(model.name, sent);
     });
