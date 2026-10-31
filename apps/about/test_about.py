@@ -143,7 +143,7 @@ def test_the_phones_double_tap_goes_back_to_the_info_menu(glasses):
     glasses.remote(1, 2)                         # two: back
     text = glasses.screen_text()
     assert gone(glasses)
-    assert "Glaz > Info" in text and "  About" in text
+    assert "Glaz > Info" in text and "> About" in text   # the cursor on it
     assert glasses.sent(APP_STOP) and glasses.sent(MENU_OPEN)
     glasses.assert_ok()
 

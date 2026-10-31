@@ -289,7 +289,8 @@ def test_a_double_tap_from_the_list_leaves_and_stops_it(listed):
     listed.tap(2)
     assert listed.sent(APP_STOP)
     assert not listed.sent(APP_BACKGROUND)       # it never runs unseen
-    assert "Files" not in listed.screen_text()
+    text = listed.screen_text()
+    assert "> Files" in text and FIRST not in text   # the menu, on it
     assert not listed.emu.files.handles
     listed.assert_ok()
 

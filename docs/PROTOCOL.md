@@ -266,8 +266,9 @@ cannot be loaded: a dark screen alone looks the same as a hang.
 | **RUNNING** | the module | `on_tap()`, else keep `app` alive | `on_back()` up a level inside, else back to menu (background modules keep running) | sleep | `on_roll()` only, never leaves |
 
 Returning to the menu leaves the cursor on the module just closed, so it can
-be run again with a single tap. Each level keeps its own cursor, so going up
-lands on the submenu just left.
+be run again with a single tap -- however it was started: from the menu, by
+the phone (`APP_OPEN`), by a tap on the blank screen or by a wake. Each
+level keeps its own cursor, so going up lands on the submenu just left.
 
 **A single tap on the blank screen brings back the last module launched**,
 wherever it sits in the tree: a background one as it was, a sleeping one

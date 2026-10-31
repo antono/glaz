@@ -1149,3 +1149,12 @@ def test_a_keyboard_shows_in_the_top_bar(glasses):
     hands_off(glasses, 0)
     glasses.advance(2)
     assert glasses.image() == before
+
+
+def test_status_is_tried_again_while_the_radio_is_busy(probed):
+    lua(probed, BUSY % (STATUS, 5))
+    probed.clear_sent()
+    probed.send(STATUS_GET, b"\x00")
+    probed.advance(0.5)
+    assert len(probed.sent(STATUS)) == 1
+    probed.assert_ok()

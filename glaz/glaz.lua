@@ -939,10 +939,13 @@ local function run_module(id, arg)
     stack = { table.unpack(path) }
     send(MENU_LEVEL, #stack)
   end
+  -- the cursor on it, as a launch from the menu leaves it: back in the
+  -- menu, the module just closed is under the cursor, wherever it came
+  -- from (the phone's APP_OPEN, a wake, the blank screen's tap)
   local lv = level()
   local name = '?'
-  for _, item in ipairs(lv.items) do
-    if item.id == id then name = item.label end
+  for i, item in ipairs(lv.items) do
+    if item.id == id then name, lv.sel = item.label, i end
   end
 
   local mod = load_module(id)

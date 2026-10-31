@@ -981,3 +981,31 @@ def test_the_hosts_break_while_reading_tells_the_phone_the_place(frame):
     reqs = requests(frame)
     assert len(reqs) == 1 and reqs[0][2] == 0 and reqs[0][0] > 3
     frame.assert_ok()
+
+
+@pytest.mark.parametrize("w, before, left", [
+    ("ґанок", "ґ", 22),   # Ukrainian: 18 + 4
+    ("☀sun", "☀", 44),                         # an emoji: 40 + 4
+    ("‼!ok", "‼", 44),
+])
+def test_other_cyrillic_and_emoji_have_a_width_of_their_own(frame, w,
+                                                               before, left):
+    # the font's other Cyrillic and its emoji have no table of widths: one
+    # width each, so the part before the red letter still ends at it
+    opened(frame, [w])
+    pieces = sorted((t for t in frame.texts() if t.y == WORD_Y),
+                    key=lambda t: t.x)
+    assert pieces[0].text == before and pieces[1].color == "RED"
+    assert pieces[1].x - pieces[0].x == left
+    frame.assert_ok()
+
+
+def test_a_control_character_takes_no_room(frame):
+    opened(frame, ["a\x01b\x02cd"])
+    assert word(frame)[0] == "a\x01b\x02cd"
+    pieces = sorted((t for t in frame.texts() if t.y == WORD_Y),
+                    key=lambda t: t.x)
+    assert pieces[1].color == "RED"
+    assert pieces[1].x - pieces[0].x == frame.emu.display.fonts.glyphs[
+        ord("a")][0] + 4
+    frame.assert_ok()

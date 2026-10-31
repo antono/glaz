@@ -458,3 +458,42 @@ def test_opened_again_it_starts_over(glasses):
     assert "0:00  tap = check" in glasses.screen_text()
     assert glasses.sent(FACTS) == [facts(3)]
     glasses.assert_ok()
+
+
+def test_opened_without_a_phone_it_waits_for_one(frame):
+    frame.emu.connected = False
+    frame.tap(2)                                 # from the menu: the phone
+    frame.tap(1)                                 # cannot open it
+    frame.tilt(1)
+    frame.tap(1)
+    assert "Factcheck" in frame.screen_text() or \
+        "Fact" in frame.screen_text()
+    assert color_of(frame, "no phone") == "RED"
+    assert not frame.emu._mic_on
+    assert not frame.sent(REC_START)
+    frame.emu.connected = True                   # here: it listens
+    frame.advance(1)
+    assert frame.emu._mic_on
+    assert bytes([REC_START, 16, 8, 4]) in frame.sent()
+    assert "no phone" not in frame.screen_text()
+    frame.assert_ok()
+
+
+def test_a_microphone_that_does_not_start_says_so(frame):
+    frame.send(0x30, b"\x07real_start = frame.microphone.start\n"
+               b"frame.microphone.start = function() error('no mic') end")
+    frame.advance(0.3)
+    frame.clear_sent()
+    opened(frame)
+    assert color_of(frame, "no microphone") == "RED"
+    assert not frame.emu._mic_on
+    assert not frame.sent(REC_START)
+    frame.advance(13.7)
+    assert "no microphone" in frame.screen_text()   # it stays: not a note
+    frame.send(0x30, b"\x07frame.microphone.start = real_start")
+    frame.advance(0.3)
+    frame.tap(1)                                 # a tap tries again
+    assert frame.emu._mic_on
+    assert bytes([REC_START, 16, 8, 4]) in frame.sent()
+    assert "no microphone" not in frame.screen_text()
+    frame.assert_ok()
