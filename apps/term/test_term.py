@@ -409,3 +409,84 @@ def test_without_glaz_firmware_it_says_so(frame):
     frame.tap(2)
     assert DONE not in term_sent(frame)           # it never asked
     frame.assert_ok()
+
+
+# ---------------------------------------------------------------- edges
+
+def test_a_row_sent_empty_is_cleared(glasses):
+    # the phone leaves trailing blanks off: a blank row comes as n = 0
+    opened(glasses)
+    call(glasses, frame_msg(1, {1: "one", 2: "two", 3: "three"}))
+    call(glasses, frame_msg(2, {2: ""}))
+    assert mono_rows(glasses) == {Y: "one", Y + 2 * SIZE: "three"}
+    assert bytes([TERM, 2, 2]) in term_sent(glasses)
+    glasses.assert_ok()
+
+
+def test_the_frame_number_wraps_from_255_to_0(glasses):
+    opened(glasses)
+    call(glasses, frame_msg(255, {1: "last"}))
+    call(glasses, frame_msg(0, {1: "first again"}))
+    assert mono_rows(glasses) == {Y: "first again"}
+    taken = [m for m in term_sent(glasses) if m[1] == 2]
+    assert taken == [bytes([TERM, 2, 255]), bytes([TERM, 2, 0])]
+    glasses.assert_ok()
+
+
+def test_a_frame_sent_twice_is_taken_twice(glasses):
+    # the phone sends it again when the answer went missing
+    opened(glasses)
+    msg = frame_msg(137, {1: "$ top"})
+    call(glasses, msg)
+    call(glasses, msg)
+    assert mono_rows(glasses) == {Y: "$ top"}
+    taken = [m for m in term_sent(glasses) if m[1] == 2]
+    assert taken == [bytes([TERM, 2, 137])] * 2
+    glasses.assert_ok()
+
+
+def test_the_last_row_full_and_the_first_untouched(glasses):
+    opened(glasses)
+    call(glasses, frame_msg(1, {1: "top"}))
+    call(glasses, frame_msg(2, {12: "~" * 45}))   # mask bit 12, the lowest
+    assert mono_rows(glasses) == {Y: "top", Y + 11 * SIZE: "~" * 45}
+    glasses.assert_ok()
+
+
+def test_a_status_from_before_the_link_went_is_not_shown_after(frame):
+    opened(frame)
+    call(frame, b"sconnecting to 10.0.0.137")
+    frame.emu.connected = False
+    frame.advance(2)
+    assert "no phone" in frame.screen_text()
+    frame.emu.connected = True
+    frame.clear_sent()
+    frame.advance(2)
+    assert term_sent(frame) == [WANT]             # asked again
+    text = frame.screen_text()
+    assert "waiting for the phone" in text
+    assert "connecting" not in text
+    frame.assert_ok()
+
+
+def test_sleep_from_the_terminal_tells_the_phone(frame):
+    opened(frame)
+    call(frame, frame_msg(1, {1: "$"}))
+    frame.clear_sent()
+    frame.tap(3, settle=3.0)                      # deep sleep
+    frame.advance(2)
+    assert frame.emu.asleep
+    assert DONE in term_sent(frame)
+    frame.assert_ok()
+
+
+def test_the_hosts_break_tells_the_phone(frame):
+    opened(frame)
+    call(frame, frame_msg(1, {1: "$"}))
+    frame.clear_sent()
+    frame.emu.break_signal()
+    frame.advance(1)
+    assert not frame.running()
+    assert DONE in term_sent(frame)
+    frame.assert_ok()
+

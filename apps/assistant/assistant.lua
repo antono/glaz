@@ -57,6 +57,8 @@ local FOR_ASSISTANT = 1   -- REC_START's fourth byte
 local RATE = 8000
 local BITS = 16           -- or 8; Glaz > Menu > Assistant
 local MAX_LISTEN = 120    -- s; only so a forgotten one does not run on
+local MAX_THINK = 360     -- s waited for an answer: the agent's three
+                          -- rounds of 120 s (flutter-glaz agent.dart)
 local ROWS = 5            -- the chats' rows
 local LOG_ROWS = 4        -- the chat's rows; the fifth is the status
 local RETRY = 5           -- s without an answer before asking again
@@ -75,6 +77,7 @@ local per_second = 0      -- bytes of sound a second
 local lost = 0            -- bytes the link did not take
 local view = ''           -- '', 'chats' or 'chat'
 local busy = false        -- asked; the agent is thinking
+local busy_at = 0         -- utc() it began to think
 local note = ''           -- the status row's own: 'no phone', ...
 local rows = {}           -- the chat's lines on screen: number -> {kind, text}
 local total = 0           -- lines in the chat; 0 until the phone says
@@ -164,7 +167,7 @@ end
 -- Stops listening and asks.
 local function ask()
   finish()
-  busy = true
+  busy, busy_at = true, frame.time.utc()
 end
 
 -- What the screen shows, in short: tick() returns it, so a change redraws.
@@ -199,6 +202,7 @@ local function take(arg)
       local b, n, from, body =
         string.match(text, '^(%d):(%d+):(%d+)\n?(.*)$')
       if not b then return end
+      if b == '1' and not busy then busy_at = frame.time.utc() end
       busy, total, from = b == '1', tonumber(n), tonumber(from)
       if follow then
         top = tail_top()
@@ -274,9 +278,13 @@ end
 
 -- Listening is not being left alone: without this glaz.lua's APP_TIMEOUT
 -- (60 s) would stop the module, dropping the question, long before
--- MAX_LISTEN.
+-- MAX_LISTEN. Nor is waiting for the answer, which can take minutes:
+-- stopped, the module drops the question and the phone throws the answer
+-- away. Not with the phone gone, nor past MAX_THINK.
 function _M.busy()
-  return started ~= nil
+  return started ~= nil or
+         (busy and frame.bluetooth.is_connected() and
+          frame.time.utc() - busy_at < MAX_THINK)
 end
 
 function _M.on_tap()

@@ -217,3 +217,53 @@ def test_not_on_halo(halo):
     halo.open_app("tilt")
     assert not halo.sent(APP_START)
     halo.assert_ok()
+
+
+def test_jitter_around_level_reads_zero_and_never_minus_zero(glasses):
+    opened(glasses, roll=0.0, pitch=0.0)
+    for roll in (0.3, -0.2, 0.49, -0.49, -0.5, 0.1, -0.3):
+        glasses.emu.set_direction(roll, roll, 0.0)
+        glasses.advance(0.3)
+        text = glasses.screen_text()
+        assert "r0  p0  h0" in text, (roll, text)
+        assert "-0" not in text
+    glasses.emu.set_direction(-0.51, 0.5, 0.0)   # just past the half degree
+    glasses.advance(0.3)
+    assert "r-1  p1  h0" in glasses.screen_text()
+    glasses.assert_ok()
+
+
+@pytest.mark.parametrize("roll, pitch, heading, line", [
+    (-180.0, 90.0, 359.6, "r-180  p90  h360"),
+    (180.0, -90.0, -359.6, "r180  p-90  h-360"),
+])
+def test_the_ends_of_each_range(glasses, roll, pitch, heading, line):
+    opened(glasses, roll=roll, pitch=pitch, heading=heading)
+    assert line in glasses.screen_text().splitlines()   # whole, not cut
+    glasses.assert_ok()
+
+
+def test_moving_the_head_does_not_keep_it_open(glasses):
+    # only a tap counts: watching the numbers move is no input
+    opened(glasses)
+    glasses.clear_sent()
+    for i in range(11):                          # 55 s of turning the head
+        glasses.emu.set_direction(-25.0 + 5 * i, 137.0 - 10 * i, 0.0)
+        glasses.advance(5)
+    assert not glasses.sent(APP_STOP)
+    glasses.emu.set_direction(30.0, 0.0, 0.0)
+    glasses.advance(6)                           # a minute since it opened
+    assert glasses.sent(APP_STOP)
+    assert "  p" not in glasses.screen_text()
+    glasses.assert_ok()
+
+
+def test_frame_with_no_phone_it_stays_up_its_minute(frame):
+    opened(frame)
+    frame.emu.connected = False                  # the phone out of reach
+    frame.advance(59)
+    assert READING in frame.screen_text()
+    assert not frame.emu.asleep
+    frame.advance(2)
+    assert READING not in frame.screen_text()
+    frame.assert_ok()

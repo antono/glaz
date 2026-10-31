@@ -253,3 +253,53 @@ def test_halo_lays_out_any_author_to_fit(halo):
     assert "glaz 1.3.7/by Anton/|" in answer
     assert "|glaz 1.3.7/by Anton Ivan/Vasiljev" in answer
     halo.assert_ok()
+
+
+def test_the_remotes_menu_button_opens_the_menu(glasses):
+    glasses.open_app("about")
+    glasses.clear_sent()
+    glasses.remote(1, 3, settle=1.0)             # Menu: three taps
+    assert gone(glasses)
+    assert glasses.sent(APP_STOP) and glasses.sent(MENU_OPEN)
+    assert "Glaz > Info" in glasses.screen_text()
+    glasses.assert_ok()
+
+
+def test_frame_shows_it_with_no_phone(frame):
+    frame.advance(5)                             # past the splash
+    frame.emu.connected = False
+    walk_to_about(frame)
+    frame.tap(1)
+    assert shown(frame) == LINES["frame"]        # nothing from the phone
+    frame.assert_ok()
+
+
+def test_frame_a_triple_tap_sleeps_and_a_tap_wakes_into_it(frame):
+    frame.open_app("about")
+    frame.tap(3, settle=3.0)
+    frame.advance(2)
+    assert frame.emu.asleep
+    frame.tap(1, settle=2.0)
+    assert frame.emu.boots == 2                  # waking is a reset
+    assert frame.until("Frame app is running", since=2)
+    frame.advance(1)
+    assert shown(frame) == LINES["frame"]
+    frame.assert_ok()
+
+
+def test_halo_fits_a_version_with_three_digit_minor(halo):
+    # a minor bumped past 99, and a two-digit patch: 'glaz 0.137.13'
+    lua = ("local D = require('about.halo') "
+           "return (string.gsub(D.lines('glaz', '0.137.13', "
+           "'Anton Vasiljev'), '\\n', '/'))")
+    halo.clear_sent()
+    halo.send(LUA_EVAL, b"\x07" + lua.encode())
+    halo.advance(0.5)
+    results = halo.joined(LUA_RESULT)
+    assert results and results[-1][0] == 7
+    answer = results[-1][1].decode()
+    lines = answer[answer.index("glaz "):].rstrip('"').split("/")
+    assert lines == ["glaz 0.137.13", "by Anton", "Vasiljev"]
+    for line, room in zip(lines, (14, 13, 11)):
+        assert len(line) <= room, line
+    halo.assert_ok()

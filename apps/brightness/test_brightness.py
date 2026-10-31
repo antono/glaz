@@ -11,7 +11,7 @@ emulator's panel starts at 0 instead (see test_the_panel_boots_at_level_1).
 import pytest
 
 from glasses import (APP_BACKGROUND, APP_START, APP_STOP, HANDS_OFF,
-                     MENU_OPEN, has_module)
+                     LUA_EVAL, MENU_OPEN, has_module)
 
 pytestmark = pytest.mark.module("brightness")
 
@@ -349,3 +349,96 @@ def test_reached_through_the_menu(frame):
     assert "> Brightness" in frame.screen_text()
     assert frame.emu.display.brightness == 2
     frame.assert_ok()
+
+
+# ---------------------------------------------------------------- edges
+
+def test_the_remote_stops_at_the_ends_too(frame):
+    frame.open_app("brightness")
+    for _ in range(3):
+        frame.remote(2, 1)
+    assert scale(frame) == "-2  -1  0  1  [2]"
+    assert frame.emu.display.brightness == 2
+    for _ in range(6):
+        frame.remote(3, 255)
+    assert scale(frame) == "[-2]  -1  0  1  2"
+    assert frame.emu.display.brightness == -2
+    frame.assert_ok()
+
+
+def test_there_and_back_ends_where_it_began(frame):
+    keep(frame, 0)
+    frame.open_app("brightness")
+    for step in (1, 1, -1, -1, -1, -1, 1, 1):
+        frame.remote(2, 1 if step > 0 else 255, settle=0.05)
+    frame.advance(0.5)
+    assert scale(frame) == "-2  -1  [0]  1  2"
+    assert frame.emu.display.brightness == 0
+    frame.tap(1)
+    assert frame.emu.display.brightness == 0
+    frame.assert_ok()
+
+
+def test_kept_at_the_top_a_tilt_further_changes_nothing(frame):
+    keep(frame, 2)
+    frame.open_app("brightness")
+    assert scale(frame) == "-2  -1  0  1  [2]"
+    frame.tilt(1)
+    assert scale(frame) == "-2  -1  0  1  [2]"
+    frame.tap(2)                                 # cancel: nothing to undo
+    assert frame.emu.display.brightness == 2
+    frame.assert_ok()
+
+
+def test_a_tilt_under_a_notification_moves_nothing(frame):
+    frame.open_app("brightness")
+    frame.notify("Chat", "Hi", "137 apples")
+    frame.tilt(-1)
+    frame.remote(2, 255)
+    assert frame.emu.display.brightness == BOOT
+    frame.tap(1)                                 # the notification away
+    assert scale(frame) == AT_BOOT
+    frame.assert_ok()
+
+
+def test_a_tap_on_a_notification_does_not_keep_the_preview(frame):
+    # the tap dismisses the notification, nothing more: the picker stays
+    # open, and a double tap after it still cancels
+    frame.open_app("brightness")
+    frame.tilt(-1)
+    frame.notify("Chat", "Hi", "137 apples")
+    frame.tap(1)
+    assert "137 apples" not in frame.screen_text()
+    assert scale(frame) == "-2  -1  [0]  1  2"
+    frame.tap(2)
+    assert "[" not in frame.screen_text()
+    assert frame.emu.display.brightness == BOOT
+    frame.assert_ok()
+
+
+def test_a_notification_that_goes_by_itself_leaves_the_preview(frame):
+    frame.open_app("brightness")
+    frame.tilt(1)
+    frame.notify("Chat", "Hi", "137 apples")
+    frame.advance(20)                            # gone by itself
+    assert "137 apples" not in frame.screen_text()
+    assert scale(frame) == "-2  -1  0  1  [2]"
+    assert frame.emu.display.brightness == 2
+    frame.assert_ok()
+
+
+def test_the_kept_level_outlasts_a_crash_and_restart(frame):
+    keep(frame, -2)
+    # an error in the app's loop: glaz_boot starts it again, no reboot
+    frame.send(LUA_EVAL, b"\x01local s = frame.display.show; "
+               b"frame.display.show = function() "
+               b"frame.display.show = s; error('crash 137') end")
+    since = len(frame.lines)
+    assert frame.until("restarting", since=since)
+    assert frame.until("Frame app is running", since=since)
+    frame.advance(5)
+    assert frame.emu.display.brightness == -2    # the panel kept it
+    frame.open_app("brightness")
+    assert scale(frame) == "[-2]  -1  0  1  2"
+    frame.tap(2)                                 # cancel: nothing to undo
+    assert frame.emu.display.brightness == -2

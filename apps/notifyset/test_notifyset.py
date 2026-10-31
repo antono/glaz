@@ -414,3 +414,63 @@ def test_off_a_malformed_or_proper_notify_leaves_the_screen(glasses):
     glasses.advance(0.5)
     assert glasses.screen_text() == before
     glasses.assert_ok()
+
+
+# ---------------------------------------------------------------- edges
+
+def test_a_double_tap_on_a_notification_does_not_leave(glasses):
+    glasses.open_app("notifyset")
+    glasses.notify("Mail", TITLE, "dismiss me")
+    assert popped(glasses)
+    glasses.clear_sent()
+    glasses.tap(2)                             # dismisses it, nothing else
+    assert not popped(glasses)
+    assert not glasses.sent(APP_STOP)
+    assert rows(glasses)[:2] == ["> pop-up: on", "  stays: 5 s"]
+    glasses.assert_ok()
+
+
+def test_left_alone_a_minute_it_closes_keeping_what_was_picked(glasses):
+    glasses.open_app("notifyset")
+    glasses.tap(1)                             # off
+    glasses.clear_sent()
+    glasses.advance(65)
+    assert glasses.sent(APP_STOP)
+    assert "pop-up" not in glasses.screen_text()
+    assert "notifyset.popup=off" in prefs(glasses)
+    glasses.notify("Mail", TITLE, "still off")
+    glasses.advance(0.5)
+    assert not popped(glasses)
+    glasses.assert_ok()
+
+
+def test_seven_tilts_wrap_round_to_the_second_setting(glasses):
+    glasses.open_app("notifyset")
+    for _ in range(7):                         # odd: the second setting
+        glasses.remote(2, 1)
+    assert rows(glasses)[:2] == ["  pop-up: on", "> stays: 5 s"]
+    glasses.assert_ok()
+
+
+@pytest.mark.parametrize("device", ["frame", "halo"])
+def test_a_key_set_twice_takes_the_last(fresh):
+    g = start_with(fresh, ["notifyset.popup=on", "notifyset.popup=off"])
+    g.open_app("notifyset")
+    assert rows(g)[0] == "> pop-up: off"
+    g.assert_ok()
+
+
+def test_with_the_flash_full_the_change_still_counts_until_restart(frame):
+    """No room for prefs.txt: the write fails quietly, the new value holds
+    while the glasses run."""
+    for i in range(10):
+        (frame.sandbox / f"fill{i}.bin").write_bytes(b"x" * 4096)
+    total, used = frame.emu.files.space()
+    assert used >= total
+    frame.open_app("notifyset")
+    frame.tap(1)                               # off
+    assert rows(frame)[0] == "> pop-up: off"
+    frame.notify("Mail", TITLE, "unseen")
+    frame.advance(0.5)
+    assert not popped(frame)
+    frame.assert_ok()

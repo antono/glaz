@@ -606,3 +606,99 @@ def test_the_hosts_break_puts_the_camera_to_sleep(frame):
     frame.emu.break_signal()
     frame.advance(1)
     assert frame.emu._camera_awake is False      # stop() ran
+
+
+# ---------------------------------------------------------------- edges
+
+def series_of_start(frame, at=None):
+    """Starts a series, at utc() at when given, waits for its first photo
+    and stops it: its number."""
+    if at is not None:
+        frame.advance(at - frame.emu.utc())
+    frame.clear_sent()
+    frame.tap(1, settle=0.8)
+    frame.advance(FIRST)
+    frame.tap(1)                                 # stop
+    return photos(frame)[0][0]
+
+
+def test_a_start_255_s_later_is_still_a_new_series(frame):
+    # the number comes from the clock, which gives it again 255 s on;
+    # the phone would put both series in one folder
+    frame.open_app("timeseries")
+    at = frame.emu.utc()
+    first = series_of_start(frame)
+    while frame.emu.utc() < at + 250:            # kept open by tilts
+        frame.tilt(1)
+        frame.tilt(-1)
+        frame.advance(min(40, at + 250 - frame.emu.utc()))
+    second = series_of_start(frame, at + 255)    # the same moment, 255 s on
+    assert 1 <= second <= 255
+    assert second != first
+    frame.assert_ok()
+
+
+def test_a_start_255_s_after_closing_is_still_a_new_series(frame):
+    frame.open_app("timeseries")
+    at = frame.emu.utc()
+    first = series_of_start(frame)
+    frame.tap(2)                                 # closed: the module dropped
+    frame.advance(at + 250 - frame.emu.utc())
+    frame.open_app("timeseries")
+    assert series_of_start(frame, at + 255) != first
+    frame.assert_ok()
+
+
+def test_a_tilt_past_the_end_while_shooting_keeps_the_rhythm(glasses):
+    start(glasses, {"timeseries.interval": "60"})
+    glasses.advance(FIRST)
+    assert len(photos(glasses)) == 1
+    glasses.tilt(1)                              # nothing past 60
+    glasses.tilt(1)
+    assert chosen(glasses) == 60
+    glasses.advance(55)
+    assert len(photos(glasses)) == 1
+    glasses.advance(6)
+    assert len(photos(glasses)) == 2
+    glasses.assert_ok()
+
+
+def test_rapid_start_stop_start_shoots_one_series(glasses):
+    glasses.open_app("timeseries")
+    glasses.clear_sent()
+    for _ in range(3):                           # start, stop, start
+        glasses.tap(1, settle=0.8)
+    assert "tap = stop" in glasses.screen_text()
+    glasses.advance(FIRST + 4)
+    shots = photos(glasses)
+    assert len(shots) == 2
+    assert len({s for s, _ in shots}) == 1
+    assert "sent 2  failed 0" in glasses.screen_text()
+    glasses.assert_ok()
+
+
+def test_the_link_lost_mid_series_keeps_the_counts(frame):
+    start(frame)
+    frame.advance(FIRST + 4)                     # two shots
+    frame.emu.connected = False
+    frame.advance(10)
+    assert "no host, waiting" in frame.screen_text()
+    assert "sent 2  failed 0" in frame.screen_text()
+    frame.emu.connected = True
+    frame.advance(1)
+    assert "sent 3  failed 0" in frame.screen_text()
+    assert len({s for s, _ in photos(frame)}) == 1   # still one series
+    frame.assert_ok()
+
+
+def test_asleep_while_shooting_the_series_stops(frame):
+    start(frame)
+    frame.advance(FIRST)
+    frame.tap(3)                                 # three taps: to sleep
+    frame.advance(2)
+    assert frame.emu.asleep
+    assert frame.emu._camera_awake is False
+    frame.clear_sent()
+    frame.advance(20)
+    assert not photos(frame)
+    frame.assert_ok()

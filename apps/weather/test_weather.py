@@ -636,3 +636,78 @@ def test_the_weather_arrives_under_a_notification(glasses):
     assert len(requests(glasses)) == 1
     assert "Sunny" in glasses.screen_text()
     glasses.assert_ok()
+
+
+# ---------------------------------------------------------------- edges
+
+def test_the_same_answer_twice_is_taken_once(glasses):
+    settings(glasses, {"weather.city": "Berlin"})
+    opened(glasses)
+    ident = requests(glasses)[-1][0]
+    answer(glasses, SUNNY, ident=ident)
+    answer(glasses, "Berlin, Germany|+12°C|Rain\n", ident=ident)
+    assert "Sunny" in glasses.screen_text()       # the request is done
+    assert "Rain" not in glasses.screen_text()
+    assert len(requests(glasses)) == 1
+    glasses.assert_ok()
+
+
+def test_the_same_position_twice_fetches_once(glasses):
+    opened(glasses)
+    ident = location_asks(glasses)[-1][0]
+    place(glasses, ident=ident)
+    place(glasses, -33.8688, -151.2093, ident=ident)
+    assert [u for _, (_, _, u, _) in requests(glasses)] == [
+        "https://wttr.in/52.52,13.40" + FORMAT]
+    glasses.assert_ok()
+
+
+@pytest.mark.parametrize("lat, lon, where", [
+    (90, 180, "90.00,180.00"),                    # the pole, the date line
+    (-90, -180, "-90.00,-180.00"),
+])
+def test_a_fix_at_the_ends_of_the_globe(glasses, lat, lon, where):
+    opened(glasses)
+    place(glasses, lat, lon)
+    assert url(glasses) == f"https://wttr.in/{where}" + FORMAT
+    glasses.assert_ok()
+
+
+def test_a_frost_below_zero_is_shown(glasses):
+    settings(glasses, {"weather.city": "Oslo"})
+    opened(glasses)
+    answer(glasses, "Oslo, Norway|-13°C|Heavy snow\n")
+    assert lines(glasses)[0] == "Oslo, Norway"
+    assert lines(glasses)[1].startswith("-13")
+    assert lines(glasses)[2] == "Heavy snow"
+    glasses.assert_ok()
+
+
+def test_an_html_error_page_keeps_to_the_modules_rows(glasses):
+    # a proxy's 502: lines of HTML, cut to 26 characters, the rest unseen
+    settings(glasses, {"weather.city": "Berlin"})
+    opened(glasses)
+    answer(glasses, "<html>\n<body>\n<h1>502 Bad Gateway</h1>\n"
+                    "</body>\n</html>\n", status=502)
+    shown = lines(glasses)
+    assert shown[0] == "error 502"
+    assert len(shown) <= 3
+    glasses.assert_ok()
+
+
+def test_asleep_mid_request_it_wakes_asking_afresh(frame):
+    settings(frame, {"weather.city": "Berlin"})
+    opened(frame)
+    frame.tap(3)                                  # to sleep, still asking
+    frame.advance(2)
+    assert frame.emu.asleep
+    frame.clear_sent()
+    frame.tap(1)                                  # a wake is a power-on
+    assert frame.until("Frame app is running", 20)
+    frame.set_clock()
+    frame.advance(2)
+    assert url(frame) == "https://wttr.in/Berlin" + FORMAT   # asked again
+    assert "asking the pho" in frame.screen_text()
+    answer(frame, SUNNY)
+    assert "Sunny" in frame.screen_text()
+    frame.assert_ok()

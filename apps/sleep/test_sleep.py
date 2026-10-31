@@ -285,3 +285,69 @@ def test_the_wake_taps_go_back_to_stock_before_sleeping(frame):
     assert tap["threshold"] == 7 and tap["duration"] == 0
     assert tap["latch"] is True and tap["rate"] == 256
     frame.assert_ok()
+
+
+def test_a_tap_that_dismisses_a_notification_does_not_sleep(frame):
+    frame.open_app("sleep")
+    frame.notify("Chat", "Ann", "lunch at 13:37?")
+    assert "Ann" in frame.screen_text()
+    frame.tap(1)                                 # the notice goes, only
+    frame.advance(2)
+    assert not frame.emu.asleep
+    assert "sleep now?" in frame.screen_text()
+    frame.tap(1, settle=0)                       # now it sleeps
+    assert until_asleep(frame)
+    frame.assert_ok()
+
+
+def test_a_notification_in_the_goodnight_blink_does_not_keep_them_up(frame):
+    frame.open_app("sleep")
+    frame.tap(1, settle=0)
+    frame.advance(0.9)                           # the tap counted: the blink
+    frame.notify("Chat", "Ann", "lunch at 13:37?")
+    assert until_asleep(frame)
+    assert frame.lit() == 0
+    frame.assert_ok()
+
+
+def test_the_phones_double_tap_goes_back_and_nothing_sleeps(frame):
+    frame.open_app("sleep")
+    frame.clear_sent()
+    frame.remote(1, 2, settle=1.0)               # INPUT: two taps
+    assert frame.sent(APP_STOP)
+    assert "sleep now?" not in frame.screen_text()
+    frame.advance(5)
+    assert not frame.emu.asleep
+    frame.assert_ok()
+
+
+def test_closed_by_itself_a_tap_does_not_bring_it_back(frame):
+    frame.open_app("sleep")
+    frame.advance(60 + 2)                        # APP_TIMEOUT
+    assert "sleep now?" not in frame.screen_text()
+    frame.clear_sent()
+    frame.tap(1)                                 # the blank screen
+    assert not frame.sent(APP_START)             # not Sleep, nothing ran
+    assert "sleep now?" not in frame.screen_text()
+    assert not frame.emu.asleep
+    frame.assert_ok()
+
+
+def test_closed_by_itself_a_tap_brings_back_the_app_before_it(frame):
+    frame.open_app("about")
+    frame.tap(2)                                 # left
+    frame.open_app("sleep")
+    frame.advance(60 + 2)                        # APP_TIMEOUT
+    frame.tap(1)
+    text = frame.screen_text()
+    assert "About" in text and "sleep now?" not in text
+    frame.assert_ok()
+
+
+def test_a_tap_just_before_the_timeout_still_sleeps(frame):
+    frame.open_app("sleep")
+    frame.advance(59.0)                          # 'sleep now?' still shown
+    assert "sleep now?" in frame.screen_text()
+    frame.tap(1, settle=0)
+    assert until_asleep(frame)
+    frame.assert_ok()

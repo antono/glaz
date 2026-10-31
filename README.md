@@ -59,7 +59,7 @@ out:
 | --- | --- |
 | Tilt your head to a shoulder and back | Scroll the menu up or down |
 | One tap | Select, or bring back the last app you used |
-| Two taps | Go back; wake the glasses up from sleep |
+| Two taps | Go back, also one level up inside an app; wake the glasses up from sleep |
 | Three taps | Go to sleep, from anywhere |
 
 The menu has these apps:
@@ -67,6 +67,9 @@ The menu has these apps:
 - **Apps**
   - **Assistant**: ask a question out loud and read the answer on the
     glasses. The answer is also read aloud, but only through headphones.
+    The glasses show the whole chat, with the tools the assistant used
+    in their own colours. Chats are kept on the phone: start a new one
+    or go on with an earlier one.
   - **Factchecker**: listens to a conversation; tap when you hear a
     claim, and an AI agent checks what was said since the last tap. The
     claims come back as a list: true in green, false in red, partly true
@@ -91,19 +94,28 @@ The menu has these apps:
   - **Recorder**: a voice recorder. It keeps recording in the background,
     and the phone writes a transcript.
   - **Stopwatch**: keeps counting in the background.
+  - **Tuner**: tune a guitar, bass guitar, ukulele, violin, banjo,
+    balalaika or domra. The glasses show the nearest string, how many
+    cents off it is, and whether to tune up or down. The phone listens,
+    with its own microphone or the glasses'.
   - **Files**: browse and preview the files stored on the glasses.
   - **Weather**: the weather where you are, from wttr.in.
   - **Flipper**: a Flipper Zero's screen, four times the size, through the
     phone. You press the Flipper's own buttons.
+  - **Terminal**: an SSH shell on a computer of yours, on the glasses,
+    typed on a keyboard connected to the phone. Needs the extended
+    firmware.
 - **Sensors**: battery level, a live readout of your head angle, and
-  **Tap tune** for adjusting how sensitive tap detection is.
+  **Tap tune** for adjusting how sensitive tap detection is, and seeing
+  which side of the glasses was tapped.
 - **Settings**: display brightness, Notifications (whether they pop up,
   and for how long), and Sleep (put the glasses to sleep now).
 - **Info**: Bluetooth status, uptime, firmware version, and About.
 
 Apps marked "background" keep running when you leave them, and an icon in
 the top bar shows this. New phone notifications pop up on the glasses as
-they arrive.
+they arrive. Text in Cyrillic and the 137 most used emoji show on the
+glasses as they are (with the extended firmware).
 
 ### On the phone
 
@@ -116,17 +128,21 @@ iOS and macOS builds are in the code but need Xcode.
 - **Update the firmware** over Bluetooth: official releases or the
   extended firmware (see below).
 - **Photos and recordings**, sorted by date, with transcripts of the
-  recordings.
+  recordings. Share or delete a photo from the viewer.
 - **AI agent**: one agent for Assistant and Factchecker, any server
   that speaks the OpenAI chat API (Hermes Agent, say), set once in
   Services, with a history of what it was asked and how long it took.
 - **Assistant**: asks the AI agent. The assistant can open apps on the
-  glasses for you.
+  glasses for you. Read the chats and go on with them in writing.
 - **Factchecker**: past sessions, each claim with its verdict, why, and
   links to the sources.
 - **Translate**: the languages to translate from and into, and whether
   the original text is shown too.
-- **Remote**: control the glasses from the phone screen.
+- **Terminal**: the computers to connect to, and SSH keys, kept in
+  Android's keystore. A key can be made on the phone.
+- **Remote**: control the glasses from the phone screen, from a Bluetooth
+  keyboard or clicker, or from a Flipper Zero (see below and
+  [docs/REMOTE.md](docs/REMOTE.md)).
 - **Services** the phone does for the glasses: setting the clock,
   sending notifications, internet access and location.
 - **Per-app settings**: photo quality, the place for Weather, which apps
@@ -146,18 +162,33 @@ iOS and macOS builds are in the code but need Xcode.
 
 - **Glasses files** and a **Log** for when something goes wrong.
 
+### On a Flipper Zero
+
+`flipper-glaz/` is a Flipper Zero app that turns the Flipper into a remote
+for the glasses. Hold it upright and press its buttons: a short press and
+a long one each do their own thing. Its screen shows the glasses' name and
+battery, free space and memory on them, and the app they are showing. It
+pairs with glaz on the phone, not as a keyboard, so the phone's on-screen
+keyboard keeps working. Android wakes glaz when the Flipper comes near.
+It is a draft; see [flipper-glaz/README.md](flipper-glaz/README.md) and
+[docs/REMOTE.md](docs/REMOTE.md).
+
 ## Extended firmware
 
 glaz runs on the official Frame firmware, but some features need the
 **extended firmware** built from the
-[`glaz` branch of antono/frame-codebase](https://github.com/antono/frame-codebase/tree/glaz):
+[`glaz/stable` branch of antono/frame-codebase](https://github.com/antono/frame-codebase/tree/glaz/stable):
 
 - **Two taps to wake.** On the official firmware one tap wakes the glasses,
   so a bag or a table can wake them by accident.
 - **Reliable waking.** The glasses always wake on a tap after sleep, no
   matter what the app on them did before it went to sleep.
-- **Tap tune.** You can adjust tap sensitivity live, from the glasses. On
-  the official firmware this app only shows a message.
+- **Tap tune.** You can adjust tap sensitivity live, from the glasses, and
+  see which side was tapped. On the official firmware this app only shows
+  a message.
+- **Cyrillic and emoji.** The glasses' font has Cyrillic letters and the
+  137 most used emoji.
+- **A terminal font**, monospace, for Terminal (`frame.display.mono()`).
 - **Free space** on the glasses can be read by apps (`frame.file.space()`).
 
 Builds of the extended firmware have `-glaz` at the end of their version,
@@ -197,9 +228,9 @@ emulator-start &    # an Android emulator, for working on the UI (it has no Blue
 ```
 
 `apk` and `linux-app` also bundle the official firmware releases into the
-app. They bundle the extended firmware too, if you have built it in a
-checkout of `frame-codebase` (set `FRAME_CODEBASE` to its path; see
-`flutter-glaz/tool/fetch_firmware.sh`).
+app, and the extended firmware, which must be built first: `firmware` in
+the root shell builds `glaz/stable` in a checkout of `frame-codebase` (set
+`FRAME_CODEBASE` to its path; see `flutter-glaz/tool/fetch_firmware.sh`).
 
 ## Desktop app with Nix
 

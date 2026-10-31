@@ -533,3 +533,69 @@ def test_a_status_byte_belongs_to_the_last_knock_until_a_change():
     assert text[2:4] == ["hits 5", "firmware sends no flags"]
     m.on_roll(1)                                 # threshold
     assert m.on_tap().split("\n")[2:4] == ["hits 0", "last -"]
+
+
+# ---------------------------------------------------------------- edges
+
+@pytest.mark.parametrize("flags, row", [
+    (0x00, "last 0x00 "),                        # a knock that names no side
+    (0xFF, "last 0xFF X+ X- Y+ Y- Z+ Z-"),       # every bit, 6 and 7 raw
+])
+def test_the_status_byte_at_its_ends(flags, row):
+    _, m = module_alone()
+    assert m.on_hit(1, flags).split("\n")[3] == row
+
+
+def test_a_long_burst_is_counted_whole():
+    _, m = module_alone()
+    m.on_hit(137, 0x08)
+    assert m.on_hit(137, None).split("\n")[2] == "hits 274"
+
+
+def test_quiet_wraps_from_15_to_0():
+    rt, _ = module_alone()
+    rt.globals().chip.quiet = 15
+    m = launched(rt)
+    m.on_roll(1)
+    m.on_roll(1)                                 # quiet
+    assert rows(m.tick())[1] == "tap: quiet 15 > 0"
+    m.on_tap()
+    assert rt.globals().chip.quiet == 0
+
+
+def test_a_chip_that_cannot_be_read_shows_unknowns(glasses):
+    lua(glasses, "frame.imu.tap_config = function() "
+                 "error('i2c failed', 0) end")
+    opened(glasses)
+    assert lines(glasses)[:3] == ["thr ? q ? dur ? ax ?",
+                                  "[test] knock to count", "hits 0"]
+    assert any("err: i2c failed" in l for l in glasses.lines)
+    glasses.tap(1)                               # knocks still count
+    assert lines(glasses)[2] == "hits 1"
+    glasses.clear_sent()
+    glasses.tap(2)                               # and it closes
+    assert glasses.sent(APP_STOP)
+    assert glasses.running()
+
+
+def test_a_tilt_round_the_whole_ring_keeps_the_count(glasses):
+    opened(glasses)
+    glasses.tap(1)
+    glasses.tap(1)
+    for _ in range(5):                           # four settings and test
+        glasses.tilt(-1)
+    assert lines(glasses)[1:3] == ["[test] knock to count", "hits 2"]
+    glasses.assert_ok()
+
+
+def test_the_tap_that_steps_a_setting_is_not_counted(glasses):
+    opened(glasses)
+    glasses.tilt(1)                              # threshold
+    glasses.tap(1)                               # steps it, count to 0
+    assert lines(glasses)[2:4] == ["hits 0", "last -"]
+    assert chip(glasses)["threshold"] == 10
+    glasses.tilt(-1)                             # test
+    glasses.tap(1)
+    assert lines(glasses)[2] == "hits 1"
+    assert chip(glasses)["threshold"] == 10      # a knock changes nothing
+    glasses.assert_ok()

@@ -320,3 +320,42 @@ def test_frame_starts_again_from_zero_after_sleep(frame):
     frame.advance(1)
     assert uptime(frame) < before
     frame.assert_ok()
+
+
+@pytest.mark.parametrize("seconds, line", [
+    (59, "0h 00m 59s"),
+    (3599, "0h 59m 59s"),
+    (86399, "23h 59m 59s"),
+])
+def test_just_under_a_minute_an_hour_or_a_day_is_not_rounded_up(
+        glasses, seconds, line):
+    lua(glasses, f"frame.time.utc({seconds})")   # and some 0.6 s
+    glasses.advance(0.2)                         # most of a second past it
+    glasses.open_app("uptime", settle=0)
+    assert line in glasses.screen_text().splitlines()
+    glasses.assert_ok()
+
+
+def test_a_notification_covers_it_and_it_does_not_come_back(glasses):
+    glasses.open_app("uptime")
+    glasses.notify("Chat", "Ann", "lunch at 13:37?")
+    text = glasses.screen_text()
+    assert "Ann" in text and not UPTIME.search(text)
+    glasses.advance(10)                          # the notice and its time go
+    assert not UPTIME.search(glasses.screen_text())
+    glasses.assert_ok()
+
+
+def test_it_leaves_a_stopwatch_in_the_background_running(glasses):
+    glasses.open_app("stopwatch")
+    glasses.tap(1)                               # counting
+    glasses.tap(2)                               # back: in the background
+    glasses.open_app("uptime")
+    glasses.clear_sent()
+    glasses.advance(6)                           # gone by itself
+    assert len(glasses.sent(APP_STOP)) == 1      # itself, only
+    glasses.open_app("stopwatch")
+    text = glasses.screen_text()
+    assert "paused" not in text and "tap = start" not in text
+    glasses.assert_ok()
+

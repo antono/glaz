@@ -5,8 +5,8 @@ it back with a fresh reading, a double tap goes to the Sensors menu.
 """
 import pytest
 
-from glasses import (APP_BACKGROUND, APP_START, APP_STOP, MENU_LEVEL,
-                     MENU_OPEN)
+from glasses import (APP_BACKGROUND, APP_START, APP_STOP, LUA_EVAL,
+                     MENU_LEVEL, MENU_OPEN)
 
 pytestmark = pytest.mark.module("battery")
 
@@ -260,3 +260,63 @@ def test_a_reading_it_cannot_show_is_an_error_not_a_crash(frame):
     # the app carried on: the one error is the module's, printed once
     errors = frame.errors()
     assert len(errors) == 1 and "Battery err:" in errors[0], errors
+
+
+# ---------------------------------------------------------------- edges
+
+@pytest.mark.parametrize("level", [0.0, 100.0])
+def test_frame_gives_the_ends_as_floats_too(frame, level):
+    frame.emu.battery = level
+    frame.open_app("battery")
+    assert frame.screen_text().splitlines()[-1] == f"{int(level)}%"
+    frame.assert_ok()
+
+
+def test_each_tap_on_the_blank_screen_reads_it_afresh(glasses):
+    # charging: the level climbs between looks
+    glasses.open_app("battery")
+    for level in (13, 37, 100):
+        glasses.advance(6)                       # gone by itself
+        set_battery(glasses, level)
+        glasses.tap(1)
+        assert glasses.screen_text().splitlines()[-1] == f"{level}%"
+    glasses.assert_ok()
+
+
+def test_the_phone_opening_another_app_puts_it_away(glasses):
+    set_battery(glasses, 37)
+    glasses.open_app("battery")
+    glasses.clear_sent()
+    glasses.open_app("firmware")
+    assert glasses.sent(APP_STOP)
+    text = glasses.screen_text()
+    assert "Firmware" in text and "37%" not in text
+    glasses.assert_ok()
+
+
+def test_three_taps_while_shown_sleep_and_wake_reads_it_afresh(frame):
+    frame.emu.battery = 37
+    frame.open_app("battery")
+    frame.clear_sent()
+    frame.tap(3, settle=3.0)
+    frame.advance(2)
+    assert frame.sent(APP_STOP)
+    assert frame.emu.asleep
+    frame.emu.battery = 13                       # it drained while asleep
+    frame.tap(1, settle=2.0)                     # waking is a reset
+    assert frame.until("Frame app is running", since=2)
+    frame.set_clock()
+    frame.open_app("battery")
+    assert frame.screen_text().splitlines()[-1] == "13%"
+    frame.assert_ok()
+
+
+def test_no_reading_at_all_is_an_error_not_a_crash(frame):
+    # a firmware without a level: run() fails, the app carries on
+    frame.send(LUA_EVAL, b"\x01frame.battery_level = function() end")
+    frame.open_app("battery")
+    assert "err:" in frame.screen_text()
+    frame.advance(6)
+    assert frame.screen_text() == ""             # and goes as usual
+    assert frame.running()
+    assert all("Battery err:" in e for e in frame.errors()), frame.errors()

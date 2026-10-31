@@ -196,6 +196,44 @@ B (back); a gamepad sends its D-pad and A, B and Start. A remote that
 sends other keys does nothing on the glasses: add its keys to the sets in
 `keys.dart`.
 
+## A ring remote (JX-05)
+
+The JX-05 is a cheap Bluetooth ring sold for scrolling TikTok. It is no
+keyboard: it pairs with the phone as a pointer (Android: `MOUSE | STYLUS`,
+plus a keyboard for its volume keys) and each press of it is a short
+touch of its own, a swipe or a tap, as a finger would make. Its chip
+(JieLi or Beken, closed toolchains) cannot be reprogrammed, so glaz reads
+those touches and turns them back into keys (`lib/services/ring.dart`):
+
+| Ring | Comes to the phone as | Glasses | `INPUT` |
+| --- | --- | --- | --- |
+| up / down | a swipe up / down, ~0.2 s | the module's own; else previous / next item | `[3, 255]` / `[3, 1]` |
+| left / right | a swipe left / right | previous / next item | `[2, 255]` / `[2, 1]` |
+| centre | a touch without moving | select | `[1, 1]` |
+| centre twice | two touches 30 ms apart | back | `[1, 2]` |
+| centre held | volume down | show or hide the menu | `[1, 3]` |
+| up or down held | volume down / up, repeated | the menu / back, once | `[1, 3]` / `[1, 2]` |
+
+A single tap waits 200 ms for a second one before it selects. Holding the
+ring's centre longer still turns the ring off, its own doing.
+
+It needs the background part of the Keyboard remote: steps 1 and 2 of
+"Turn on the Keyboard remote" (Android 14 or later; pair the ring in
+Android's Bluetooth settings). Only an accessibility service can keep
+the ring's touches from the app in front -- glaz's own screen included,
+where a tap would press whatever lies under it. While the glasses are
+connected and a ring named `JX-05...` is attached, the service takes all
+of the phone's mouse and stylus input (`KeyRemoteService.kt`): the ring's
+goes to the glasses, any other mouse's is lost until the ring or the
+glasses go. The ring's volume keys are taken too, the phone's own volume
+buttons are not. Without the glasses, the ring scrolls TikTok as before.
+
+The ring's events were read with `adb shell getevent -lt` on a Pixel 7:
+`ABS_X`/`ABS_Y` 0..3583, `BTN_TOUCH`, and `KEY_VOLUMEUP`,
+`KEY_VOLUMEDOWN`, `KEY_POWER`, `KEY_HOMEPAGE`. Power and Home are the
+phone's and pass. A ring of another name: add it to `ring()` in
+`KeyRemoteService.kt`.
+
 ## Trouble
 
 - **Nothing happens.** Check that the glasses are connected (Glaz tab),
@@ -215,5 +253,8 @@ sends other keys does nothing on the glasses: add its keys to the sets in
   the glasses: connect them on the Glaz tab. A ring top right instead of
   a dot: the phone does not have the Flipper either; check that the
   Flipper remote is on and the Flipper paired (More > Services).
+- **The ring scrolls the app in front instead.** The accessibility
+  service is off, the phone is older than Android 14, or the glasses are
+  not connected.
 - **Glaz no longer starts for the Flipper.** glaz was force-stopped:
   open it once by hand.

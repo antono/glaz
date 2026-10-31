@@ -20,13 +20,14 @@ bool hasGlyph(int c) =>
 /// a single code point (graphical_assets/emoji.py in the firmware).
 bool isFontEmoji(int c) => _emoji.contains(c);
 
-final _emoji = (
-  '😂❤😍🤣😊🙏💕😭😘👍😅👏😁♥🔥💔💖💙😢🤔😆🙄💪😉☺👌🤗💜😔😎😇🌹'
-  '🤦🎉‼💞✌✨🤷😱😌🌸🙌😋💗💚😏💛🙂💓🤩😄😀🖤😃💯🙈👇🎶😒🤭❣❗😜💋'
-  '👀😪😑💥🙋😞😩😡🤪👊☀😥🤤👉💃😳✋😚😝😴🌟😬🙃🍀🌷😻😓⭐✅🌈😈🤘💦'
-  '✔😣🏃💐☹🎊💘😠☝😕🌺🎂🌻😐🖕💝🙊😹🗣💫💀👑🎵🤞😛🔴😤🌼😫⚽🤙☕🏆🧡'
-  '🎁⚡🌞🎈❌'
-).runes.toSet();
+final _emoji =
+    ('😂❤😍🤣😊🙏💕😭😘👍😅👏😁♥🔥💔💖💙😢🤔😆🙄💪😉☺👌🤗💜😔😎😇🌹'
+            '🤦🎉‼💞✌✨🤷😱😌🌸🙌😋💗💚😏💛🙂💓🤩😄😀🖤😃💯🙈👇🎶😒🤭❣❗😜💋'
+            '👀😪😑💥🙋😞😩😡🤪👊☀😥🤤👉💃😳✋😚😝😴🌟😬🙃🍀🌷😻😓⭐✅🌈😈🤘💦'
+            '✔😣🏃💐☹🎊💘😠☝😕🌺🎂🌻😐🖕💝🙊😹🗣💫💀👑🎵🤞😛🔴😤🌼😫⚽🤙☕🏆🧡'
+            '🎁⚡🌞🎈❌')
+        .runes
+        .toSet();
 
 // U+00A1..U+00FF the font does not have
 const _latin1Gaps = {

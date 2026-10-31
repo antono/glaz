@@ -16,8 +16,10 @@
 -- Not in a local of this file: glaz drops a module when it stops, and
 -- Frame's require() reads the file again, so a local would be back at the
 -- default on every open -- the scale showing it while the panel is not, and
--- a cancel setting the panel to it. The global glaz_brightness outlives the
--- module; glaz_boot clears it with the app's other globals after a crash.
+-- a cancel setting the panel to it. Nor in a global: glaz_boot clears the
+-- app's globals after a crash and starts it again without a reboot, the
+-- panel still at the kept level. So it is kept in frame.display, which was
+-- there before glaz_boot looked: it lives as long as the panel's register.
 local _M = {}
 
 _M.label = 'Brightness'
@@ -27,7 +29,7 @@ _M.background = false  -- sleeps: stopped as soon as it leaves the screen
 local MIN, MAX = -2, 2
 local BOOT = 1   -- the level the firmware starts the panel at, see above
 
-local level = glaz_brightness or BOOT   -- the confirmed level
+local level = frame.display.glaz_brightness or BOOT   -- the confirmed level
 local preview = level    -- the level being shown while the picker is open
 local picked = false
 
@@ -67,7 +69,7 @@ end
 
 function _M.on_tap()
   level = preview
-  glaz_brightness = level
+  frame.display.glaz_brightness = level
   picked = true
   return nil, true   -- done: the menu comes straight back
 end

@@ -1615,7 +1615,9 @@ function app_loop()
             local ok, busy = try(mod.busy)
             if ok and busy then run_at = now end
           end
-          if now - run_at > APP_TIMEOUT then
+          -- not while a tap is still being counted (Frame: TAP_WINDOW): a
+          -- tap in the minute's last moment is the wearer's, for the app
+          if now - run_at > APP_TIMEOUT and tap_n == 0 then
             stop_app()
           elseif now >= next_app then
             next_app = now + (mod.period or APP_TICK_PERIOD)
@@ -1631,7 +1633,7 @@ function app_loop()
               end
             end
           end
-        elseif now - run_at > INFO_TIMEOUT then
+        elseif now - run_at > INFO_TIMEOUT and tap_n == 0 then
           -- an 'info' module has said its piece; clear the display
           stop_app()
         end

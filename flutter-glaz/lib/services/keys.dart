@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../frame/link.dart';
 import '../frame/protocol.dart';
 import '../settings.dart';
+import 'ring.dart';
 import 'term.dart';
 
 /// Any keyboard the phone has as the remote: Bluetooth or USB, a
@@ -27,6 +28,9 @@ import 'term.dart';
 /// same keys reach the glasses with another app in front, sent here on
 /// [channel]; the service keeps them from that app only while they are
 /// taken here: the glasses connected, the service on.
+///
+/// A ring remote's swipes and taps come from the same service, on screen
+/// or not, as keys of the table above ([Ring]).
 ///
 /// Android 16 (target SDK 36) has predictive back: Android's Back may never
 /// come as a key, but as a pop of the route ([didPopRoute]), or, with
@@ -131,6 +135,19 @@ class KeyRemote extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  late final ring = Ring(press);
+
+  /// One key from a remote that is no keyboard: pressed and let go.
+  void press(LogicalKeyboardKey key) {
+    if (!_active) return;
+    final at = Duration(milliseconds: _sincePress.elapsedMilliseconds);
+    const physical = PhysicalKeyboardKey(0);
+    _take(KeyDownEvent(physicalKey: physical, logicalKey: key, timeStamp: at));
+    _take(KeyUpEvent(physicalKey: physical, logicalKey: key, timeStamp: at));
+  }
+
+  final _sincePress = Stopwatch()..start();
+
   bool get _active =>
       settings.serviceOn('keys') && link.connected && !link.busy;
 
@@ -189,6 +206,8 @@ class KeyRemote extends ChangeNotifier with WidgetsBindingObserver {
     channel.setMethodCallHandler((call) async {
       if (call.method == 'key') fromBackground(call.arguments as List);
       if (call.method == 'keyboard') _keyboard(call.arguments as bool);
+      if (call.method == 'ring') ring.motion(call.arguments as List);
+      if (call.method == 'ringKey') ring.key(call.arguments as List);
     });
     link.addListener(_sync);
     settings.addListener(_sync);
