@@ -151,6 +151,31 @@ screens -o docs/screens        # a screenshot of every app, both glasses
 
 Without devenv: `pip install -r requirements.txt`, then `pytest tests apps`.
 
+## Which Lua the tests reach
+
+The tests pass; do they run all of the glasses' code? `tests/lua_coverage.py`
+is a pytest plugin that puts a line hook in each emulator's Lua and records
+every line that runs, and `scripts/lua_coverage.py` says, per file of the
+upload, which lines never did (`luac -l` tells which lines are code):
+
+```sh
+LUACOV=cov.json PYTHONPATH=tests pytest -p lua_coverage tests apps
+python scripts/lua_coverage.py cov.json                 # Frame, a line per file
+python scripts/lua_coverage.py cov.json -d halo --lines glaz_app   # the lines missed
+```
+
+The hook runs on every line, so the suite takes about three times as long
+and Frame's heap limit is lifted while it does: the tests that live on that
+limit (`test_frame_emulator.py`, the "let go of packet by packet" ones) fail
+under it, which tells nothing. Run the suite in parts, at the same time if
+you like, one `LUACOV` file each, and give the report all of them to merge.
+
+Last measured (glasses 0.43.1): Frame 97 % of lines, Halo 92 %. What was
+left were the paths that the tests had no reason to take: a module switched
+off or not loading, long notifications, a level longer than the screen, a
+module's `draw()` failing. Start from this report when adding tests, and
+from `--lines` for a file whose number is low.
+
 ## Screenshots for the docs
 
 `scripts/screenshots.py` (`screens` in the shell) opens every app on both
