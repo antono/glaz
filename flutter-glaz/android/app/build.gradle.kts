@@ -32,6 +32,17 @@ android {
         versionName = flutter.versionName
     }
 
+    // Phones are ARM: no x86 libraries, Flutter's or the plugins' (offline
+    // translation, OCR), each tens of MB. Debug builds and `flutter run`
+    // stay as they are, on a phone; not on an x86 emulator. Excluded here,
+    // as abiFilters are not: Flutter's plugin adds its target platforms
+    // (x64 among them) to those.
+    packaging {
+        jniLibs {
+            excludes += listOf("lib/x86/**", "lib/x86_64/**")
+        }
+    }
+
     // The canonical key, android/glaz.jks: from `git secret reveal`, or
     // from the secrets in CI. Every build signed with it installs over any
     // other. Without it, the machine's own debug key.
