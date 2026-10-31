@@ -11,7 +11,7 @@ import 'package:flutter/services.dart';
 /// | up / down | a swipe up / down, ~0.2 s | arrow up / down |
 /// | left / right | a swipe left / right | arrow left / right |
 /// | centre | a touch without moving | Enter: select |
-/// | centre twice | two touches 30 ms apart | Escape: back |
+/// | centre twice | two touches ~130 ms apart | Escape: back |
 /// | centre held | volume down | context menu: the menu |
 /// | held up / down | volume down / up, repeated | the menu / back |
 ///
@@ -27,9 +27,9 @@ class Ring {
   /// 900 to 1700.
   static const swipe = 200.0;
 
-  /// A second touch this soon makes a double: the ring sends both 30 ms
-  /// apart. A single tap waits this long to be sure.
-  static const twice = Duration(milliseconds: 200);
+  /// A second touch this soon makes a double: the ring sends both about
+  /// 130 ms apart. A single tap waits this long to be sure.
+  static const twice = Duration(milliseconds: 250);
 
   /// The ring repeats a held key every 150 ms; a press of the same key
   /// this soon after the last is that repeat.

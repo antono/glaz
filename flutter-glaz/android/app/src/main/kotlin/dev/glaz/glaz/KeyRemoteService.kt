@@ -7,6 +7,7 @@ import android.hardware.input.InputManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -117,6 +118,8 @@ class KeyRemoteService : AccessibilityService(), InputManager.InputDeviceListene
         val info = serviceInfo ?: return
         info.motionEventSources = if (on) POINTERS else 0
         serviceInfo = info
+        Log.i("glaz", "ring: pointers ${if (on) "taken" else "left"}, sources " +
+            Integer.toHexString(serviceInfo?.motionEventSources ?: -1))
     }
 
     /**

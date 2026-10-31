@@ -68,15 +68,15 @@ void main() {
     });
   });
 
-  test('two taps 30 ms apart are back, and no select', () {
+  test('two taps 130 ms apart are back, and no select', () {
     fakeAsync((async) {
       swipe([
         [589, 1540],
       ], 0);
-      async.elapse(const Duration(milliseconds: 30));
+      async.elapse(const Duration(milliseconds: 135));
       swipe([
         [589, 1540],
-      ], 30);
+      ], 135);
       async.elapse(const Duration(seconds: 1));
       expect(pressed, [LogicalKeyboardKey.escape]);
     });

@@ -210,11 +210,12 @@ those touches and turns them back into keys (`lib/services/ring.dart`):
 | up / down | a swipe up / down, ~0.2 s | the module's own; else previous / next item | `[3, 255]` / `[3, 1]` |
 | left / right | a swipe left / right | previous / next item | `[2, 255]` / `[2, 1]` |
 | centre | a touch without moving | select | `[1, 1]` |
-| centre twice | two touches 30 ms apart | back | `[1, 2]` |
+| centre twice | two touches ~130 ms apart | back | `[1, 2]` |
 | centre held | volume down | show or hide the menu | `[1, 3]` |
 | up or down held | volume down / up, repeated | the menu / back, once | `[1, 3]` / `[1, 2]` |
 
-A single tap waits 200 ms for a second one before it selects. Holding the
+A single tap waits 250 ms for a second one before it selects; a swipe
+reaches the glasses 50 to 70 ms after the ring lets go. Holding the
 ring's centre longer still turns the ring off, its own doing.
 
 It needs the background part of the Keyboard remote: steps 1 and 2 of
@@ -253,6 +254,9 @@ phone's and pass. A ring of another name: add it to `ring()` in
   the glasses: connect them on the Glaz tab. A ring top right instead of
   a dot: the phone does not have the Flipper either; check that the
   Flipper remote is on and the Flipper paired (More > Services).
+- **The ring's presses come late, or as one long touch.** Its Bluetooth
+  link is failing: Android shows it connected while it is not. Wake the
+  ring (or pair it again) and keep it near the phone.
 - **The ring scrolls the app in front instead.** The accessibility
   service is off, the phone is older than Android 14, or the glasses are
   not connected.
