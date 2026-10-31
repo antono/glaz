@@ -45,6 +45,16 @@ def test_starts_without_errors(glasses):
     glasses.screenshot("splash")
 
 
+def test_frame_starts_with_the_room_it_has_on_the_glasses(frame):
+    # Frame runs out at about 135 KB and glaz starts at about 89 KB
+    # (docs/FRAME.md): the emulator's HEAP leaves the app the same 46 KB.
+    # When this fails, the app's start moved: measure HEAP again.
+    from frame_emulator import HEAP
+    mem = [l for l in frame.lines if l.startswith("mem ")]
+    start = int(mem[0].split()[1])
+    assert 40 <= HEAP // 1024 - start <= 52, (start, HEAP // 1024)
+
+
 def test_the_splash_goes_by_itself(glasses):
     glasses.advance(5)
     assert "glaz" not in glasses.screen_text()

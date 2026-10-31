@@ -20,7 +20,9 @@ package) and frame.* as the firmware has it:
   of 247) and its error, data from the phone to the receive callback;
 - the host's break, raised once (luaport.c), and its reset;
 - camera (a JPEG of a picture the test sets), microphone (bytes the test
-  gives), fpga_read (zeros: no flip pending), battery, time.
+  gives), fpga_read (zeros: no flip pending), battery, time;
+- a heap as small as Frame's: as much room above the app's start as there
+  (HEAP), and Lua's 'not enough memory' when it is full.
 
 Time is virtual (tests/vclock.py): it moves only when the test advances
 it, so a test of a timeout takes no time and runs the same every time.
@@ -57,6 +59,16 @@ BLOCK, BLOCKS = 4096, 43   # littlefs on Frame: 172 KB (docs: flash space)
 FREE_AFTER_UPLOAD = 8 * BLOCK
 PIECE = 512                # LUAL_BUFFERSIZE on Frame: the most read() gives
 ERR = "\0frame-error"      # a Python stub's error, raised in Lua by PRELUDE
+NOMEM = "not enough memory"   # Lua's LUA_ERRMEM, as the firmware prints it
+# Frame's Lua runs out at about 135 KB, and glaz starts at about 89 KB: 46 KB
+# of room (docs/FRAME.md, "Known gotchas"). Here the app is source, with
+# its debug information and none of the phone's minifying, and starts at
+# about 200 KB (collectgarbage('count') after start, test_app.py), so the
+# heap is that and the same 46 KB. Measured again when the app's start
+# moves: test_app.py fails when the room is not 40 to 52 KB.
+HEAP = 246 * 1024
+# What lupa takes to hand a stub's result to Lua besides its strings
+STUB_SLACK = 1024
 # imu.c's tap_defaults: what a boot and every wake from deep sleep set
 TAP_DEFAULTS = {"threshold": 7, "y": 7, "z": 7, "quiet": 0, "duration": 0,
                 "axes": 0x08, "latch": True, "rate": 256}
@@ -148,6 +160,15 @@ def checkstr(v, n: int, fn: str) -> str:
                    f"(string expected, got {luatype(v)})")
 
 
+def strings(v) -> int:
+    """The bytes of the strings in what a stub hands to Lua."""
+    if isinstance(v, (str, bytes, bytearray)):
+        return len(v)
+    if isinstance(v, (tuple, list)):
+        return sum(strings(x) for x in v)
+    return 0
+
+
 def lua_errors(fn):
     """A stub whose LuaError becomes a Lua error with the firmware's text."""
     def wrapped(*args):
@@ -168,18 +189,25 @@ local error, type, select, tostring, tonumber, load, pcall =
 local setmetatable, getmetatable, ipairs =
       setmetatable, getmetatable, ipairs
 local pack, unpack = table.pack, table.unpack
+local NOMEM = py.NOMEM
 
 -- A stub's error raised as luaL_error raises it: at the line of Lua that
--- called the frame.* function. Never tail-called, so that level 3 is that
+-- called the frame.* function; out of memory, as Lua raises it, with no
+-- line at all. Never tail-called, so that level 1 is the caller of fail().
+local function fail(msg, level)
+  if msg == NOMEM then error(msg, 0) end
+  error(msg, level + 1)
+end
+-- Never tail-called either, so that level 3 is the frame.* function's
 -- caller (a tail call would drop the frame.* function's own level).
 local function raise(r, ...)
-  if r == ERR then error((...), 3) end
+  if r == ERR then fail((...), 3) end
   return r, ...
 end
 local function wrap(f)
   return function(...)
     local t = pack(f(...))
-    if t[1] == ERR then error(t[2], 2) end
+    if t[1] == ERR then fail(t[2], 2) end
     return unpack(t, 1, t.n)
   end
 end
@@ -187,7 +215,7 @@ end
 local function wrapn(f)
   return function(...)
     local t = pack(f(select('#', ...), ...))
-    if t[1] == ERR then error(t[2], 2) end
+    if t[1] == ERR then fail(t[2], 2) end
     return unpack(t, 1, t.n)
   end
 end
@@ -370,7 +398,7 @@ local function path_fn(fn, f, n)
       checkstring(fn, i, select('#', ...) >= i, (select(i, ...)))
     end
     local t = pack(f(...))
-    if t[1] == ERR then error(t[2], 2) end
+    if t[1] == ERR then fail(t[2], 2) end
     return unpack(t, 1, t.n)
   end
 end
@@ -669,6 +697,7 @@ class FrameEmulator:
         # on one, as here by default
         self.double_tap_wake = False
         self.updating = False      # frame.update() called: in the bootloader
+        self.heap = HEAP           # Lua's memory in bytes; None: no limit
         self._first_tap: float | None = None
         self._power_on()
         self.clock.watch(lambda: self._running)
@@ -705,7 +734,12 @@ class FrameEmulator:
         self._callbacks = {}
         self.files.close_all()
         self._stay_awake = False     # run_lua(): "frame.stay_awake(false)"
-        rt = lupa.LuaRuntime(unpack_returned_tuples=True, encoding="latin-1")
+        # max_memory=0 is lupa's own allocator, which counts what Lua takes
+        rt = lupa.LuaRuntime(unpack_returned_tuples=True, encoding="latin-1",
+                             max_memory=0)
+        rt.set_max_memory(self.heap or 0, total=True)
+        self._rt = rt
+        self._collect = rt.globals().collectgarbage
         g = rt.globals()
         handler = self.print_handler
         tostring = g.tostring
@@ -715,9 +749,42 @@ class FrameEmulator:
                 handler("\t".join(str(tostring(a)) for a in args))
 
         g.print = lua_print
-        py = rt.table_from(self._stubs())
+        py = rt.table_from({k: self._fitting(k, v) if callable(v) else v
+                            for k, v in self._stubs().items()})
         rt.execute(PRELUDE, py, ERR)
         self._lua = rt
+
+    def _room(self, size: int) -> bool:
+        """Whether size bytes more fit in Lua's heap: after a full
+        collection when they do not, as Lua's allocator does first."""
+        def fits():
+            return (self._rt.get_memory_used(total=True) + size + STUB_SLACK
+                    <= self.heap)
+        if not self.heap or fits():
+            return True
+        self._collect()
+        return fits()
+
+    def _malloc(self, size: int, error: str = NOMEM):
+        """The firmware's own malloc(), from the heap Lua shares: it fails
+        where Lua's garbage is, uncollected (display.c's malloc_collecting
+        is the one that collects first)."""
+        if self.heap and (self._rt.get_memory_used(total=True) + size
+                          > self.heap):
+            raise LuaError(error)
+
+    def _fitting(self, name: str, fn):
+        """The stub, its strings handed to Lua only when they fit. lupa
+        aborts the process when Lua runs out while it pushes one, where
+        the firmware's push raises Lua's error: so the stub raises it."""
+        full = ("error", NOMEM) if name == "sleep" else (ERR, NOMEM)
+
+        def fitting(*args):
+            if not self._room(0):
+                return full
+            r = fn(*args)
+            return r if self._room(strings(r)) else full
+        return fitting
 
     def _run(self, script: str):
         # run_lua(): require('main'), so main.lua's errors are "exiting
@@ -751,6 +818,8 @@ class FrameEmulator:
                 self.display.powered = True
         except Exception as e:
             if not isinstance(e, Stopped):
+                if isinstance(e, lupa.LuaMemoryError) and not str(e):
+                    e = lupa.LuaMemoryError(NOMEM)
                 self.error = e
                 if self.print_handler is not None:
                     self.print_handler(f"[frame-emulator] Lua error: {e}")
@@ -826,6 +895,10 @@ class FrameEmulator:
         fn = self._callbacks.get(event.kind)
         if fn is None:
             return False
+        if event.kind != "tap" and not self._room(strings(event.data)):
+            # the firmware pushes the data before the callback runs
+            self._callback_error = NOMEM
+            return True
         try:
             if event.kind == "tap":
                 fn() if event.data is None else fn(int(event.data))
@@ -833,8 +906,9 @@ class FrameEmulator:
                 fn(event.data.decode("latin-1"))
         except lupa.LuaError as e:
             # lua_tostring() of the error: the message, not lupa's
-            # traceback after it
-            self._callback_error = str(e).split("\nstack traceback:")[0]
+            # traceback after it; lupa's out of memory has none
+            self._callback_error = (str(e).split("\nstack traceback:")[0]
+                                    or NOMEM)
             return True
         return False
 
@@ -904,7 +978,9 @@ class FrameEmulator:
             address = checkint(address, 1, "fpga_read")
             if not 0 <= address <= 0xFF:
                 raise LuaError("address must be between 0x00 and 0xFF")
-            return "\0" * checkint(n, 2, "fpga_read")
+            n = checkint(n, 2, "fpga_read")
+            emu._malloc(n)
+            return "\0" * n
 
         def fpga_write(address, data=None):
             address = checkint(address, 1, "fpga_write")
@@ -1108,6 +1184,7 @@ class FrameEmulator:
             n = checkint(n, 1, "read")
             if n <= 0:
                 raise LuaError("bytes must be greater than 0")
+            emu._malloc(n, "bytes requested is too large")
             if emu._jpeg_pos >= len(emu._jpeg):
                 emu._jpeg = b""
                 return None
@@ -1218,6 +1295,7 @@ class FrameEmulator:
                 raise LuaError("bytes must be a multiple of 2")
             if not emu.mic_data:
                 return "" if emu._mic_on else None
+            emu._malloc(n)
             chunk = bytes(emu.mic_data[:n])
             del emu.mic_data[:n]
             return chunk.decode("latin-1")
@@ -1225,6 +1303,7 @@ class FrameEmulator:
         f = emu.files
         d = emu.display
         stubs = {
+            "NOMEM": NOMEM,
             "HARDWARE_VERSION": HARDWARE_VERSION,
             "FIRMWARE_VERSION": FIRMWARE_VERSION,
             "GIT_TAG": "emulator",

@@ -11,7 +11,10 @@
 --                  being asked is dropped, sent nowhere
 --
 -- A chat is a log of lines, coloured by kind: the wearer's questions, the
--- agent's tool calls (a photo taken, notes read), its answers.
+-- agent's tool calls (a photo taken, notes read), its answers. The phone
+-- keeps it; the glasses hold the four lines on screen and ask for the
+-- next four as the view moves, so a long chat costs them no more memory
+-- than a short one (docs/PROTOCOL.md, "Memory on the glasses").
 --
 -- Only taps start and stop it: nothing guesses where a question ends.
 -- Listening is Recorder's streaming with a fourth byte in REC_START, 1, so
@@ -22,17 +25,21 @@
 -- was not running:
 --
 --   'stop'      -- stop listening and ask
---   't:<busy>' then '\n<kind>|<text>' per line -- the chat's newest lines,
---                  already cut to the screen; <busy> 1 while the agent
---                  thinks. kind: Q question, T tool call, A answer, C a
---                  command run, E went wrong
---   'e:<text>'  -- went wrong outside a chat (nothing heard, no agent)
+--   't:<busy>:<total>:<from>' then '\n<kind>|<text>' per line -- at most
+--                  four of the chat's lines from line <from>, already cut
+--                  to the screen; <total> lines in all; <busy> 1 while the
+--                  agent thinks. kind: Q question, T tool call, A answer,
+--                  C a command run, E went wrong. Sent again as it changes
+--   'e:<text>'  -- went wrong outside a chat (nothing heard, no agent):
+--                  red under the chat, its last four lines
 --   'listen'    -- listen again
 --   'c:<live>' then '\n<id>|<title>' per chat -- the chats, newest first;
 --                  <live> the id of the one still going on, or 0
 --
--- ASSIST asks, '>BBI2': op, id -- 1 the chats, 2 go on with chat <id>
--- (the phone answers 't:'), 3 a new chat, sent just before listening.
+-- ASSIST asks, '>BBI2I2': op, id, from -- 1 the chats, 2 go on with chat
+-- <id> (the phone answers 't:', its newest lines), 3 a new chat, sent
+-- just before listening, 4 the chat's lines from line <from> (from 1; 0
+-- the newest, followed), asked again after RETRY until they come.
 local _M = {}
 
 _M.label = 'Assistant'
@@ -43,7 +50,8 @@ local REC_START = 0x1F
 local AUDIO     = 0x05
 local AUDIO_END = 0x06
 local REC_DROP  = 0x10    -- [0x10]: the question is dropped, not asked
-local ASSIST    = 0x04    -- '>BBI2': 1 the chats, 2 open one, 3 a new one
+local ASSIST    = 0x04    -- '>BBI2I2': 1 the chats, 2 open one, 3 a new
+                          -- one, 4 the chat's lines from <from>
 local FOR_ASSISTANT = 1   -- REC_START's fourth byte
 
 local RATE = 8000
@@ -53,7 +61,7 @@ local MAX_THINK = 360     -- s waited for an answer: the agent's three
                           -- rounds of 120 s (flutter-glaz agent.dart)
 local ROWS = 5            -- the chats' rows
 local LOG_ROWS = 4        -- the chat's rows; the fifth is the status
-local RETRY = 5           -- s without the chats before asking again
+local RETRY = 5           -- s without an answer before asking again
 
 -- Layout, as Translate's: rows under the top bar, the cursor left of the
 -- text
@@ -71,13 +79,17 @@ local view = ''           -- '', 'chats' or 'chat'
 local busy = false        -- asked; the agent is thinking
 local busy_at = 0         -- utc() it began to think
 local note = ''           -- the status row's own: 'no phone', ...
-local log = {}            -- the chat, { kind, text } a line, oldest first
-local top = 1             -- the log line on the first row
-local follow = true       -- the view keeps to the end of the log
+local rows = {}           -- the chat's lines on screen: number -> {kind, text}
+local total = 0           -- lines in the chat; 0 until the phone says
+local errs = {}           -- 'e:' lines, at most LOG_ROWS, under the chat
+local top = 1             -- the chat's line on the first row
+local follow = true       -- the view keeps to the end of the chat
+local asked = nil         -- the window asked for and not come: its from
 local chats = nil         -- { {id, title}, ... } once the phone says
 local sel, ctop = 0, 0    -- the chat under the cursor, on the first row;
                           -- 0 is 'New chat'
 local asked_at = nil      -- utc() the chats were asked for
+local wanted_at = 0       -- utc() the window was asked for
 local ver = 0             -- goes up with every change the phone brings
 
 local function send(packet)
@@ -88,9 +100,9 @@ local function send(packet)
   return false
 end
 
-local function assist(op, id)
+local function assist(op, id, from)
   return frame.bluetooth.is_connected()
-    and send(string.pack('>BBI2', ASSIST, op, id or 0))
+    and send(string.pack('>BBI2I2', ASSIST, op, id or 0, from or 0))
 end
 
 -- As Recorder's: at most two seconds' worth a call.
@@ -101,6 +113,10 @@ local function drain()
     if not ok or s == nil or s == '' then return end
     done = done + #s
     if not send(string.char(AUDIO) .. s) then lost = lost + #s end
+    -- as Recorder's: two seconds of sound is 32 KB of strings, a quarter
+    -- of the heap, unless each goes as it is sent
+    s = nil
+    collectgarbage('step')
   end
 end
 
@@ -113,7 +129,13 @@ local function finish()
 end
 
 local function tail_top()
-  return math.max(1, #log - LOG_ROWS + 1)
+  return math.max(1, total - LOG_ROWS + 1)
+end
+
+-- The lines on screen, asked for: the newest while following.
+local function want_window()
+  asked, wanted_at = follow and 0 or top, frame.time.utc()
+  assist(4, 0, asked)
 end
 
 local function listen()
@@ -150,7 +172,8 @@ end
 
 -- What the screen shows, in short: tick() returns it, so a change redraws.
 local function state_str()
-  return table.concat({ view, ver, sel, ctop, top, tostring(follow),
+  return table.concat({ view, ver, sel, ctop, top, total, #errs,
+                        tostring(follow),
                         tostring(busy), note, lost // 1024,
                         started and math.floor(frame.time.utc() - started)
                         or '-' }, '|')
@@ -176,20 +199,36 @@ local function take(arg)
     if view == 'chats' then return end
     view = 'chat'
     if kind == 't' then
-      local b, body = string.match(text, '^(%d)\n?(.*)$')
+      local b, n, from, body =
+        string.match(text, '^(%d):(%d+):(%d+)\n?(.*)$')
+      if not b then return end
       if b == '1' and not busy then busy_at = frame.time.utc() end
-      log, busy = {}, b == '1'
-      for k, t in string.gmatch(body or '', '(%a)|([^\n]*)') do
-        log[#log + 1] = { k, t }
+      busy, total, from = b == '1', tonumber(n), tonumber(from)
+      if follow then
+        top = tail_top()
+      elseif top > tail_top() then
+        -- shorter than the view: the chat changed under it
+        top, follow = tail_top(), true
       end
+      if from ~= top then
+        -- for a view since left: the one on screen is asked for
+        if asked == nil then want_window() end
+        return
+      end
+      rows, errs = {}, {}
+      for k, t in string.gmatch(body, '(%a)|([^\n]*)') do
+        rows[from] = { k, t }
+        from = from + 1
+      end
+      if asked == 0 or asked == top then asked = nil end
     else
       finish()
       busy = false
       for line in string.gmatch(text, '[^\n]+') do
-        log[#log + 1] = { 'E', line }
+        errs[#errs + 1] = line
+        if #errs > LOG_ROWS then table.remove(errs, 1) end
       end
     end
-    if follow then top = tail_top() end
   end
   ver = ver + 1
 end
@@ -200,7 +239,8 @@ local function ask_chats()
 end
 
 local function reset()
-  log, top, follow, busy, note = {}, 1, true, false, ''
+  rows, total, errs, top, follow = {}, 0, {}, 1, true
+  busy, note, asked = false, '', nil
 end
 
 function _M.start(info)
@@ -218,6 +258,10 @@ function _M.tick()
   if view == 'chats' and not chats
      and (not asked_at or frame.time.utc() - asked_at > RETRY) then
     ask_chats()
+  end
+  if view == 'chat' and asked and frame.bluetooth.is_connected()
+     and frame.time.utc() - wanted_at > RETRY then
+    want_window()
   end
   if started then
     if not frame.bluetooth.is_connected() then
@@ -268,8 +312,13 @@ function _M.on_roll(dir)
     if sel < ctop then ctop = sel end
     if sel > ctop + ROWS - 1 then ctop = sel - ROWS + 1 end
   else
+    local was = top
     top = math.max(1, math.min(top + dir * (LOG_ROWS - 1), tail_top()))
     follow = top == tail_top()
+    if top == was then return nil end
+    -- the rows kept are drawn where they still are, until the rest come
+    errs = {}
+    want_window()
   end
   return state_str()
 end
@@ -310,8 +359,17 @@ function _M.draw()
     end
     return
   end
+  -- the errors under the chat's lines, the last four of both shown
+  local shown = math.max(0, math.min(LOG_ROWS, total - top + 1))
+  local skip = math.max(0, shown + #errs - LOG_ROWS)
   for r = 0, LOG_ROWS - 1 do
-    local l = log[top + r]
+    local l
+    if r + skip < shown then
+      l = rows[top + skip + r]
+    else
+      local e = errs[r + skip - shown + 1]
+      l = e and { 'E', e }
+    end
     if l and l[2] ~= '' then
       frame.display.text(l[2], LEFT_X, TOP_Y + ROW_H * r,
                          { color = COLORS[l[1]] or 'WHITE' })
@@ -348,7 +406,8 @@ end
 -- Leaving: a double tap from the chats, or anything else that stops it.
 function _M.stop()
   drop()
-  view, chats, log = '', nil, {}
+  view, chats = '', nil
+  reset()
 end
 
 return _M

@@ -534,14 +534,15 @@ def test_a_short_piece_after_a_cut_letter_is_shown_whole(glasses):
     glasses.assert_ok()
 
 
-def test_137_files_wrap_round_at_both_ends(glasses):
-    only(glasses, *[(f"F{i:03}", i, 1) for i in range(1, 138)])
+def test_37_files_wrap_round_at_both_ends(glasses):
+    # Frame's flash holds about 40 files of a 4 KB block each
+    only(glasses, *[(f"F{i:03}", i, 1) for i in range(1, 38)])
     open_files(glasses)
     glasses.tilt(-1)                             # from the first to the last
-    assert names(glasses) == ["F135", "F136", "F137"]
-    assert body(glasses)[2] == "> F137  137 B"
+    assert names(glasses) == ["F035", "F036", "F037"]
+    assert body(glasses)[2] == "> F037  37 B"
     glasses.tilt(-1)
-    assert body(glasses)[1] == "> F136  136 B"
+    assert body(glasses)[1] == "> F036  36 B"
     glasses.tilt(1)
     glasses.tilt(1)                              # from the last to the first
     assert body(glasses)[0] == "> F001  1 B"

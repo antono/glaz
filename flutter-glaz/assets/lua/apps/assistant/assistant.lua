@@ -1,0 +1,1 @@
+../../../../../apps/assistant/assistant.lua

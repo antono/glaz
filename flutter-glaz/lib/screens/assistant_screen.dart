@@ -6,11 +6,13 @@ import '../services/speech.dart';
 import '../services/voice.dart';
 import '../services/services.dart';
 import '../theme.dart';
+import 'agent_screen.dart';
 import 'assistant_chat_screen.dart';
 
-/// The agent the glasses' Assistant asks, the language it hears, and the
-/// chats with it: on Assistant's page in the Menu tab, under its
-/// settings for the glasses. Phone only: none of it goes to the glasses.
+/// The agent the glasses' Assistant asks (its settings are the AI agent
+/// service's), the language it hears, and the chats with it: on
+/// Assistant's page in the Menu tab, under its settings for the glasses.
+/// Phone only: none of it goes to the glasses.
 class AssistantSettings extends StatefulWidget {
   const AssistantSettings({super.key});
 
@@ -21,10 +23,6 @@ class AssistantSettings extends StatefulWidget {
 class _AssistantSettingsState extends State<AssistantSettings> {
   final _settings = Services.instance.settings;
   final _assistant = Services.instance.assistant;
-  late final _url = TextEditingController(text: _settings.agentUrl);
-  late final _key = TextEditingController(text: _settings.agentKey);
-  late final _model = TextEditingController(text: _settings.agentModel);
-  bool _showKey = false;
 
   @override
   void initState() {
@@ -33,84 +31,14 @@ class _AssistantSettingsState extends State<AssistantSettings> {
   }
 
   @override
-  void dispose() {
-    _url.dispose();
-    _key.dispose();
-    _model.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    final scheme = Theme.of(context).colorScheme;
     return ListenableBuilder(
       listenable: _assistant,
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 24, 4, 8),
-            child: Text('Agent', style: text.titleMedium),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
-            child: Text(
-              'The phone transcribes what you ask and asks your agent: any '
-              'server that speaks the OpenAI chat API; for Hermes Agent, '
-              'its API server (hermes gateway) on your tailnet. Kept on the '
-              'phone, never sent to the glasses.',
-              style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-            ),
-          ),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  TextField(
-                    controller: _url,
-                    keyboardType: TextInputType.url,
-                    autocorrect: false,
-                    decoration: const InputDecoration(
-                      labelText: 'Server',
-                      hintText: 'https://hermes.tail1234.ts.net',
-                      helperText: 'With tailscale serve, or http://...:8642',
-                    ),
-                    onChanged: (v) => _settings.agentUrl = v,
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _key,
-                    obscureText: !_showKey,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    decoration: InputDecoration(
-                      labelText: 'Key',
-                      helperText: "Hermes: API_SERVER_KEY in the server's .env",
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _showKey ? Icons.visibility_off : Icons.visibility,
-                        ),
-                        onPressed: () => setState(() => _showKey = !_showKey),
-                      ),
-                    ),
-                    onChanged: (v) => _settings.agentKey = v,
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _model,
-                    autocorrect: false,
-                    decoration: const InputDecoration(
-                      labelText: 'Model',
-                      helperText: 'Hermes: hermes-agent',
-                    ),
-                    onChanged: (v) => _settings.agentModel = v,
-                  ),
-                ],
-              ),
-            ),
-          ),
+          const SizedBox(height: 24),
+          const AgentLink(),
           const SizedBox(height: 16),
           _Language(_assistant),
           const SizedBox(height: 16),

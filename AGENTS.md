@@ -146,9 +146,16 @@ python3 -m venv .venv
   `return {}` if it has nothing of its own), and a `README.md`: what the
   app is for, its screenshots (`scripts/screenshots.py --readme name`
   makes `screens/<glasses>.png`) and how it works. List it in the `MENU`
-  tree in `glaz/glaz.lua` and as an asset folder in
-  `flutter-glaz/pubspec.yaml` (a test checks). See `docs/PROTOCOL.md` and
+  tree in `glaz/glaz.lua`, as an asset folder in
+  `flutter-glaz/pubspec.yaml`, and link its Lua into the phone's assets
+  with `flutter-glaz/tool/link_apps.sh` (a test checks both). See `docs/PROTOCOL.md` and
   `docs/DEVICES.md`. A change to how an app works updates its README.
+- **Glasses memory is small**: about 135 KB of Lua heap, 89 KB of it the
+  app's from the start. Apps hold only what their screen shows; the
+  phone keeps the data and sends small windows (a few hundred bytes) as
+  the glasses ask for them; streamed sound or pictures are let go of
+  packet by packet (`collectgarbage('step')`); no table grows with time.
+  See docs/PROTOCOL.md, "Memory on the glasses".
 - What differs between Frame and Halo goes in the parts, never in a check
   of which glasses these are (docs/DEVICES.md); `check.sh` holds to it.
 - Every commit that changes an app bumps its version in the same commit,

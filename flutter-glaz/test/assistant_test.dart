@@ -46,7 +46,7 @@ class FakeAgent implements Agent {
   final asked = <List<AgentMessage>>[];
 
   @override
-  Future<String> ask(List<AgentMessage> messages) async {
+  Future<String> ask(List<AgentMessage> messages, {Duration? wait}) async {
     asked.add(messages);
     return replies.isNotEmpty ? replies.removeAt(0) : reply;
   }
@@ -172,8 +172,8 @@ void main() {
     test('the answer goes to Assistant when nothing else opens', () async {
       agent.reply = 'Сорок два.';
       await assistant.ask('Сколько?');
-      expect(last(appOpen), 'assistant\nt:0\nQ|Сколько?\nA|Сорок два.');
-      expect(last(moduleCall), 'assistant\nt:1\nQ|Сколько?');
+      expect(last(appOpen), 'assistant\nt:0:2:1\nQ|Сколько?\nA|Сорок два.');
+      expect(last(moduleCall), 'assistant\nt:1:1:1\nQ|Сколько?');
     });
 
     test('only the apps last uploaded are offered and opened', () async {
@@ -306,10 +306,10 @@ void main() {
         link,
         settings,
         FakeTranscriber(),
-        agent: AssistantService.defaultAgent,
+        agent: agentFrom,
       );
       await assistant.ask('hi');
-      expect(last(appOpen), contains('\nE|Set up the agent'));
+      expect(last(appOpen), contains('\nE|Set up the AI agent: Glaz\nE|> More > Services'));
     });
 
     test('set takes only known settings and options', () async {
@@ -369,13 +369,13 @@ void main() {
       expect(
         link.sent.where((s) => s.$1 == moduleCall).map((s) => s.$2),
         contains(
-          'assistant\nt:1\nQ|Что я вижу?\n'
+          'assistant\nt:1:3:1\nQ|Что я вижу?\n'
           'T|* Took a photo with the\nT|glasses ..',
         ),
       );
       expect(link.sent.last, (
         appOpen,
-        'assistant\nt:0\nQ|Что я вижу?\n'
+        'assistant\nt:0:4:1\nQ|Что я вижу?\n'
             'T|* Took a photo with the\nT|glasses\nA|Вижу кота.',
       ));
       expect(assistant.turns.single.queries, hasLength(1));
@@ -666,14 +666,14 @@ void main() {
       expect(a.current, first);
       expect(
         link.sent.last.$2,
-        'assistant\nt:0\nQ|Первый вопрос\nA|Сорок два.',
+        'assistant\nt:0:2:1\nQ|Первый вопрос\nA|Сорок два.',
       );
 
       a.onMessage([assist, 3, 0, 0]);
       expect(a.current, isNull);
     });
 
-    test('a long chat goes to the glasses as its newest turns', () async {
+    test('a long chat goes to the glasses four lines at a time', () async {
       final a = AssistantService(
         SentLink(),
         settings,
@@ -684,13 +684,49 @@ void main() {
       for (var i = 0; i < 137; i++) {
         await a.ask('Вопрос $i');
       }
+      final all = a.glassesLines(a.current!);
       final out = a.onGlasses(a.current!);
-      expect(
-        utf8.encode(out).length,
-        lessThanOrEqualTo(AssistantService.maxBytes),
+      // a screen's worth, of Cyrillic: a few hundred bytes at most
+      expect(utf8.encode(out).length, lessThanOrEqualTo(300));
+      expect(out, startsWith('t:0:${all.length}:${all.length - 3}\n'));
+      expect(out.split('\n').skip(1), all.skip(all.length - 4));
+      expect(all, contains('Q|Вопрос 0'));
+
+      final first = a.onGlasses(a.current!, from: 1);
+      expect(first, startsWith('t:0:${all.length}:1\nQ|Вопрос 0\n'));
+      expect(first.split('\n'), hasLength(5));
+      // past the end: the newest
+      expect(a.onGlasses(a.current!, from: 9999), out);
+    });
+
+    test('the glasses ask for a window, and keep it as it changes', () async {
+      final link = SentLink();
+      final a = AssistantService(
+        link,
+        settings,
+        FakeTranscriber(),
+        agent: (_) => agent,
       );
-      expect(out, contains('Q|Вопрос 136'));
-      expect(out, isNot(contains('Q|Вопрос 0\n')));
+      for (var i = 0; i < 4; i++) {
+        await a.ask('Вопрос $i');
+      }
+      a.onMessage([assist, 4, 0, 0, 0, 2]);
+      final n = a.glassesLines(a.current!).length;
+      expect(link.sent.last, (
+        moduleCall,
+        'assistant\nt:0:$n:2\nA|Сорок два.\nQ|Вопрос 1'
+            '\nA|Сорок два.\nQ|Вопрос 2',
+      ));
+      // a question asked: thinking, the same view
+      final asking = a.ask('Вопрос 4');
+      final mine = link.sent.lastWhere((m) => m.$2.contains('t:1:'));
+      expect(mine.$2, startsWith('assistant\nt:1:${n + 1}:2\n'));
+      await asking;
+      // the answer put on screen: the newest lines
+      expect(
+        link.sent.last.$2,
+        startsWith('assistant\nt:0:${n + 2}:${n - 1}\n'),
+      );
     });
   });
 }

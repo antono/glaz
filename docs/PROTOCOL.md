@@ -441,10 +441,11 @@ Every event is exactly 2 bytes, except `NET_REQUEST` and the photo chunks.
 | `0x0C` | `TERM` | `[0x0C, 1, cols, rows]` / `[0x0C, 0]` / `[0x0C, 2, seq]` | Terminal: start a shell this size, stop, frame `seq` taken — see [Terminal](#terminal) |
 | `0x07` | photo chunk | `[0x07, jpeg bytes...]` | part of a photo (Camera module) |
 | `0x08` | photo end | `[0x08]` | last chunk; the photo is complete |
-| `0x1F` | `REC_START` | `[0x1F, bits, rate / 1000, for]` | Recorder starts a recording — see [Recorder](#recorder); `for` = `1`: the Assistant listening, see [Assistant](#assistant); `2`: Translate listening, see [Translate](#translate); `3`: the Tuner listening, see [Tuner](#tuner). Any `for` but `0` (or none) is not a recording |
+| `0x1F` | `REC_START` | `[0x1F, bits, rate / 1000, for]` | Recorder starts a recording — see [Recorder](#recorder); `for` = `1`: the Assistant listening, see [Assistant](#assistant); `2`: Translate listening, see [Translate](#translate); `3`: the Tuner listening, see [Tuner](#tuner); `4`: Factchecker listening, see [Factchecker](#factchecker). Any `for` but `0` (or none) is not a recording |
 | `0x02` | `SCALE_GET` | `[0x02, n]` | Scales wants scale `n` (0-based); the phone answers with `MODULE_CALL` `scales` -- see [SCALES.md](SCALES.md) |
 | `0x03` | `TUNER` | `[0x03, 1, mic]` / `[0x03, 0]` | Tuner: listen, with the phone's microphone (`mic` 0) or the glasses' (1); stop -- see [Tuner](#tuner) |
-| `0x04` | `ASSIST` | `[0x04, op, id (2)]` | Assistant lists the chats (`1`), goes on with chat `id` (`2`) or starts a new one (`3`) -- see [Assistant](#assistant) |
+| `0x04` | `ASSIST` | `[0x04, op, id (2), from (2)]` | Assistant lists the chats (`1`), goes on with chat `id` (`2`), starts a new one (`3`) or asks for the chat's lines from line `from` (`4`) -- see [Assistant](#assistant) |
+| `0x01` | `FACTS` | `[0x01, op, a (2), b (2)]` | Factchecker: the wearer left (`0`), check since the last cut (`1`), fact `a`'s check from its line `b` (`2`), the facts from number `a`, `0` the newest (`3`) -- see [Factchecker](#factchecker) |
 | `0x10` | `REC_DROP` | `[0x10]` | Assistant was left mid-question (a double tap): forget it, ask nothing, drop an answer on its way — see [Assistant](#assistant) |
 | `0x05` | audio chunk | `[0x05, samples...]` | part of a recording |
 | `0x06` | audio end | `[0x06, samples...]` | last part; the recording is complete |
@@ -721,9 +722,10 @@ link did not take shows as `lost N KB` while listening.
 
 The phone (`flutter-glaz/lib/services/assistant.dart`) transcribes it as it
 comes, with ML Kit as for recordings but in a language of its own (Glaz >
-Menu > Assistant; the recordings' until one is picked), and asks the agent: any server with
+Menu > Assistant; the recordings' until one is picked), and asks the AI agent: any server with
 the OpenAI chat completions API -- Hermes Agent's API server on the user's
-tailnet, model `hermes-agent` -- set in Glaz > Menu > Assistant. The phone
+tailnet, model `hermes-agent` -- set in Glaz > More > Services, AI agent,
+which Factchecker asks too; switched off there, neither asks. The phone
 keeps the chats, the newest 50, in its own folder (`assistant/chats.json`)
 and lists them under Glaz > Menu > Assistant, Chats; a tap opens one to
 read and to go on with in writing, and the glasses' next question goes to
@@ -769,19 +771,20 @@ module takes in `start()` or `remote()`:
 | Argument | Means |
 | --- | --- |
 | `stop` | stop listening and ask (`MODULE_CALL`) |
-| `t:busy` | the current chat, then `\nkind\|text` a line: its newest lines, cut to the screen, whole turns, 900 bytes at most; `busy` `1` while the agent thinks. `kind`: `Q` a question, `T` a tool call (`* Took a photo with the glasses`, ` ..` while it runs), `A` the answer, `C` a command run, `E` went wrong. Sent as the question is heard and as each tool call starts and ends (`MODULE_CALL`, only seen with Assistant on screen), and with the answer (`APP_OPEN`) |
-| `e:text` | went wrong outside a chat: nothing heard, the assistant off |
+| `t:busy:total:from` | a window of the current chat: then `\nkind\|text` a line, at most four of its lines from line `from` (from 1), cut to the screen, a few hundred bytes; `total` the lines in the chat; `busy` `1` while the agent thinks. `kind`: `Q` a question, `T` a tool call (`* Took a photo with the glasses`, ` ..` while it runs), `A` the answer, `C` a command run, `E` went wrong. Sent for `ASSIST` `2` and `4`, as the question is heard and as each tool call starts and ends (`MODULE_CALL`, only seen with Assistant on screen), and with the answer (`APP_OPEN`): the window the glasses last asked for, the newest four for `APP_OPEN` or another chat |
+| `e:text` | went wrong outside a chat: nothing heard, the assistant off; red under the chat's lines, its last four lines kept |
 | `listen` | listen again |
 | `c:live` | the chats, then `\nid\|title` each, newest 12, titles cut to a row; `live` the id of the chat still going on (asked or picked within ten minutes), `0` for none (`MODULE_CALL`) |
 
 **Chats on the glasses.** Opened from the menu, Assistant first lists the
 chats: `New chat`, then the phone's chats, newest first, the cursor on the
 one still going on, else on `New chat`. It asks with `ASSIST` (`0x04`),
-`>BBI2`: op, id -- `1` the list (again every 5 s until it comes), `2` go
-on with chat `id`: the phone makes it the current chat and answers `t:`
-with it, and the next tap asks in it; `3` a new
+`>BBI2I2`: op, id, from -- `1` the list (again every 5 s until it comes),
+`2` go on with chat `id`: the phone makes it the current chat and answers
+`t:` with its newest lines, and the next tap asks in it; `3` a new
 chat, sent just before `REC_START` when the wearer taps `New chat`, so
-that tap listens at once. Opened by the phone with an argument, Assistant
+that tap listens at once; `4` the current chat's lines from line `from`
+(`0` the newest, followed), again every 5 s until they come. Opened by the phone with an argument, Assistant
 skips the list. A double tap anywhere but the list goes back to it, asked
 for again; a `t:` or `e:` that comes while the list is up is for a
 question dropped on the way and is thrown away.
@@ -790,10 +793,17 @@ A chat on the glasses is a log, four rows and a status row under them
 (`listening 5s`, `thinking..`, `tap = ask`), drawn in colours by kind:
 questions sky blue, tool calls orange, answers white, commands grey,
 errors red. It keeps to its end as lines come; a tilt goes a screen back
-or on, `^` in the status row while not at the end. Text is what the font
-has, Cyrillic included, in lines of at most 26 characters. With an
-`@open` the answer is not shown: the app it opened covers it. A tap asks
-again, in the same chat.
+or on, `^` in the status row while not at the end. The phone keeps the
+chat and the glasses only the four lines on screen (see [Memory on the
+glasses](#memory-on-the-glasses)): a tilt asks for the four from the new
+first row with `ASSIST` `4`, the lines still on screen staying where they
+are until those come. A window for another view than the one on screen
+-- the newest lines, after the wearer went back -- is dropped and the
+one on screen asked for. Before 2026-10-29 the phone sent the newest
+lines, up to 900 bytes, in every `t:`, and the glasses kept all of it.
+Text is what the font has, Cyrillic included, in lines of at most 26
+characters. With an `@open` the answer is not shown: the app it opened
+covers it. A tap asks again, in the same chat.
 
 The system prompt tells the agent that "what do I see" means `@photo`,
 the glasses' camera -- never its own screen or tools -- and, with Photos
@@ -812,6 +822,70 @@ the glasses' screen only (`android/.../Voice.kt`).
 `APP_OPEN` brings Assistant back to the screen for the answer even if the
 wearer went elsewhere meanwhile. An answer to a question that was asked
 again in between is dropped.
+
+### Factchecker
+
+Factchecker (`apps/factcheck/factcheck.lua`, [its README](../apps/factcheck/README.md))
+checks the facts in a conversation. It listens from the moment it opens:
+`REC_START` with a fourth byte `4`, then `AUDIO` packets as Recorder's,
+16-bit unless Glaz > Menu > Factchecker says 8, and never an `AUDIO_END`:
+the sound has no end, only cuts. It stops when the wearer leaves, the
+link goes (back, it listens again), or after 30 minutes.
+
+The phone keeps the session; the glasses hold only what is on their
+screen, four facts or four lines of a check, and ask for the next four
+as the view moves (see [Memory on the glasses](#memory-on-the-glasses)).
+They ask with `FACTS` (`0x01`), `>BBI2I2`: op, a, b --
+
+| Op | Means |
+| --- | --- |
+| `0` | the wearer left: the phone stops transcribing and drops what it heard since the last cut; checks already running finish and are kept |
+| `1` | a cut: check what was said since the last one (or since `REC_START`); listening goes on |
+| `2` | fact `a`'s check, from its line `b` (1 the first): the phone answers `d:`, and again, the same lines, when its verdict comes |
+| `3` | the facts from number `a`, oldest first from 1; `0` the newest, followed as they come: on opening, as the view moves, when the link is back |
+
+An ask not answered in 5 s is sent again. The phone remembers the window
+the glasses asked for last and sends it again whenever a fact in it, the
+count or the pieces being read change. Opened again within 10 minutes of
+the last thing heard or checked -- after leaving for a moment, or after
+the glasses' app restarted -- Factchecker goes on with the same session,
+its facts still there.
+
+The phone (`flutter-glaz/lib/services/factcheck.dart`) transcribes the
+sound as it comes, with ML Kit in the Assistant's language, a new
+transcription from every cut. At a cut it asks the AI agent for
+the checkable claims in the piece (JSON, each with a short form for the
+glasses), then asks it to check each, in parallel, searching the web: a
+verdict -- true, false, partly, unknown -- a short summary and its
+sources. The prompts tell the agent which is which: pulling the claims out
+is the quick step, the wearer waiting, to be answered at once from the
+text alone, with no tools; a check is the slow step, the claim already on
+the glasses, and may take up to 5 minutes (the agent's own limit is 120 s). Unknown is what it says without a source, rather than guess. The
+sessions are kept on the phone with their sources, in the Assistant's
+folder (`assistant/factchecks.json`).
+
+`FACTS` is `0x01`, the same byte as `data.lua`'s one-byte answer to a
+packet that failed; the phone tells them apart by length -- an answer is
+one byte, `FACTS` always six (`flutter-glaz/lib/frame/link.dart`).
+
+It answers with `MODULE_CALL` `factcheck`, and only while Factchecker is
+open on the glasses -- from `REC_START` or op 2 or 3 until op 0, another
+app's `REC_START`, or the link down: to a module that is not running a
+`MODULE_CALL` starts it in the background, in place of the app there:
+
+| Argument | Means |
+| --- | --- |
+| `f:pending:total:from` | four facts at most from number `from`, then `\nid\|v\|short` each, no more than 300 bytes; `total` the facts in the session; `pending` the pieces still being transcribed or read; `short` at most 22 characters; `v`: `P` being checked, `T` true, `F` false, `M` partly, `U` unknown. `from` is what op 3 asked for, kept so that four fit (`0`: the newest four). Sent on `REC_START`, on op 3, and whenever the window changes |
+| `d:id:v:total:from` | four lines at most of fact `id`'s check from line `from`, `total` lines in all, then `\nline` each, cut to the screen: the verdict (`FALSE`), the whole claim, the summary, the sources' domains |
+| `e:text` | went wrong: no speech recognition, no agent, the agent failed; red |
+| `n:text` | a note: `Nothing heard`, `No facts in that`; grey, gone after 5 s |
+
+The glasses show the facts with a mark and a colour each: `+` true green,
+`x` false red, `~` partly yellow, `?` unknown grey, `.` being checked
+white; the bottom row, under the newest fact, is both the status and the
+button that cuts. A `MODULE_CALL` that comes while Factchecker is not
+running starts it in the background, where it does nothing: it listens
+only when the wearer opened it.
 
 ### Translate
 
@@ -889,7 +963,7 @@ The phone answers with `MODULE_CALL` `translate` and one of:
 
 | Argument | Means |
 | --- | --- |
-| `w:<sess>:<from>:<total>:<f>` then `\n<K>\|<text>` per line | lines from number `from`, at most `count` (16), as many as fit in 900 bytes; `total` counts the partial line too; `f` `1` a tail answer or push, `0` an answer to op 1. An empty log is `w:1:0:0:1` |
+| `w:<sess>:<from>:<total>:<f>` then `\n<K>\|<text>` per line | lines from number `from`, at most `count` (16), as many as fit in 300 bytes (900 before 2026-10-29); `total` counts the partial line too; `f` `1` a tail answer or push, `0` an answer to op 1. An empty log is `w:1:0:0:1` |
 | `n:<sess>:<total>` | how many lines there are, while open and not following |
 | `s:<text>` | the status row's text, 30 characters at most; empty clears it |
 | `x:<text>` | as `s:`, and the phone no longer hears: the glasses stop the microphone, as a pause does |
@@ -937,7 +1011,9 @@ lines loses its oldest 1000 and starts a new session.
 log winning (under 3 a second); an `n:` at most once a second; `s:` only
 when it changes. Answers to requests go at once. A line is at most about
 123 bytes (58 narrow Cyrillic glyphs of two bytes, and `K|\n`), so the
-four-line tail always fits in 900. `link.dart` keeps its 200 ms between
+four-line tail fits in the 300 bytes the phone sends at most (before
+2026-10-29, 900); a window asked for that comes short of the screen, the
+glasses ask again for the screen's lines alone. `link.dart` keeps its 200 ms between
 messages of one code and waits for each packet's ack.
 
 **Nothing unasked.** The phone sends Translate nothing unless the glasses
@@ -1055,8 +1131,9 @@ memory than a sentence.
 
 The phone answers with `MODULE_CALL` `reader` and
 `t:from:total:text:words`: the words from number `from`, one space
-between them, as many of `count` as fit in 900 bytes, how many the text
-has, and its number. `t:0:0:0:` means there is no text.
+between them, as many of `count` as fit in 300 bytes (900 before
+2026-10-29), how many the text has, and its number; the glasses ask for
+the rest as they near the end of what they have. `t:0:0:0:` means there is no text.
 
 **Another text.** The number is the text's id in the library, kept
 across restarts (`id % 255 + 1`). When the user marks another text, the
@@ -1299,7 +1376,9 @@ Lua console) -- the REPL is blocked then, so `glaz.lua` runs it, in
 - The Lua is tried with `return ` in front first, so an expression answers
   with its value: `frame.battery_level()` gives `100`. What it `print()`s
   comes first, one line each, then each value it returns; a table shows
-  its first 40 entries, one level deep. The answer stops at 8 KB.
+  its first 40 entries, one level deep. The answer stops at 8 KB, and a
+  long string is cut before it is quoted, so a value far longer still
+  fits. Lua that runs the heap out is answered `-not enough memory`.
 - It runs in the app's globals: `frame.*`, the libraries, and the globals
   of earlier requests, which stay. The app's own locals are out of reach.
   It runs on the main loop, which waits for it; Lua that never ends hangs
@@ -1480,6 +1559,39 @@ over Bluetooth -- a phone newer than the app on the glasses flooded the link
 that way (seen: thousands of notifications a minute after `SETTINGS_SET`
 reached an older app), and its own requests drowned. The phone also stops
 waiting for a folder listing after 8 s and says to Upload.
+
+### Memory on the glasses
+
+Frame gives Lua about 135 KB of heap, and the app takes about 89 KB of it
+from the start (FRAME.md, "Known gotchas", 8): an app on screen has some
+40 KB for its code, its state and whatever comes over the link. `data.lua`
+puts a message together from its packets in that heap, and a message that
+finds no room for it ends the app: "Error in data accumulator: not enough
+memory", then "glaz app error, restarting" (Factchecker on 2026-10-29,
+opening a fact after listening a while: the phone sent 900 bytes into a
+heap full of sound already sent). So every app:
+
+- **Holds what is on its screen, not what there is.** The phone keeps the
+  data -- the texts, the lists, the logs -- and the glasses ask for a
+  window: what the screen shows, and a little around it at most. Reader
+  holds a few dozen words of a book, Translate the lines on screen and a
+  few above, Factchecker four facts or four lines of a check. A session
+  an hour long costs the glasses no more than a minute's.
+- **Asks for the next piece as the view moves**, and asks again if it does
+  not come; the phone sends the window again as what is in it changes.
+- **Gets small messages**: a few hundred bytes, the screen's worth;
+  never a whole list or a whole text, however short it is today.
+- **Lets go of what it sends.** Streaming sound or pictures makes a
+  string a packet; the loop drops it and steps the collector
+  (`s = nil; collectgarbage('step')`, as Recorder and Factchecker do):
+  two seconds of 16-bit sound is 32 KB, a quarter of the heap.
+- **Keeps no table that grows** with time or with what the phone has.
+
+The emulator gives Lua a heap as small as Frame's (TESTING.md), so an app
+that runs out does there too. A test of memory also measures what the app
+holds (`collectgarbage('count')` through `LUA_EVAL`):
+`test_a_long_session_takes_no_more_memory` pages through 137 facts and
+finds the heap as it was after four.
 
 ### One packet at a time
 

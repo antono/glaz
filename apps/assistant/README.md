@@ -56,6 +56,12 @@ end; `lost N K` means sound the Bluetooth link did not take. Colours:
 questions sky blue, tool calls orange, answers white, commands grey,
 errors red. Text is UTF-8: the font has Cyrillic.
 
+**Memory.** The phone keeps the chat; the glasses hold the four lines on
+screen and ask for the next four as a tilt moves the view, so a long
+chat costs them no more than a short one. The sound is let go of packet
+by packet as it is sent (`s = nil; collectgarbage('step')`). See
+[PROTOCOL.md, Memory on the glasses](../../docs/PROTOCOL.md#memory-on-the-glasses).
+
 **Listening.** Only taps start and stop it; nothing guesses where a
 question ends. The sound is Recorder's streaming: `REC_START` with a
 fourth byte `1` (for the assistant), then `AUDIO` packets, `AUDIO_END`
@@ -69,12 +75,14 @@ Going back or
 leaving while listening or waiting sends `REC_DROP` (`0x10`): the phone
 asks nothing, or throws the answer away.
 
-**What it asks of the phone.** `ASSIST` (`0x04`, `>BBI2`: op, id): `1`
-the chats (again every 5 s until they come), `2` go on with chat `id`,
-`3` a new chat, sent just before listening. The phone answers through
-`remote()` (`MODULE_CALL`) or `APP_OPEN 'assistant'` with an argument:
-`c:` the chats, `t:` the chat's newest lines and whether the agent is
-thinking, `e:` an error outside a chat, `listen`, `stop`. `APP_OPEN`
+**What it asks of the phone.** `ASSIST` (`0x04`, `>BBI2I2`: op, id,
+from): `1` the chats (again every 5 s until they come), `2` go on with
+chat `id`, `3` a new chat, sent just before listening, `4` the chat's
+four lines from line `from` (`0` the newest), again every 5 s until they
+come. The phone answers through `remote()` (`MODULE_CALL`) or `APP_OPEN
+'assistant'` with an argument: `c:` the chats, `t:` four of the chat's
+lines, how many it has and whether the agent is thinking, `e:` an error
+outside a chat, `listen`, `stop`. `APP_OPEN`
 brings Assistant back on screen for the answer even if the wearer went
 elsewhere.
 
@@ -87,10 +95,11 @@ the newest 50 chats, runs the commands in the answer (`@open`,
 in headphones only. All of it, with the wire format, is in
 [PROTOCOL.md, Assistant](../../docs/PROTOCOL.md#assistant).
 
-**Settings** (Glaz > Menu > Assistant, on the phone): the server, the
-language heard, `bits` (8 or 16), reading answers aloud, and whether
-the agent may use the photos and recordings. The glasses read only
-`bits`.
+**Settings** (Glaz > Menu > Assistant, on the phone): the language
+heard, `bits` (8 or 16), reading answers aloud, and whether the agent may
+use the photos and recordings. The glasses read only `bits`. The agent
+itself -- server, key, model -- is the AI agent service's (Glaz > More >
+Services), which Factchecker shares; the page links to it.
 
 ## Files
 

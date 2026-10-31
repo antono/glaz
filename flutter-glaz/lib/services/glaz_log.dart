@@ -20,6 +20,9 @@ enum LogKind {
   /// Translate: what was heard, its translation, what went wrong.
   translate('Translate'),
 
+  /// Factchecker: what was heard, the claims, their checks.
+  factcheck('Factchecker'),
+
   /// A message to or from the glasses, by its code (protocol.dart).
   message('Messages');
 

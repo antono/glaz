@@ -4,8 +4,9 @@
 
 The apps on the glasses are tested without the glasses. A program on the
 computer pretends to be them: it runs the same Lua the glasses run, gives
-it a screen, a clock, taps, a head to tilt and a phone to talk to, and
-lets a test look at what ends up on the screen. Every app has such tests,
+it a screen, a clock, taps, a head to tilt and a phone to talk to, and as
+little memory as Frame has, and lets a test look at what ends up on the
+screen. Every app has such tests,
 on Frame and, where it runs there, on Halo. They take seconds, run on
 every push (GitHub Actions), and save pictures of the screens, which the
 docs can use.
@@ -48,6 +49,41 @@ Frame's firmware (`lab-frame-codebase`, branch `glaz/main`,
   reads bytes the test gives; `fpga_read` says no flip is pending.
 - Errors have the firmware's words: `Invalid color name`, `number has no
   integer representation` for an `x` of 60.5.
+- A heap as small as Frame's, below.
+
+**Memory.** Frame's Lua runs out at about 135 KB and glaz starts at
+about 89 KB, which leaves an app about 46 KB (docs/FRAME.md, "Known
+gotchas"). The emulator's Lua has a limit too, lupa's `max_memory`:
+`HEAP` in `tests/frame_emulator/__init__.py`, 246 KB. Here glaz is
+source, with its debug information and not minified, and starts at about
+200 KB, so the limit leaves it the same 46 KB. `test_app.py` checks that
+room (40 to 52 KB) and fails when the app's start has moved: measure
+`HEAP` again then, from the `mem N KB` glaz prints at start.
+
+When the heap is full it is Lua's error, as on the glasses:
+`not enough memory`, with no line, which `pcall` catches and which
+`data.min.lua`'s receive callback prints as `Error in data accumulator:
+not enough memory`. As in Frame's Lua 5.4, an allocation of Lua's
+collects the garbage before it fails, so only what is kept runs an app
+out: a list that grows with a session, strings held in a table. The
+firmware's own `malloc()`, which shares the heap, does not collect
+first: `microphone.read()`, `fpga_read()` and the camera's `read()`
+fail where Lua's garbage is, as on Frame. What the emulator cannot have
+is the C heap's fragmentation: on the glasses a full collection can free
+enough bytes and still no block big enough, so garbage that piles up
+(strings made faster than the collector's steps go) can run Frame out
+where the emulator does not. A test passing here is a floor, not proof.
+
+The limit is in KB of the emulator's own heap, and its code is bigger
+than Frame's: source with its debug information, 64-bit pointers. So an
+app that loads much code (Translate's photo: the module, the camera
+library and `glaz_photo`) can find no room here where it has some on
+Frame. Such a test gets more with `@pytest.mark.heap(kb)`
+(`tests/fixtures.py`) and says why next to it; strings and what comes
+from the phone cost about the same on both, and get none.
+
+`glasses.emu.heap = None` before `start()` takes the limit away, to see
+what a test takes.
 
 **Halo.** Brilliant Labs' [`halo-emulator`](https://pypi.org/project/halo-emulator/),
 adjusted by `tests/halo_sandbox.py` to Halo's firmware of today
@@ -133,7 +169,8 @@ when it lands on main. It keeps the screens (both the tests' and
 ## When the firmware changes
 
 - New or changed Lua functions: `tests/frame_emulator/__init__.py`, after
-  the firmware's C, and a test in `test_frame_emulator.py`.
+  the firmware's C, and a test in `test_frame_emulator.py`. One that
+  `malloc()`s calls `emu._malloc()` first.
 - New fonts: `python tests/frame_emulator/make_fonts.py [FRAME_CODEBASE]`.
 - A new halo-emulator: `requirements.txt`, and what `halo_sandbox.py`
   patches, which is said there.

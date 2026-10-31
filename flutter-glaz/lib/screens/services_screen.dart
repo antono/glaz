@@ -5,6 +5,7 @@ import '../glasses_menu.dart';
 import '../services/location.dart';
 import '../services/service_list.dart';
 import '../services/services.dart';
+import 'agent_screen.dart';
 
 /// What the phone does for Lua apps on the glasses.
 class ServicesScreen extends StatelessWidget {
@@ -49,22 +50,38 @@ class ServicesScreen extends StatelessWidget {
           child: Column(
             children: [
               for (final service in services)
-                SwitchListTile(
-                  title: Row(
-                    children: [
-                      Text(service.label),
-                      if (!service.ready) ...[
-                        const SizedBox(width: 8),
-                        const _Badge('Planned'),
+                if (service.id == 'agent')
+                  // its page holds its settings and what it was asked
+                  ListTile(
+                    title: Text(service.label),
+                    subtitle: Text(_subtitle(s, service)),
+                    trailing: Switch(
+                      value: s.settings.serviceOn(service.id),
+                      onChanged: (v) => _toggle(context, s, service.id, v),
+                    ),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const AgentScreen(),
+                      ),
+                    ),
+                  )
+                else
+                  SwitchListTile(
+                    title: Row(
+                      children: [
+                        Text(service.label),
+                        if (!service.ready) ...[
+                          const SizedBox(width: 8),
+                          const _Badge('Planned'),
+                        ],
                       ],
-                    ],
+                    ),
+                    subtitle: Text(_subtitle(s, service)),
+                    value: service.ready && s.settings.serviceOn(service.id),
+                    onChanged: service.ready
+                        ? (v) => _toggle(context, s, service.id, v)
+                        : null,
                   ),
-                  subtitle: Text(_subtitle(s, service)),
-                  value: service.ready && s.settings.serviceOn(service.id),
-                  onChanged: service.ready
-                      ? (v) => _toggle(context, s, service.id, v)
-                      : null,
-                ),
             ],
           ),
         ),
@@ -213,6 +230,11 @@ class ServicesScreen extends StatelessWidget {
 
   static String _subtitle(Services s, GlazService service) {
     switch (service.id) {
+      case 'agent':
+        return s.settings.agentUrl.isEmpty
+            ? 'Not set up yet: tap to set it up'
+            : 'Assistant and Factchecker ask '
+                  '${AgentLink.state(true, s.settings.agentUrl)}';
       case 'keys':
         return _keysForeground(s)
             ? 'Only with Glaz on screen: turn it on in Accessibility '
