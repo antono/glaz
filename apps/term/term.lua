@@ -121,8 +121,10 @@ function _M.tick()
     return 'needs the glaz\nfirmware'
   end
   if not frame.bluetooth.is_connected() then
+    -- what the phone said went with the link: back, it is asked afresh
     asked, heard = nil, false
     texts, attrs, shown = {}, {}, false
+    status = 'waiting for the phone'
     return 'no phone'
   end
   if not heard and (not asked or now - asked > ASK_AGAIN) then

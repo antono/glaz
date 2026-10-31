@@ -33,8 +33,23 @@ local function human(size)
   return string.format('%.1fK', size / 1024)
 end
 
+-- A line longer than a read (512 bytes) comes in pieces, cut wherever the
+-- bytes ran out: a piece may then start or end inside a character. Those
+-- bytes are dropped, so the rest still counts as UTF-8; a line that is not
+-- UTF-8 anyway (a binary file) stays as it is.
+local function whole(s)
+  if utf8.len(s) then return s end
+  local t = string.gsub(s, '^[\x80-\xBF]+', '')
+  for k = 0, 3 do
+    local u = string.sub(t, 1, #t - k)
+    if utf8.len(u) then return u end
+  end
+  return s
+end
+
 -- UTF-8: LINE_MAX counts characters (Cyrillic is two bytes each)
 local function clip(s)
+  s = whole(s)
   if (utf8.len(s) or #s) <= LINE_MAX then return s end
   local cut = utf8.len(s) and utf8.offset(s, LINE_MAX - 1) or LINE_MAX - 1
   return string.sub(s, 1, cut - 1) .. '..'

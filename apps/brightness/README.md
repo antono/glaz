@@ -50,10 +50,14 @@ brackets round the one being previewed: `-2  -1  0  [1]  2`.
   It has no `remote()`, so `MODULE_CALL` does nothing.
 
 **Where the level lives.** The firmware has no getter for the brightness,
-so the module tracks it, in the global `glaz_brightness`. Not in a local:
-glaz drops a module when it stops and Frame's `require()` reads the file
-again, so a local would be back at its default on every opening. The
-global outlives the module, and the picker reopens on the level kept last.
+so the module tracks it, in `frame.display.glaz_brightness`. Not in a
+local: glaz drops a module when it stops and Frame's `require()` reads the
+file again, so a local would be back at its default on every opening. Nor
+in a global: after a crash glaz_boot clears the app's globals and starts it
+again without a reboot, the panel still at the kept level, and the picker
+would show the default and a cancel set the panel to it. `frame.display`
+was there before glaz_boot looked, so the level lives as long as the
+panel's register, and the picker reopens on the level kept last.
 
 It is in RAM only. After a reboot, or a wake from deep sleep (which is a
 reset), the panel is back at the firmware's default and so is the picker.

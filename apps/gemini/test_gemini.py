@@ -716,3 +716,78 @@ def test_a_page_in_cyrillic(glasses):
     assert color(glasses, "цитата") == "GREY"
     glasses.screenshot("gemini-cyrillic")
     glasses.assert_ok()
+
+
+# ---------------------------------------------------------------- edges
+
+def test_the_last_page_number_and_the_home_link_go_back_whole(glasses):
+    """page is a byte, 1 to 255; home is link 65535, the most of two."""
+    opened(glasses, page=255, lines=STATION, back=1, top=9)
+    glasses.tilt(1)                      # '< back', then 'home'
+    glasses.tilt(1)
+    assert cursor_row(glasses) == "home"
+    glasses.clear_sent()
+    glasses.tap(1)
+    assert asks(glasses) == [(OPEN, 255, 65535, 9)]
+    glasses.call("gemini", answer(1, HOME, back=0))   # wrapped round to 1
+    glasses.advance(0.3)
+    assert cursor_row(glasses) == "Gemini project"
+    glasses.assert_ok()
+
+
+def test_the_same_page_twice_keeps_the_cursor(glasses):
+    opened(glasses)
+    glasses.tilt(1)
+    assert cursor_row(glasses) == "Antenna"
+    glasses.call("gemini", answer(1, HOME, back=0))   # sent again
+    glasses.advance(0.3)
+    assert cursor_row(glasses) == "Antenna"
+    glasses.assert_ok()
+
+
+def test_a_page_of_exactly_one_screen_does_not_scroll(glasses):
+    lines = [("T", f"line {i}") for i in range(5)]
+    opened(glasses, page=3, lines=lines)
+    before = glasses.screen_text()
+    glasses.clear_sent()
+    glasses.tap(1)
+    glasses.tilt(1)
+    glasses.tilt(-1)
+    assert glasses.screen_text() == before
+    assert not glasses.sent(GEM_GET)
+    glasses.assert_ok()
+
+
+def test_a_page_one_line_over_a_screen_scrolls_by_one(glasses):
+    lines = [("T", f"line {i}") for i in range(6)]
+    opened(glasses, page=3, lines=lines)
+    glasses.tap(1)
+    text = glasses.screen_text()
+    assert "line 0" not in text and "line 1" in text and "line 5" in text
+    glasses.tilt(-1)
+    assert "line 0" in glasses.screen_text()
+    glasses.assert_ok()
+
+
+def test_forty_lines_in_cyrillic_split_over_packets(glasses):
+    """As many lines as fit in 900 bytes, 40 at most, cut by Bluetooth
+    every 200 bytes, inside a letter too: the glasses put it together
+    first."""
+    lines = [("T", f"Строчка {i}") for i in range(40)]
+    arg = answer(6, lines, back=1)
+    assert 600 < len(arg.encode()) <= 900
+    raw = b"gemini\n" + arg.encode()            # MODULE_CALL's payload
+    assert any(0x80 <= raw[n] < 0xC0 for n in range(200, len(raw), 200))
+    glasses.open_app("gemini")
+    glasses.call("gemini", arg)
+    glasses.advance(0.3)
+    for _ in range(9):
+        glasses.tap(1)                   # a screen down each, to the end
+    text = glasses.screen_text()
+    assert "Строчка 39" in text and "Строчка 35" in text
+    assert "Строчка 34" not in text
+    glasses.clear_sent()
+    glasses.advance(6)
+    assert not glasses.sent(GEM_GET)     # every line came: nothing asked
+    glasses.assert_ok()
+

@@ -312,3 +312,63 @@ def test_a_version_that_cannot_be_read_shows_the_error(glasses):
     glasses.advance(5.5)
     assert glasses.screen_text() == ""           # and goes as usual
     assert glasses.running()
+
+
+# ---------------------------------------------------------------- edges
+
+def test_an_empty_version_shows_nothing_and_breaks_nothing(glasses):
+    lua(glasses, "frame.FIRMWARE_VERSION = ''")
+    glasses.open_app("firmware")
+    text = glasses.screen_text()
+    assert "Firmware" in text
+    assert SHOWN[glasses.device] not in text
+    glasses.advance(5.5)
+    assert glasses.screen_text() == ""
+    glasses.assert_ok()
+
+
+def test_opened_by_the_phone_again_and_again_it_starts_once(glasses):
+    glasses.clear_sent()
+    for _ in range(5):
+        glasses.open_app("firmware", settle=0.1)
+    assert len(glasses.sent(APP_START)) == 1
+    assert SHOWN[glasses.device] in glasses.screen_text()
+    glasses.advance(5.5)                         # its own 5 s, no more
+    assert glasses.screen_text() == ""
+    assert len(glasses.sent(APP_STOP)) == 1
+    glasses.assert_ok()
+
+
+def test_taps_on_the_blank_screen_one_after_another(glasses):
+    # each brings it back once; one while it is shown changes nothing
+    glasses.open_app("firmware")
+    glasses.advance(5.5)
+    glasses.clear_sent()
+    glasses.tap(1)
+    glasses.tap(1)
+    assert len(glasses.sent(APP_START)) == 1
+    assert SHOWN[glasses.device] in glasses.screen_text()
+    glasses.assert_ok()
+
+
+def test_the_phone_opening_another_app_puts_it_away(glasses):
+    glasses.open_app("firmware")
+    glasses.clear_sent()
+    glasses.open_app("battery")
+    assert glasses.sent(APP_STOP)
+    assert glasses.sent(APP_START)
+    text = glasses.screen_text()
+    assert "Battery" in text and SHOWN[glasses.device] not in text
+    glasses.assert_ok()
+
+
+def test_awake_again_it_shows_the_version_as_before(frame):
+    frame.open_app("firmware")
+    frame.tap(3, settle=3.0)
+    frame.advance(2)
+    assert frame.emu.asleep
+    frame.tap(1, settle=2.0)                     # waking is a reset
+    assert frame.until("Frame app is running", since=2)
+    frame.open_app("firmware")
+    assert SHOWN["frame"] in frame.screen_text()
+    frame.assert_ok()

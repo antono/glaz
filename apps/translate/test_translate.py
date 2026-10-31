@@ -11,7 +11,7 @@ import struct
 import pytest
 
 from glasses import (APP_BACKGROUND, APP_START, APP_STOP, LUA_EVAL,
-                     LUA_RESULT, has_module)
+                     LUA_RESULT, Glasses, has_module)
 
 pytestmark = pytest.mark.module("translate")
 
@@ -1029,3 +1029,112 @@ def test_the_longest_status_fits_the_screen():
     for c in status:
         x += glyphs[ord(c)][0] + 4
     assert x - 4 <= WIDTH
+
+
+# ---------------------------------------------------------------- edges
+
+def test_a_tap_before_the_log_came_pauses(glasses):
+    voice(glasses)
+    glasses.clear_sent()
+    glasses.tap(1)                               # the tail not here yet
+    assert glasses.sent(AUDIO_END)
+    assert not glasses.emu._mic_on
+    window(glasses, 1, 0, 0, 1)                  # the answer, after
+    assert "paused, tap to listen" in glasses.screen_text()
+    assert status(glasses) == "-  paused"
+    assert asks(glasses) == []                   # nothing asked again
+    glasses.assert_ok()
+
+
+def test_four_lines_are_one_screen_five_scroll_back(glasses):
+    voice(glasses)
+    window(glasses, 1, 0, 4, 1, log(0, 4))
+    glasses.clear_sent()
+    glasses.tilt(-1)                             # all of it on screen
+    assert not glasses.sent(TRANSLATE)
+    assert status(glasses) == "4:4  listening"
+    window(glasses, 1, 1, 5, 1, log(1, 4))       # one more: line 0 above
+    glasses.tilt(-1)
+    assert asks(glasses) == [(1, 1, 0, 8)]
+    window(glasses, 1, 0, 5, 0, log(0, 5))
+    assert "line 0" in glasses.screen_text()
+    assert status(glasses) == "4:5  listening  ^"
+    glasses.assert_ok()
+
+
+def test_the_same_push_twice_changes_nothing(glasses):
+    voice(glasses)
+    window(glasses, 1, 133, 137, 1, log(133, 4))
+    before = glasses.screen_text()
+    glasses.clear_sent()
+    window(glasses, 1, 133, 137, 1, log(133, 4))
+    glasses.advance(6)
+    assert glasses.screen_text() == before
+    assert not glasses.sent(TRANSLATE)
+    glasses.assert_ok()
+
+
+def test_the_last_session_and_the_longest_log(glasses):
+    """sess is a byte, 1 to 255, and line numbers two: both at their
+    highest go back to the phone as they came."""
+    voice(glasses)
+    window(glasses, 255, 65531, 65535, 1, log(65531, 4))
+    assert status(glasses) == "65535:65535  listening"
+    glasses.clear_sent()
+    glasses.tilt(-1)
+    assert asks(glasses) == [(1, 255, 65524, 8)]
+    glasses.call("translate", "n:255:65535")
+    glasses.clear_sent()
+    glasses.tap(2)
+    assert asks(glasses) == [(0, 255, 0, 0)]
+    glasses.assert_ok()
+
+
+def test_a_full_window_in_cyrillic_split_over_packets(glasses):
+    """900 bytes, as the phone sends at most: Bluetooth cuts it every 200
+    bytes, inside a letter too; the glasses put it together first."""
+    voice(glasses)
+    lines = [f"S|перевод номер {i}: доброе утро" for i in range(137, 153)]
+    arg = "w:1:0:16:1\n" + "\n".join(lines)
+    assert 800 < len(arg.encode()) <= 900
+    raw = b"translate\n" + arg.encode()          # MODULE_CALL's payload
+    assert any(0x80 <= raw[n] < 0xC0 for n in range(200, len(raw), 200))
+    glasses.call("translate", arg)
+    glasses.advance(0.3)
+    rows = [t.text for t in sorted(glasses.texts(), key=lambda t: t.y)
+            if TOP_Y <= t.y < STATUS_Y]
+    assert rows == [l[2:] for l in lines[-4:]]
+    assert status(glasses) == "16:16  listening"
+    glasses.assert_ok()
+
+
+def test_a_mode_it_does_not_know_is_voice(tmp_path):
+    g = Glasses("frame", tmp_path / "frame")
+    (g.sandbox / "prefs.txt").write_text("translate.mode=137")
+    try:
+        g.start()
+        g.set_clock()
+        g.open_app("translate")
+        assert cursor_row(g) == 0
+        g.tap(1)
+        assert g.sent(REC_START)
+        assert "translate.mode=voice" in (g.sandbox / "prefs.txt").read_text()
+        g.assert_ok()
+    finally:
+        g.stop()
+
+
+def test_scrolling_back_twice_before_an_answer_takes_the_last(glasses):
+    voice(glasses)
+    window(glasses, 1, 133, 137, 1, log(133, 4))
+    glasses.clear_sent()
+    glasses.tilt(-1)                             # top 130: asks from 126
+    glasses.tilt(-1)                             # top 127: asks from 123
+    assert asks(glasses) == [(1, 1, 126, 8), (1, 1, 123, 8)]
+    window(glasses, 1, 126, 137, 0, log(126, 8))   # the first, late
+    assert "loading.." in glasses.screen_text()
+    window(glasses, 1, 123, 137, 0, log(123, 8))
+    text = glasses.screen_text()
+    assert "line 127" in text and "line 130" in text
+    assert "line 131" not in text
+    glasses.assert_ok()

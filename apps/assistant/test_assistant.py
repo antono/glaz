@@ -719,3 +719,109 @@ def test_malformed_arguments_do_no_harm(glasses, arg):
     glasses.advance(1)
     assert "Assistant" in glasses.screen_text()
     glasses.assert_ok()
+
+
+# ---------------------------------------------------------------- edges
+
+def test_an_answer_that_takes_minutes_is_waited_for(glasses):
+    """The agent takes up to 120 s a round: thinking is not being left
+    alone, or APP_TIMEOUT would drop the question and the phone throw the
+    answer away."""
+    listening(glasses)
+    glasses.tap(1)
+    glasses.clear_sent()
+    glasses.advance(137)
+    assert not glasses.sent(APP_STOP)
+    assert not glasses.sent(REC_DROP)
+    assert "thinking.." in glasses.screen_text()
+    glasses.call("assistant", CHAT)
+    assert "274" in glasses.screen_text()
+    glasses.advance(65)                          # answered: idle again
+    assert glasses.sent(APP_STOP)
+    assert not glasses.sent(REC_DROP)
+    glasses.assert_ok()
+
+
+def test_an_answer_that_never_comes_is_given_up_on(glasses):
+    listening(glasses)
+    glasses.tap(1)
+    glasses.clear_sent()
+    glasses.advance(350)
+    assert not glasses.sent(APP_STOP)
+    glasses.advance(75)                          # MAX_THINK, 360 s, then
+    assert glasses.sent(APP_STOP)                # APP_TIMEOUT's 60 s
+    assert glasses.sent(REC_DROP)
+    glasses.assert_ok()
+
+
+def test_thinking_without_the_phone_closes_after_a_minute(glasses):
+    listening(glasses)
+    glasses.tap(1)
+    glasses.emu.connected = False                # no answer can come now
+    glasses.clear_sent()
+    glasses.advance(65)
+    assert "Weather today" not in glasses.screen_text()
+    assert "thinking.." not in glasses.screen_text()
+    glasses.emu.connected = True
+    glasses.assert_ok()
+
+
+def test_the_phones_thinking_counts_from_when_it_says_so(glasses):
+    glasses.open_app("assistant", "t:1\nQ|What is 137 times 2")
+    glasses.clear_sent()
+    glasses.advance(137)
+    assert "thinking.." in glasses.screen_text()
+    assert not glasses.sent(APP_STOP)
+    glasses.assert_ok()
+
+
+def test_a_tap_while_a_chat_loads_listens_in_it(glasses):
+    opened(glasses)
+    glasses.tap(1)                               # Dinner ideas, loading
+    glasses.clear_sent()
+    glasses.tap(1)
+    assert not glasses.sent(ASSIST)              # no new chat: the phone's
+    assert glasses.sent(REC_START) == [bytes([REC_START, 16, 8, 1])]
+    assert "loading.." not in glasses.screen_text()
+    glasses.call("assistant", CHAT)              # the chat, late
+    assert "274" in glasses.screen_text()
+    assert "listening" in glasses.screen_text()
+    assert glasses.emu._mic_on
+    glasses.assert_ok()
+
+
+def test_the_highest_chat_id_is_asked_for_whole(glasses):
+    opened(glasses, "c:65535\n65535|Chat 65535\n137|Chat 137")
+    assert color_of(glasses, "Chat 65535") == "YELLOW"
+    glasses.clear_sent()
+    glasses.tap(1)
+    assert glasses.sent(ASSIST) == [assist(2, 65535)]
+    glasses.assert_ok()
+
+
+def test_a_stop_with_nothing_heard_does_nothing(glasses):
+    opened(glasses)
+    glasses.clear_sent()
+    glasses.call("assistant", "stop")
+    assert not glasses.sent(AUDIO_END)
+    assert color_of(glasses, "Dinner ideas") == "YELLOW"
+    assert "thinking.." not in glasses.screen_text()
+    glasses.assert_ok()
+
+
+def test_a_full_chat_in_cyrillic_split_over_packets(glasses):
+    """900 bytes, as the phone sends at most: Bluetooth cuts it every 200
+    bytes, inside a letter too; the glasses put it together first."""
+    listening(glasses)
+    glasses.tap(1)
+    lines = [f"Ответ номер {i}: всё хорошо" for i in range(137, 155)]
+    arg = "t:0\n" + "\n".join(f"A|{l}" for l in lines)
+    assert 800 < len(arg.encode()) <= 900
+    # a packet ends inside a letter: the next one starts mid-letter
+    raw = b"assistant\n" + arg.encode()         # MODULE_CALL's payload
+    assert any(0x80 <= raw[n] < 0xC0 for n in range(200, len(raw), 200))
+    glasses.call("assistant", arg)
+    rows = [t.text for t in sorted(glasses.texts(), key=lambda t: t.y)
+            if t.text.startswith("Ответ")]
+    assert rows == lines[-4:]
+    glasses.assert_ok()

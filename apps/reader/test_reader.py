@@ -866,3 +866,118 @@ def test_halo_has_no_reader(halo):
     assert not requests(halo)
     assert "wpm" not in halo.screen_text()
     halo.assert_ok()
+
+
+# ---------------------------------------------------------------- edges
+
+class TwicePhone(Phone):
+    """A phone that answers every request twice, as after a retry."""
+
+    def answer(self, frm, count=60):
+        super().answer(frm, count)
+        super().answer(frm, count)
+
+
+def test_every_answer_twice_reads_each_word_once(glasses):
+    glasses.clear_sent()
+    glasses.open_app("reader")
+    phone = TwicePhone(glasses, LONG)
+    phone.run(0.2)
+    glasses.tap(1, settle=0)
+    seen = [w for _, w in changes(glasses, phone, 137 * 0.3)]
+    assert seen == LONG
+    assert status(glasses) == ["300 wpm", "the end", "100%"]
+    glasses.assert_ok()
+
+
+def test_cyrillic_split_over_packets_comes_whole(glasses):
+    # words of 6 letters, 11 bytes and a space: the answer goes in 200-byte
+    # writes, and the first ends in the middle of the 16th word's 'л'
+    words = [f"слово{i % 10}" for i in range(137)]
+    phone = opened(glasses, words)
+    glasses.tap(1, settle=0)
+    seen = [w for _, w in changes(glasses, phone, 137 * 0.3)]
+    assert seen == words
+    glasses.assert_ok()
+
+
+def test_reopened_at_the_last_word_a_tap_reads_from_the_start(glasses):
+    # the end told the phone the last word: a book finished last time
+    phone = opened(glasses, LONG, place=136)
+    assert word(glasses)[0] == "w136"
+    assert status(glasses) == ["300 wpm", "the end", "100%"]
+    glasses.clear_sent()
+    phone.seen = 0
+    glasses.tap(1)
+    assert requests(glasses)[0][1:3] == (0, 60)
+    phone.run(1)
+    assert word(glasses)[0].startswith("w")
+    assert "the end" not in status(glasses)
+    glasses.assert_ok()
+
+
+def test_at_800_wpm_the_phone_keeps_up(glasses):
+    glasses.settings({"reader.wpm": "800"})
+    glasses.advance(0.2)
+    phone = opened(glasses, LONG)
+    glasses.tap(1, settle=0)
+    seen = changes(glasses, phone, 25)
+    assert [w for _, w in seen] == LONG
+    # 137 words at 75 ms, some held longer: never waiting on the phone
+    assert seen[-1][0] < 137 * 0.075 * 1.6
+    glasses.assert_ok()
+
+
+def test_a_long_book_far_in(glasses):
+    words = [f"w{i}" for i in range(137_000)]
+    phone = opened(glasses, words, place=100_000)
+    assert word(glasses)[0] == "w100000"
+    assert "72%" in status(glasses)              # word 100001 of 137000
+    glasses.tap(1)
+    phone.run(2)
+    glasses.tap(1)
+    phone.serve()
+    assert phone.kept[-1][0] > 100_000
+    glasses.assert_ok()
+
+
+def test_an_answer_without_words_asks_for_them_again(glasses):
+    glasses.clear_sent()
+    glasses.open_app("reader")
+    glasses.call("reader", "t:0:137:1:")
+    glasses.advance(0.2)
+    assert "loading" in glasses.screen_text()
+    assert requests(glasses)[-1][1:3] == (0, 60)
+    Phone(glasses, LONG).answer(0)
+    glasses.advance(0.2)
+    assert word(glasses)[0] == "w0"
+    glasses.assert_ok()
+
+
+def test_sleep_while_reading_tells_the_phone_the_place(frame):
+    phone = opened(frame, LONG)
+    frame.tap(1)
+    phone.run(2)
+    frame.clear_sent()
+    phone.seen = 0
+    frame.tap(3, settle=3.0)                      # deep sleep
+    frame.advance(2)
+    assert frame.emu.asleep
+    reqs = requests(frame)
+    assert len(reqs) == 1
+    place, frm, count, wpm, text = reqs[0]
+    assert (frm, count, wpm, text) == (place, 0, 300, 1) and place > 3
+    frame.assert_ok()
+
+
+def test_the_hosts_break_while_reading_tells_the_phone_the_place(frame):
+    phone = opened(frame, LONG)
+    frame.tap(1)
+    phone.run(2)
+    frame.clear_sent()
+    frame.emu.break_signal()
+    frame.advance(1)
+    assert not frame.running()
+    reqs = requests(frame)
+    assert len(reqs) == 1 and reqs[0][2] == 0 and reqs[0][0] > 3
+    frame.assert_ok()

@@ -138,6 +138,10 @@ function _M.on_tap()
     -- it stops, and a counter would start at 1 again and run into the
     -- previous series on the phone
     series = math.floor(frame.time.utc()) % 255 + 1
+    -- a start 255 s after the last gets its number again, and the phone
+    -- would put both in one folder: never the same twice running
+    if series == _M.host.pref('series', 0) then series = series % 255 + 1 end
+    _M.host.set_pref('series', series)
     pcall(frame.camera.power_save, false)
     next_at = frame.time.utc() + WARMUP   -- exposure settles first
   end

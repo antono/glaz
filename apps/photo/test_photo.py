@@ -499,3 +499,67 @@ def test_left_beside_a_stopwatch_the_camera_powers_down(frame):
     frame.tap(2)
     assert not frame.emu._camera_awake
     frame.assert_ok()
+
+
+# ---------------------------------------------------------------- limits
+
+@pytest.mark.parametrize("size", [100, 720])
+def test_the_smallest_and_largest_sizes_are_taken(glasses, size):
+    glasses.settings({"photo.resolution": str(size)})
+    glasses.open_app("photo")
+    shoot(glasses)
+    [jpeg] = photos(glasses)
+    assert picture(jpeg).size == (size, size)
+    remote_photo(glasses, size, 3)
+    [jpeg] = photos(glasses)
+    assert picture(jpeg).size == (size, size)
+    glasses.assert_ok()
+
+
+def test_the_remotes_button_twice_takes_two_photos(glasses):
+    glasses.clear_sent()
+    glasses.send(PHOTO_TAKE, struct.pack(">HB", 200, 3))
+    glasses.advance(0.5)                         # the first warming up
+    glasses.send(PHOTO_TAKE, struct.pack(">HB", 200, 3))
+    glasses.advance(6)
+    assert len(photos(glasses)) == 2
+    glasses.assert_ok()
+
+
+def test_a_double_tap_during_a_shot_leaves_after_it(glasses):
+    glasses.open_app("photo", settle=0)
+    glasses.clear_sent()
+    glasses.tap(1, settle=0.8)                   # the shot, warming up
+    glasses.tap(2)                               # while it is under way
+    glasses.advance(3)
+    assert len(photos(glasses)) == 1             # it went out whole
+    assert glasses.sent(APP_STOP)
+    assert not camera_on(glasses)
+    glasses.assert_ok()
+
+
+def test_the_hosts_break_powers_the_camera_down(frame):
+    frame.open_app("photo")
+    shoot(frame)
+    frame.emu.break_signal()
+    frame.advance(1)
+    assert not frame.running()
+    assert not camera_on(frame)
+    frame.assert_ok()
+
+
+def test_woken_after_sleep_camera_shoots_again(frame):
+    frame.open_app("photo")
+    shoot(frame)
+    frame.tap(3, settle=3.0)                     # deep sleep from Camera
+    frame.advance(2)
+    frame.tap(1, settle=2.0)                     # waking is a reset
+    assert frame.until("Frame app is running", since=2)
+    frame.advance(1)
+    # back where it was, counting from zero, the camera on again
+    assert "tap = photo" in frame.screen_text()
+    assert "sent" not in frame.screen_text()
+    assert camera_on(frame)
+    shoot(frame)
+    assert len(photos(frame)) == 1
+    frame.assert_ok()

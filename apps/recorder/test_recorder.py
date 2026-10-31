@@ -528,3 +528,95 @@ def test_an_unknown_argument_changes_nothing(glasses):
     assert not glasses.sent(REC_START)
     assert "tap = record" in glasses.screen_text()
     glasses.assert_ok()
+
+
+# ---------------------------------------------------------------- edges
+
+def test_on_and_off_at_once_still_make_a_whole_recording(glasses):
+    glasses.open_app("recorder")
+    glasses.clear_sent()
+    glasses.call("recorder", "on")               # the button pressed twice,
+    glasses.call("recorder", "off")              # quicker than a tick
+    glasses.advance(1)
+    codes = [m[0] for m in glasses.sent() if m[0] in (REC_START, AUDIO,
+                                                       AUDIO_END)]
+    assert codes == [REC_START, AUDIO_END]
+    assert "tap = record" in glasses.screen_text()
+    assert "saved" not in glasses.screen_text()  # nothing was sent
+    glasses.assert_ok()
+
+
+def test_off_twice_ends_the_recording_once(glasses):
+    record(glasses, bytes(1370))
+    glasses.advance(1)
+    glasses.call("recorder", "off")
+    glasses.call("recorder", "off")              # a retry from the phone
+    glasses.advance(1)
+    assert len(glasses.sent(AUDIO_END)) == 1
+    assert "saved 1 KB" in glasses.screen_text()
+    glasses.assert_ok()
+
+
+def test_an_hour_goes_on_in_minutes(frame):
+    record(frame)
+    frame.tap(2)                                 # on in the background
+    frame.emu.mic_data.extend(bytes(1370 * 1024))
+    frame.advance(3737)                          # 62 min 17 s
+    frame.open_app("recorder")
+    text = frame.screen_text()
+    assert re.search(r"REC 62:1\d  1370 KB", text), text
+    assert "lost" not in text
+    frame.assert_ok()
+
+
+def test_the_hosts_break_while_recording_ends_it(frame):
+    record(frame, bytes(1370))
+    frame.advance(1)
+    frame.clear_sent()
+    frame.emu.break_signal()
+    frame.advance(1)
+    assert not frame.running()
+    assert frame.sent(AUDIO_END)
+    assert not frame.emu._mic_on
+    frame.assert_ok()
+
+
+def test_the_hosts_break_ends_a_recording_in_the_background(frame):
+    record(frame)
+    frame.tap(2)
+    frame.clear_sent()
+    frame.emu.break_signal()
+    frame.advance(1)
+    assert frame.sent(AUDIO_END)
+    assert not frame.emu._mic_on
+    frame.assert_ok()
+
+
+def test_sleep_from_the_menu_ends_a_recording_in_the_background(frame):
+    record(frame, bytes(1370))
+    frame.tap(2)                                 # the menu, recording on
+    frame.advance(1)
+    frame.tap(3, settle=3.0)                     # deep sleep
+    frame.advance(2)
+    assert frame.emu.asleep
+    assert frame.sent(AUDIO_END)
+    assert not frame.emu._mic_on
+    frame.tap(1, settle=2.0)                     # waking is a reset
+    assert frame.until("Frame app is running", since=2)
+    frame.advance(1)
+    assert not red_dot(frame)
+    frame.open_app("recorder")
+    assert "tap = record" in frame.screen_text()
+    assert "saved" not in frame.screen_text()
+    frame.assert_ok()
+
+
+def test_a_notification_does_not_stop_the_recording(glasses):
+    record(glasses)
+    glasses.notify("Chat", "Ann", "137 seconds left")
+    glasses.emu.mic_data.extend(bytes(1370))
+    glasses.advance(10)
+    assert len(audio(glasses)) == 1370
+    assert not glasses.sent(AUDIO_END)
+    assert "tap = stop" in glasses.screen_text()
+    glasses.assert_ok()

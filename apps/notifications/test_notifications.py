@@ -602,3 +602,97 @@ def test_with_the_list_held_a_lost_phone_takes_no_tap(frame):
 def test_frame_only():
     assert has_module("frame", "notifications")
     assert not has_module("halo", "notifications")
+
+
+# ---------------------------------------------------------------- edges
+
+def test_all_gone_while_scrolled_says_none(glasses):
+    opened(glasses, total=137)
+    for _ in range(10):
+        glasses.tilt(1)                          # asks from 4
+    glasses.call("notifications", "l:4:0")       # the phone cleared them
+    assert rows(glasses) == ["no notifications"]
+    glasses.clear_sent()
+    glasses.tilt(-1)
+    glasses.tap(1)
+    glasses.advance(6)
+    assert rows(glasses) == ["no notifications"]
+    assert not glasses.sent(NOTICES_GET)
+    ok(glasses)
+
+
+def test_the_highest_id_is_asked_for_whole(glasses):
+    glasses.open_app("notifications")
+    glasses.call("notifications", "l:0:1\n4294967295|App: the last id")
+    glasses.clear_sent()
+    glasses.tap(1)
+    assert asked(glasses) == [(ONE, 4294967295)]
+    glasses.call("notifications", "f:4294967295\nall of it")
+    assert rows(glasses) == ["all of it"]
+    ok(glasses)
+
+
+def test_ten_of_ten_held_asks_nothing_more(glasses):
+    opened(glasses, total=10)
+    glasses.clear_sent()
+    for _ in range(12):                          # past the last
+        glasses.tilt(1)
+    assert rows(glasses)[-1] == "> App: title 128"
+    assert not glasses.sent(NOTICES_GET)
+    ok(glasses)
+
+
+def test_eleven_asks_for_the_last_one(glasses):
+    opened(glasses, total=11)                    # 0..9 held
+    glasses.clear_sent()
+    for _ in range(10):
+        glasses.tilt(1)
+    assert asked(glasses) == [(LIST, 4)]
+    glasses.call("notifications", listing(4, 11, [137 - n for n in
+                                                  range(4, 11)]))
+    assert rows(glasses)[-1] == "> App: title 127"
+    ok(glasses)
+
+
+def test_the_same_answer_twice_does_not_page_back(glasses):
+    opened(glasses)
+    glasses.tap(1)
+    lines = [f"line {n}" for n in range(1, 14)]
+    glasses.call("notifications", "f:137\n" + "\n".join(lines))
+    glasses.tilt(1)
+    assert rows(glasses) == lines[4:9]
+    glasses.call("notifications", "f:137\n" + "\n".join(lines))  # again
+    assert rows(glasses) == lines[4:9]
+    ok(glasses)
+
+
+def test_a_long_one_in_cyrillic_split_over_packets(glasses):
+    """900 bytes, as the phone sends at most: Bluetooth cuts it every 200
+    bytes, inside a letter too; the glasses put it together first."""
+    opened(glasses)
+    glasses.tap(1)
+    lines = [f"Строка текста {n}" for n in range(1, 31)]
+    arg = "f:137\n" + "\n".join(lines)
+    raw = b"notifications\n" + arg.encode()      # MODULE_CALL's payload
+    assert 800 < len(raw) <= 900
+    assert any(0x80 <= raw[n] < 0xC0 for n in range(200, len(raw), 200))
+    glasses.call("notifications", arg)
+    assert rows(glasses) == lines[0:5]
+    for _ in range(9):
+        glasses.tilt(1)
+    assert rows(glasses) == lines[25:30]         # the end, whole
+    ok(glasses)
+
+
+def test_rapid_taps_open_close_and_open_again(glasses):
+    opened(glasses)
+    glasses.clear_sent()
+    glasses.tap(1)                               # open: asks
+    glasses.tap(1)                               # closed before the answer
+    glasses.tap(1)                               # open again: asks again
+    assert asked(glasses) == [(ONE, 137), (ONE, 137)]
+    glasses.call("notifications", "f:137\nthe newest")
+    assert rows(glasses) == ["the newest"]
+    glasses.call("notifications", "f:137\nthe newest")   # the first's, late
+    assert rows(glasses) == ["the newest"]
+    ok(glasses)

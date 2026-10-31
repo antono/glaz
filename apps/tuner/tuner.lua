@@ -277,7 +277,9 @@ function _M.remote(arg)
   local kind = string.sub(arg, 1, 1)
   if kind == 'p' then
     local p, h = string.match(arg, '^p(%d+) (%d+)$')
-    if p then
+    -- MIDI's notes, 0..127: past them it is no note, and a number too big
+    -- for an integer would fail '%+d' in draw() on every frame
+    if p and tonumber(p) < 12800 then
       pitch, hz, live = tonumber(p) / 100, tonumber(h) / 10, true
       heard_at = frame.time.utc()
     else

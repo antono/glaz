@@ -61,7 +61,11 @@ question ends. The sound is Recorder's streaming: `REC_START` with a
 fourth byte `1` (for the assistant), then `AUDIO` packets, `AUDIO_END`
 on the tap that asks. 8 kHz, 16-bit unless Glaz > Menu > Assistant says
 8. While listening `busy()` is true, so `APP_TIMEOUT` (60 s without
-input) does not close it; it asks by itself after 120 s. Going back or
+input) does not close it; it asks by itself after 120 s. Nor while
+waiting for the answer, which can take minutes (the agent's three rounds
+of 120 s): `busy()` stays true for up to 360 s from the question, while
+the phone is there; without it, or past that, the minute applies again.
+Going back or
 leaving while listening or waiting sends `REC_DROP` (`0x10`): the phone
 asks nothing, or throws the answer away.
 

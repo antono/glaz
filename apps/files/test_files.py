@@ -497,3 +497,69 @@ def test_a_notification_over_the_list_leaves_it_as_it_was(listed):
     assert "Ann" not in listed.screen_text()
     assert body(listed)[1] == "> Adir/  "
     listed.assert_ok()
+
+
+# ---------------------------------------------------------------- edges
+
+def test_a_line_of_26_characters_fits_and_27_are_clipped(glasses):
+    open_files(glasses, **{FIRST: "x" * 26 + "\n" + "y" * 27 + "\n"})
+    glasses.tap(1)
+    assert body(glasses)[1:] == ["x" * 26, "y" * 24 + ".."]
+    glasses.assert_ok()
+
+
+def test_26_cyrillic_letters_fit_too(glasses):
+    open_files(glasses, **{FIRST: "Ж" * 26 + "\n" + "Ж" * 27 + "\n"})
+    glasses.tap(1)
+    assert body(glasses)[1:] == ["Ж" * 26, "Ж" * 24 + ".."]
+    glasses.assert_ok()
+
+
+def test_a_letter_cut_in_two_by_a_512_byte_read_is_dropped(glasses):
+    # 'a' and 300 two-byte letters: the read stops after 512 bytes, in the
+    # middle of the 256th letter; its second byte starts the next piece
+    open_files(glasses, **{FIRST: "a" + "Ж" * 300 + "\n"})
+    glasses.tap(1)
+    rows = body(glasses)
+    assert rows[1] == "a" + "Ж" * 23 + ".."
+    assert rows[2] == "Ж" * 24 + ".."
+    assert all("�" not in r for r in rows)
+    glasses.assert_ok()
+
+
+def test_a_short_piece_after_a_cut_letter_is_shown_whole(glasses):
+    open_files(glasses, **{FIRST: "a" + "Ж" * 255 + "Ж137\n"})
+    glasses.tap(1)
+    assert body(glasses)[2] == "137"             # the letter's half gone
+    glasses.assert_ok()
+
+
+def test_137_files_wrap_round_at_both_ends(glasses):
+    only(glasses, *[(f"F{i:03}", i, 1) for i in range(1, 138)])
+    open_files(glasses)
+    glasses.tilt(-1)                             # from the first to the last
+    assert names(glasses) == ["F135", "F136", "F137"]
+    assert body(glasses)[2] == "> F137  137 B"
+    glasses.tilt(-1)
+    assert body(glasses)[1] == "> F136  136 B"
+    glasses.tilt(1)
+    glasses.tilt(1)                              # from the last to the first
+    assert body(glasses)[0] == "> F001  1 B"
+    glasses.assert_ok()
+
+
+def test_woken_after_sleep_it_lists_again(frame):
+    put(frame, FIRST, "137\n")
+    open_files(frame)
+    frame.tilt(1)
+    frame.tap(1)                                 # a preview open
+    frame.tap(3, settle=3.0)                     # deep sleep
+    frame.advance(2)
+    assert frame.emu.asleep
+    assert not frame.emu.files.handles
+    frame.tap(1, settle=2.0)                     # waking is a reset
+    assert frame.until("Frame app is running", since=2)
+    frame.advance(1)
+    # back in Files, the list read afresh, the cursor at the top
+    assert body(frame)[0] == f"> {FIRST}  4 B"
+    frame.assert_ok()

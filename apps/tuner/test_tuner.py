@@ -658,3 +658,98 @@ def test_halo_cannot_open_it(halo):
     assert not halo.sent(TUNER)
     halo.assert_ok()
 
+
+
+# ---------------------------------------------------------------- edges
+
+def test_the_lowest_midi_note_is_c_minus_1(frame):
+    tuning(frame)
+    frame.call("tuner", "p0 0")
+    text = frame.screen_text()
+    assert "C-1" in text and "-4000 c" in text and "0.0 Hz" in text
+    assert colour_of(frame, "E2") == "RED"       # the nearest string
+    assert abs(needle(frame) - 80) <= 3          # pinned to the left end
+    frame.assert_ok()
+
+
+def test_the_highest_midi_note_is_g9(glasses):
+    tuning(glasses)
+    glasses.call("tuner", "p12700 125440")
+    text = glasses.screen_text()
+    assert "G9" in text and "+6300 c" in text and "12544.0 Hz" in text
+    assert colour_of(glasses, "E4") == "RED"
+    glasses.assert_ok()
+
+
+@pytest.mark.parametrize("arg", [
+    "p12800 1",                                  # past MIDI's last note
+    "p99999999999999999999999 1",                # too big for an integer
+])
+def test_a_pitch_past_midi_counts_as_nothing_heard(glasses, arg):
+    tuning(glasses)
+    glasses.call("tuner", "p4512 1124")
+    glasses.call("tuner", arg)
+    assert colour_of(glasses, "+12 c") == "GREY"
+    assert "play a string" in glasses.screen_text()
+    glasses.assert_ok()                          # draw() did not fail
+
+
+def test_a_negative_pitch_counts_as_nothing_heard(glasses):
+    tuning(glasses)
+    glasses.call("tuner", "p-100 50")
+    text = glasses.screen_text()
+    assert "play a string" in text and " c" not in text
+    glasses.assert_ok()
+
+
+def test_halfway_between_two_strings_goes_to_the_lower(glasses):
+    tuning(glasses)
+    glasses.call("tuner", "p4250 924")           # E2 + 250, A2 - 250
+    assert "+250 c" in glasses.screen_text()
+    assert colour_of(glasses, "E2") == "RED"
+    assert colour_of(glasses, "A2") == "WHITE"
+    glasses.assert_ok()
+
+
+def test_the_bass_low_e_is_its_lowest_string(glasses):
+    tuning(glasses, tilts=5)                     # Bass: E1 A1 D2 G2
+    glasses.call("tuner", "p2801 412")
+    text = glasses.screen_text()
+    assert "+1 c" in text and "in tune" in text and "41.2 Hz" in text
+    assert colour_of(glasses, "E1") == "GREEN"
+    glasses.assert_ok()
+
+
+def test_a_note_after_it_closed_opens_nothing(glasses):
+    tuning(glasses)
+    glasses.tap(2)
+    glasses.tap(2)                               # the list leaves
+    glasses.clear_sent()
+    glasses.call("tuner", "p4500 1100")          # the phone, a beat late
+    glasses.advance(2)
+    assert "A2" not in glasses.screen_text()
+    assert not glasses.sent(TUNER) and not glasses.sent(APP_BACKGROUND)
+    glasses.assert_ok()
+
+
+def test_asleep_while_tuning_the_microphone_stops(frame):
+    frame.settings({"tuner.mic": "glasses"})
+    tuning(frame)
+    frame.clear_sent()
+    frame.tap(3)                                 # three taps: to sleep
+    frame.advance(2)
+    assert frame.emu.asleep
+    assert frame.sent(AUDIO_END) and QUIT in frame.sent(TUNER)
+    assert not frame.emu._mic_on
+    frame.assert_ok()
+
+
+def test_the_hosts_break_stops_the_microphone(frame):
+    frame.settings({"tuner.mic": "glasses"})
+    tuning(frame)
+    frame.clear_sent()
+    frame.emu.break_signal()
+    frame.advance(2)
+    assert not frame.running()
+    assert frame.sent(AUDIO_END) and QUIT in frame.sent(TUNER)
+    assert not frame.emu._mic_on

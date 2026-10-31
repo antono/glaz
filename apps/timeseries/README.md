@@ -62,7 +62,9 @@ shoots and sleeps while stopped
   the next one (glaz or the host's break may have powered it down).
 - **The series number**, 1 to 255, comes from the clock at the start, not
   from a counter, so a series started after the module was reloaded does
-  not run into the previous one on the phone.
+  not run into the previous one on the phone. The last one is kept as a
+  pref: a start that the clock would give the same number again (255 s
+  later) takes the next, so it is never the same twice running.
 - **Stopped for good** (`stop()`): by Sleep, three taps, a new menu or
   the break from the phone, or another app taking the background. It
   opens again at 4 s with nothing counted.

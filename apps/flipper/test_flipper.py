@@ -511,3 +511,108 @@ def test_an_answer_the_link_never_takes_is_dropped_quietly(frame):
     flipper(frame, frame_msg(138, {1: FULL}))
     assert frame.sent(FLIPPER) == [bytes([FLIPPER, 2, 138])]
     frame.assert_ok()
+
+
+# ---------------------------------------------------------------- edges
+
+def test_a_frame_of_just_a_mask_is_taken_one_byte_less_is_not(glasses):
+    opened(glasses)
+    flipper(glasses, frame_msg(1, {0: FULL}))
+    glasses.clear_sent()
+    flipper(glasses, b"f\x89" + bytes(7))        # 9 bytes: no whole mask
+    assert glasses.sent(FLIPPER) == []
+    flipper(glasses, b"f\x89" + bytes(8))        # 10: a frame of no rows
+    assert glasses.sent(FLIPPER) == [bytes([FLIPPER, 2, 0x89])]
+    assert flipper_pixel(glasses, 0, 0) == ORANGE  # nothing changed
+    glasses.assert_ok()
+
+
+def test_a_mask_of_every_row_with_no_rows_after_it_clears_the_picture(glasses):
+    # the rows were lost on the way: each is cut off, so each is blank
+    opened(glasses)
+    flipper(glasses, frame_msg(1, {0: FULL, 63: FULL}))
+    flipper(glasses, b"f\x02" + b"\xff" * 8)
+    assert bytes([FLIPPER, 2, 2]) in glasses.sent(FLIPPER)
+    assert orange(glasses) == 0
+    assert glasses.screen_text() == ""           # a blank picture, no words
+    glasses.assert_ok()
+
+
+def test_bytes_past_the_last_row_are_ignored(glasses):
+    opened(glasses)
+    flipper(glasses, frame_msg(1, {5: nibbles("#")}) + FULL * 3)
+    assert bytes([FLIPPER, 2, 1]) in glasses.sent(FLIPPER)
+    assert orange(glasses) == 16                 # the one pixel of row 5
+    glasses.assert_ok()
+
+
+def test_the_same_frame_twice_is_answered_twice_and_drawn_once(glasses):
+    # the phone, without an answer, sends the frame again
+    opened(glasses)
+    msg = frame_msg(137, {0: FULL, 1: nibbles("#")})
+    flipper(glasses, msg)
+    flipper(glasses, msg)
+    taken = bytes([FLIPPER, 2, 137])
+    assert glasses.sent(FLIPPER).count(taken) == 2
+    assert orange(glasses) == (128 + 1) * 16
+    glasses.assert_ok()
+
+
+def test_an_older_seq_is_taken_as_any(glasses):
+    # frames are not put in order here: the phone sends one at a time
+    opened(glasses)
+    flipper(glasses, frame_msg(9, {0: FULL}))
+    flipper(glasses, frame_msg(8, {0: BLANK, 1: FULL}))
+    assert glasses.sent(FLIPPER)[-1] == bytes([FLIPPER, 2, 8])
+    assert flipper_pixel(glasses, 0, 0) != ORANGE
+    assert flipper_pixel(glasses, 0, 1) == ORANGE
+    glasses.assert_ok()
+
+
+def test_words_after_it_closed_are_not_shown_when_it_opens_again(glasses):
+    opened(glasses)
+    glasses.tap(2)
+    glasses.clear_sent()
+    flipper(glasses, b"sno Flipper found")
+    glasses.advance(5)
+    assert glasses.sent(FLIPPER) == []           # not started for it
+    assert "no Flipper found" not in glasses.screen_text()
+    opened(glasses)
+    assert "waiting for the phone" in glasses.screen_text()
+    glasses.assert_ok()
+
+
+def test_frames_under_a_notification_are_still_answered(glasses):
+    # the phone waits for each seq: unanswered, the stream would stall
+    opened(glasses)
+    flipper(glasses, frame_msg(1, {0: FULL}))
+    glasses.notify("Chat", "Hi", "137 apples")
+    assert "137 apples" in glasses.screen_text()
+    for seq in (2, 3):
+        flipper(glasses, frame_msg(seq, {seq: FULL}))
+        assert glasses.sent(FLIPPER)[-1] == bytes([FLIPPER, 2, seq])
+    glasses.tap(1)                               # the notification away
+    assert "137 apples" not in glasses.screen_text()
+    assert orange(glasses) == 3 * 128 * 16       # every row it took since
+    assert not glasses.sent(FLIPPER).count(DONE)  # the tap did not close it
+    glasses.assert_ok()
+
+
+def test_long_words_from_the_phone_are_drawn_without_trouble(glasses):
+    opened(glasses)
+    flipper(glasses, b"s" + b"137 " * 40)
+    glasses.advance(1)
+    assert "137" in glasses.screen_text()
+    glasses.assert_ok()
+
+
+def test_halo_ignores_a_call_for_it(halo):
+    halo.advance(5)
+    halo.clear_sent()
+    before = halo.screen_text()
+    halo.send(MODULE_CALL, b"flipper\n" + frame_msg(137, {0: FULL}))
+    halo.advance(1)
+    assert halo.sent(FLIPPER) == []
+    assert not halo.sent(APP_START)
+    assert halo.screen_text() == before
+    halo.assert_ok()

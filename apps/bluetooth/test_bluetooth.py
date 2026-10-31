@@ -281,3 +281,67 @@ def test_a_failing_address_or_mtu_leaves_the_rest(glasses):
     assert mac.startswith("MAC ")
     assert "AA:BB" not in mac
     glasses.assert_ok()
+
+
+# ---------------------------------------------------------------- edges
+
+@pytest.mark.parametrize("ago, shown", [
+    (59, "59s"), (60, "1m00s"), (3599, "59m59s"), (3600, "1h00m"),
+])
+def test_spans_at_their_edges(glasses, ago, shown):
+    glasses.advance(ago + 10)                # since stays above 0
+    glasses.open_app("bluetooth")
+    before = lines(glasses)[0]
+    lua(glasses, f"glaz_link.since = frame.time.utc() - {ago}")
+    # the first refresh after it, less than a second on: ago, floored
+    for _ in range(20):
+        if lines(glasses)[0] != before:
+            break
+        glasses.advance(0.1)
+    assert lines(glasses)[0].startswith(f"up {shown}  ")
+    glasses.assert_ok()
+
+
+def test_big_counts_are_shown_whole(frame):
+    frame.open_app("bluetooth")
+    lua(frame, "glaz_link.drops = 137137; glaz_link.rx = 1371371")
+    frame.advance(1)
+    up, heard, _ = lines(frame)
+    assert up.endswith("drops 137137")
+    assert "  in 137137" in heard                # rx and the eval's own
+    frame.assert_ok()
+
+
+def test_drops_while_closed_are_counted_when_it_opens(frame):
+    for _ in range(3):
+        frame.emu.connected = False
+        frame.advance(2)
+        frame.emu.connected = True
+        frame.advance(2)
+    frame.open_app("bluetooth")
+    assert "drops 3" in lines(frame)[0]
+    frame.assert_ok()
+
+
+def test_a_tilt_changes_nothing(glasses):
+    glasses.open_app("bluetooth")
+    glasses.clear_sent()
+    glasses.tilt(1)
+    glasses.tilt(-1)
+    glasses.remote(2, 1)
+    assert not glasses.sent(APP_STOP)
+    assert lines(glasses)[0].startswith("up")
+    glasses.assert_ok()
+
+
+def test_the_link_gone_for_good_puts_it_away_with_the_glasses(frame):
+    # past LINK_GRACE without the phone the glasses go to sleep: the app
+    # is stopped on the way, no Bluetooth to tell
+    frame.open_app("bluetooth")
+    frame.emu.connected = False
+    frame.advance(30)
+    assert lines(frame)[0].startswith("down 2")  # still open, counting
+    frame.advance(60)
+    assert frame.emu.asleep
+    assert "MAC" not in frame.screen_text()
+    frame.assert_ok()

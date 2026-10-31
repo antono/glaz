@@ -675,3 +675,78 @@ def test_the_box_starts_at_the_first_for_another_instrument(frame):
     frame.tap(1)                                 # the bass
     assert "fr 5" in frame.screen_text()
     frame.assert_ok()
+
+
+# ---------------------------------------------------------------- edges
+
+def test_a_scale_with_fewer_boxes_keeps_to_its_last(frame):
+    # a seven-note scale without a pentatonic under it has seven boxes;
+    # the next scale, with five, cannot start from the seventh
+    fretboard(frame)
+    frame.call("scales", "g0 2 seven|seven|0235789|||")
+    for _ in range(6):
+        frame.tilt(1)                            # its seventh box
+    frame.call("scales", DORIAN)
+    text = frame.screen_text()
+    assert "A dorian" in text and "fr 15" in text   # m pent's fifth box
+    assert colour(frame, BOTTOM, 6, 2) == "RED"     # A at fret 17
+    frame.tilt(1)
+    assert "fr 5" in frame.screen_text()         # and round to the first
+    frame.assert_ok()
+
+
+def test_a_box_ending_on_the_last_fret_stays_up_the_neck(frame):
+    # B on the low E: boxes 7, 10, 12, 14 and 17, whose 17..22 just fits
+    set_up(frame, {"scales.key": "B"})
+    fretboard(frame)
+    assert "fr 7" in frame.screen_text()
+    frame.tilt(-1)
+    assert "fr 17" in frame.screen_text()
+    assert colour(frame, SINGLE, 6, 2) == "RED"     # B at fret 19
+    frame.assert_ok()
+
+
+def test_in_e_the_first_box_is_open_and_the_last_at_ten(frame):
+    set_up(frame, {"scales.key": "E"})
+    fretboard(frame)
+    text = frame.screen_text()
+    assert "E minor pent" in text and "fr 0" in text
+    assert colour(frame, SINGLE, 6, 0) == "RED"     # the open low E
+    assert colour(frame, SINGLE, 1, 0) == "RED"     # and the high one
+    frame.tilt(-1)
+    assert "fr 10" in frame.screen_text()
+    frame.assert_ok()
+
+
+def test_one_scale_on_the_phone_asks_for_itself(frame):
+    fretboard(frame)
+    frame.call("scales", "g0 1 minor pent|m pent|0357a|||")
+    frame.clear_sent()
+    frame.tap(1)
+    frame.remote(3, 1)
+    frame.remote(3, 255)
+    assert scale_gets(frame) == [0, 0, 0]
+    frame.assert_ok()
+
+
+def test_a_number_past_the_count_still_asks_within_it(frame):
+    fretboard(frame)
+    frame.call("scales", "g137 14 dorian|dorian|023579a|9|m pent|0357a")
+    assert "A dorian" in frame.screen_text()
+    frame.clear_sent()
+    frame.tap(1)
+    frame.remote(3, 255)
+    assert scale_gets(frame) == [138 % 14, 136 % 14]
+    frame.assert_ok()
+
+
+def test_the_same_answer_twice_changes_nothing(frame):
+    fretboard(frame)
+    frame.call("scales", DORIAN)
+    frame.tilt(1)
+    before = frame.image().tobytes()
+    frame.call("scales", DORIAN)
+    assert frame.image().tobytes() == before
+    assert "fr 8" in frame.screen_text()
+    frame.assert_ok()
+

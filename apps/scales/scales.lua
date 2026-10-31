@@ -274,6 +274,8 @@ function _M.remote(arg)
             flavour = flav ~= '' and tonumber(flav, 16) or nil,
             base = bnotes ~= '' and { short = bshort, notes = semis(bnotes) }
                    or nil }
+  -- the box on screen, if this scale has as many; else its last
+  box = math.min(box, #(scale.base or scale).notes)
   last_input = frame.time.utc()
   return state()
 end
