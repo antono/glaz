@@ -41,13 +41,16 @@ likelihood:
 3. **Flat battery.** Frame has no power switch and does not sleep on its own
    while an app loop runs; it just drains, rated about 4 hours.
 
-**A fully drained Frame looks dead.** Hit in practice on 30.10.2026: the
-glasses would not turn on and ignored the reset button. A computer saw no
-`Frame`, no `Frame Update` (`fe59`) and nothing new on USB either. The
-dock's USB cable carries only power, so the glasses never show up there.
-What brought them back: put them on the charger, let them charge, and only
-then reset them. They came up as before. A reset right after plugging in
-does nothing: the battery needs some charge first.
+**Charged, but stuck: wait for it to drain.** Hit in practice on
+30.10.2026. The battery was not flat, yet the glasses would not wake, no
+host could connect, and the reset button on the dock did nothing. A
+computer saw no `Frame`, no `Frame Update` (`fe59`) and nothing new on USB
+either: the dock's USB cable carries only power, so the glasses never show
+up there. Charging changed nothing, however long they stayed on the dock.
+What brought them back: leave them off the charger until the battery is
+completely flat, then put them on the dock, let them charge and press
+reset. Only after that full drain did the reset work. They came up as
+before.
 
 Confirm the radio is fine rather than guessing:
 
