@@ -396,7 +396,8 @@ local function build(spec, label, parent)
 end
 
 -- The module behind id, loaded if it is not: nil for a host item or one
--- that failed at start. Gets its own host services (_M.host) each time.
+-- that failed at start; nil and why for one that fails now (short of
+-- memory, most likely). Gets its own host services (_M.host) each time.
 local function load_module(id)
   if mods[id] then return mods[id] end
   local name = names[id]
@@ -407,7 +408,7 @@ local function load_module(id)
     mods[id] = mod
     return mod
   end
-  return nil
+  return nil, ok and 'not a module' or tostring(mod)
 end
 
 -- The last module, kept across deep sleep. Waking is a reset, so `last`
@@ -952,7 +953,7 @@ local function run_module(id, arg)
     if item.id == id then name, lv.sel = item.label, i end
   end
 
-  local mod = load_module(id)
+  local mod, why = load_module(id)
 
   visible = false
   running = id
@@ -967,8 +968,10 @@ local function run_module(id, arg)
   send(APP_START, id)
 
   if not mod then
-    -- a host-supplied item has no module behind it; the host does the work
-    run_text = broken[id] and 'load failed' or '(host item)'
+    -- a host-supplied item has no module behind it; the host does the work.
+    -- One that does not load now says why, as an error of its own would.
+    run_text = why and err_text(why) or broken[id] and 'load failed'
+               or '(host item)'
     render()
     return
   end
@@ -1057,7 +1060,9 @@ local function remote_call(name, arg)
   end
   if not id then return end
   if running == id then
-    if mods[id].remote then module_input(mods[id].remote, arg) end
+    -- on screen, but not loaded when it was opened: nothing to call
+    local mod = mods[id]
+    if mod and mod.remote then module_input(mod.remote, arg) end
     return
   end
   local mod = mods[id]

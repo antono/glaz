@@ -60,12 +60,20 @@ FREE_AFTER_UPLOAD = 8 * BLOCK
 PIECE = 512                # LUAL_BUFFERSIZE on Frame: the most read() gives
 ERR = "\0frame-error"      # a Python stub's error, raised in Lua by PRELUDE
 NOMEM = "not enough memory"   # Lua's LUA_ERRMEM, as the firmware prints it
-# Frame's Lua runs out at about 135 KB, and glaz starts at about 89 KB: 46 KB
-# of room (docs/FRAME.md, "Known gotchas"). Here the app is source, with
-# its debug information and none of the phone's minifying, and starts at
-# about 200 KB (collectgarbage('count') after start, test_app.py), so the
-# heap is that and the same 46 KB. Measured again when the app's start
-# moves: test_app.py fails when the room is not 40 to 52 KB.
+# Frame's Lua runs out at about 134 KB (measured 2026-11-04: in use, then
+# filled until 'not enough memory'), and glaz starts at about 98 KB there:
+# 36 KB of room (docs/FRAME.md, "Known gotchas"). Here the app is source,
+# with all its debug information, 64-bit, and starts at about 200 KB
+# (collectgarbage('count') after start, test_app.py); an app's code costs
+# about twice what it does there, the phone's bytecode with no line numbers
+# (Scales: 26 KB here, 13 there). So the room is what the app on screen has
+# left once its code is in, about the same on both (Scales: 20 KB here, 24
+# there): 46 KB above the start. It was too much while the bytecode kept
+# line numbers: glaz started at 108 KB there, Scales had 9 KB left and ran
+# out on its first screen, and the tests here passed. Measured again when
+# the app's start moves: test_app.py fails when the room is not 40 to 52 KB;
+# and on the glasses (docs/TESTING.md, "Memory") when what they load
+# changes.
 HEAP = 246 * 1024
 # What lupa takes to hand a stub's result to Lua besides its strings
 STUB_SLACK = 1024

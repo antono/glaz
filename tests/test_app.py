@@ -46,8 +46,9 @@ def test_starts_without_errors(glasses):
 
 
 def test_frame_starts_with_the_room_it_has_on_the_glasses(frame):
-    # Frame runs out at about 135 KB and glaz starts at about 89 KB
-    # (docs/FRAME.md): the emulator's HEAP leaves the app the same 46 KB.
+    # Frame runs out at about 134 KB and glaz starts at about 98 KB
+    # (docs/FRAME.md): the emulator's HEAP leaves an app the room it has
+    # there once its code is in, which costs twice as much here (HEAP).
     # When this fails, the app's start moved: measure HEAP again.
     from frame_emulator import HEAP
     mem = [l for l in frame.lines if l.startswith("mem ")]
@@ -403,6 +404,28 @@ def test_a_module_that_does_not_load_says_so_in_the_menu(tmp_path, device):
     g.tap(2)                                     # back: the menu works on
     assert "Bluetooth" in g.screen_text()
     assert not [l for l in g.errors() if "load failed" not in l]
+    g.stop()
+
+
+@pytest.mark.parametrize("device", ["frame", "halo"])
+def test_a_module_that_does_not_load_when_opened_says_why(tmp_path, device):
+    # Loaded at start for its label, then short of memory when opened
+    # (Scales on Frame, 2026-11-03): its error on screen, as an error of its
+    # own shows, and a call from the phone for it -- the answer to what it
+    # asked before -- does not take the app down.
+    g = without(device, tmp_path)
+    (g.sandbox / "stopwatch.lua").write_text("error('not enough memory')")
+    g.clear_sent()
+    g.open_app("stopwatch")
+    assert g.sent(APP_START)
+    assert "err: " in g.screen_text()            # cut to Halo's row there
+    said = [l for l in g.lines if "Stopwatch err:" in l]
+    assert len(said) == 1 and "not enough memory" in said[0]
+    g.call("stopwatch", "g0 137")
+    g.advance(1)
+    assert not [l for l in g.errors() if "Stopwatch err:" not in l]
+    g.tap(2)                                     # back: the menu works on
+    assert "Stopwatch" in g.screen_text()
     g.stop()
 
 

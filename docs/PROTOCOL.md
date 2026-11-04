@@ -214,13 +214,17 @@ Two failures are contained deliberately:
 - a module that fails to `require` becomes a visible `name (load failed)` entry
   instead of taking the whole menu down;
 - a module whose `run()` throws shows `err: ...` in the status line and leaves
-  the menu usable.
+  the menu usable;
+- a module that loaded at start but not when opened -- short of memory,
+  most likely -- shows `err: not enough memory` the same way, and a
+  `MODULE_CALL` for it, on screen but not loaded, goes nowhere.
 
 Either way the error is also printed, once until it changes, as
-`Label err: file.lua:12: ...` -- with the line, as the bytecode keeps line
-numbers -- and the phone keeps what the app prints in its log (Glaz > More
-> Log), with the link going up and down, Upload's steps, the assistant and
-the messages either way.
+`Label err: file.lua:-1: ...` -- the file with no line: the phone's
+bytecode keeps no line numbers, for the memory (FRAME.md, "Known gotchas",
+11); the tests run the source and say the line -- and the phone keeps
+what the app prints in its log (Glaz > More > Log), with the link going
+up and down, Upload's steps, the assistant and the messages either way.
 
 Selecting an item still emits `MENU_SELECT` to the host, so modules and a
 host-side reaction are not mutually exclusive — both run.
@@ -1563,9 +1567,10 @@ waiting for a folder listing after 8 s and says to Upload.
 
 ### Memory on the glasses
 
-Frame gives Lua about 135 KB of heap, and the app takes about 89 KB of it
+Frame gives Lua about 134 KB of heap, and the app takes about 98 KB of it
 from the start (FRAME.md, "Known gotchas", 8): an app on screen has some
-40 KB for its code, its state and whatever comes over the link. `data.lua`
+36 KB for its code, its state and whatever comes over the link. Scales'
+code alone is about 13 KB of it loaded, Assistant's 16 KB. `data.lua`
 puts a message together from its packets in that heap, and a message that
 finds no room for it ends the app: "Error in data accumulator: not enough
 memory", then "glaz app error, restarting" (Factchecker on 2026-10-29,

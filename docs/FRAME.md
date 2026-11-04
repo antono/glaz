@@ -222,8 +222,10 @@ Everything below follows from that.
    starts `glaz/glaz_boot.lua`): it replaces `require()` with one that reads
    512 bytes at a time through `frame.file` into `load()`, and loads the
    app, `glaz_app.lua`. Also:
-   about 135 KB of heap is Lua's in all (measured: filled until 'not
-   enough memory'); the app starts at about 89 KB.
+   about 134 KB of heap is Lua's in all (measured 2026-11-04: filled
+   until 'not enough memory'); the app started at 108 KB with line numbers
+   in its bytecode, and Scales ran out of memory on its first screen; it
+   starts at about 98 KB without them (11).
 9. **BlueZ keeps the link after a script is killed.** Once bonded, the link
    can stay up (`bluetoothctl info` says `Connected: yes`) after the Python
    process dies. A connected Frame does not advertise, so the next scan finds
@@ -246,10 +248,18 @@ Everything below follows from that.
     the glasses compile each one to bytecode without debug information while
     their memory is free (`glaz_compile` in `upload.dart`, since dropped:
     see below); and `glaz.lua` loads a module only while it is on screen or in the
-    background (`load_module`). Start went from 168 KB to 105 KB. Bytecode
-    built with the app (`tool/luac_frame.c`) drops only local variables'
-    names: errors keep the file and line, `glaz.lua:1234: ...`, about
-    3 KB more for main. `host_test.py` still sends source as it is.
+    background (`load_module`). Start went from 168 KB to 105 KB.
+    `host_test.py` still sends source as it is.
+
+    Bytecode built with the app (`tool/luac_frame.c`) dropped only local
+    variables' names at first, so that errors said the file and the line.
+    By 2026-11-04 the app started at 108 KB of Frame's 134, and Scales, its
+    code 17 KB loaded, ran out of memory on its first screen. The line
+    numbers and upvalues' names go too now: the app's code loads about
+    15 KB smaller in a laptop's Lua (`glaz.lua` 60 KB to 45 KB), an app's
+    3 to 4 KB. Errors keep the file, `glaz.lua:-1: ...`; the tests run the
+    source, and say the line. The firmware's hooks -- watchdog, break,
+    taps, Bluetooth -- count instructions, so they need no line numbers.
 
     Then main.lua itself grew past what the glasses could compile in one
     go, even first thing after a reset ("not enough memory" at "Compiling

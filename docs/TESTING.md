@@ -51,14 +51,35 @@ Frame's firmware (`lab-frame-codebase`, branch `glaz/main`,
   integer representation` for an `x` of 60.5.
 - A heap as small as Frame's, below.
 
-**Memory.** Frame's Lua runs out at about 135 KB and glaz starts at
-about 89 KB, which leaves an app about 46 KB (docs/FRAME.md, "Known
+**Memory.** Frame's Lua runs out at about 134 KB and glaz starts at
+about 98 KB, which leaves an app about 36 KB (docs/FRAME.md, "Known
 gotchas"). The emulator's Lua has a limit too, lupa's `max_memory`:
 `HEAP` in `tests/frame_emulator/__init__.py`, 246 KB. Here glaz is
 source, with its debug information and not minified, and starts at about
-200 KB, so the limit leaves it the same 46 KB. `test_app.py` checks that
-room (40 to 52 KB) and fails when the app's start has moved: measure
-`HEAP` again then, from the `mem N KB` glaz prints at start.
+200 KB. An app's code costs about twice as much here as the phone's
+bytecode does there (Scales: 26 KB, 13 KB), so the limit leaves 46 KB
+above the start: about what an app has left there once its code is in
+(Scales: 20 KB here, 24 there). `test_app.py` checks that room (40 to
+52 KB) and fails when the app's start has moved: measure `HEAP` again
+then, from the `mem N KB` glaz prints at start.
+
+The emulator cannot see the glasses' bytecode grow, so what they load is
+measured on them too. On 2026-11-04 glaz started there at 108 KB, its
+bytecode still with line numbers: Scales had 9 KB left and ran out of
+memory on its first screen, and every test here passed. With the phone
+holding the glasses (scripts/phone_lua.py), at the menu:
+
+```lua
+collectgarbage('collect') return collectgarbage('count')
+```
+
+then the room, filled 1 KB at a time until it is full:
+
+```lua
+local n, t = 0, {} while pcall(function() t[n + 1] = string.rep('x', 1024) n = n + 1 end) do end t = nil return n
+```
+
+The console itself takes 4 or 5 KB of it while it runs.
 
 When the heap is full it is Lua's error, as on the glasses:
 `not enough memory`, with no line, which `pcall` catches and which

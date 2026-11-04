@@ -1,15 +1,20 @@
 /*
  * Compiles one Lua file to bytecode the glasses load, written by the very
- * Lua the firmware runs. Of the debug information only the names of local
- * variables go -- the most of it. Line numbers stay, with the file's name,
- * so an error on the glasses says where: 'glaz.lua:1234: attempt to
- * call a nil value (field 'x')', the line in the repository, since what is
- * compiled is the repository's file. This is built
- * from the firmware's own libraries/lua (tool/compile_lua.sh). Lua 5.4
- * bytecode carries the sizes of an instruction, an integer and a number and
- * checks them on load; with the firmware's luaconf.h (64-bit integers,
- * doubles) a 32-bit ARM and a 64-bit laptop agree on all three, and both are
- * little-endian.
+ * Lua the firmware runs. The debug information goes, but for the file's
+ * name: local variables' names, upvalues' names and the line numbers, a
+ * byte an instruction. The glasses' memory is small, and they were some
+ * 15 KB of the app's code loaded (docs/FRAME.md 11). An error on the
+ * glasses says the file and no line: 'glaz.lua:-1: attempt to call a nil
+ * value (field 'x')'; the tests run the source, lines and all. Nothing
+ * on the glasses needs the lines: the firmware's hooks -- the watchdog,
+ * the break, taps, Bluetooth -- count instructions (LUA_MASKCOUNT), so
+ * they run as often without them.
+ *
+ * Built from the firmware's own libraries/lua (tool/compile_lua.sh). Lua
+ * 5.4 bytecode carries the sizes of an instruction, an integer and a
+ * number and checks them on load; with the firmware's luaconf.h (64-bit
+ * integers, doubles) a 32-bit ARM and a 64-bit laptop agree on all three,
+ * and both are little-endian.
  *
  *   luac_frame in.lua out.luac [name]
  *
@@ -28,14 +33,21 @@
 #include "lua.h"
 #include "lobject.h"
 
-/* Local variables' names out of f and the functions in it; the rest of the
- * debug information is dumped as it is. */
-static void drop_locals(Proto *f)
+/* The debug information out of f and the functions in it, but for the
+ * source's name, which lua_dump() keeps only when not stripping: so it is
+ * done here, and the dump is not stripped. */
+static void strip(Proto *f)
 {
     f->sizelocvars = 0;
+    f->sizelineinfo = 0;
+    f->sizeabslineinfo = 0;
+    for (int i = 0; i < f->sizeupvalues; i++)
+    {
+        f->upvalues[i].name = NULL;
+    }
     for (int i = 0; i < f->sizep; i++)
     {
-        drop_locals(f->p[i]);
+        strip(f->p[i]);
     }
 }
 
@@ -84,7 +96,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "%s\n", lua_tostring(L, -1));
         return 1;
     }
-    drop_locals(((const LClosure *)lua_topointer(L, -1))->p);
+    strip(((const LClosure *)lua_topointer(L, -1))->p);
 
     FILE *out = fopen(argv[2], "wb");
     if (!out)
