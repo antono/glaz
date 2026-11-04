@@ -177,6 +177,42 @@ def test_a_triple_tap_sleeps_and_a_tap_wakes(glasses):
     glasses.assert_ok()
 
 
+def walk(g, steps, gap=0.5):
+    """Steps that knock the frame like taps, one every gap seconds."""
+    for i in range(steps):
+        g.emu.tap()
+        g.advance(gap)
+
+
+def test_frame_does_not_sleep_while_walking(frame):
+    frame.open_app("stopwatch")
+    walk(frame, 12)
+    frame.advance(2)
+    assert not frame.emu.asleep
+    assert frame.emu.boots == 1                  # nor slept and woke again
+    assert "Stopwatch" in frame.screen_text()
+    frame.assert_ok()
+
+
+def test_frame_three_steps_after_more_do_not_sleep(frame):
+    # a run that ends: still more than three, and three right after it
+    frame.open_app("stopwatch")
+    walk(frame, 5, gap=0.4)
+    frame.tap(3, settle=2.0)                     # 0.4 s after the last step
+    assert not frame.emu.asleep
+    assert frame.emu.boots == 1
+    frame.assert_ok()
+
+
+def test_frame_three_taps_after_stillness_still_sleep(frame):
+    frame.open_app("stopwatch")
+    walk(frame, 6)
+    frame.advance(1.5)                           # stillness, then three taps
+    frame.tap(3, settle=3.0)
+    assert frame.emu.asleep
+    frame.assert_ok()
+
+
 def test_frame_wakes_from_a_triple_tap_to_the_last_app(frame):
     frame.open_app("stopwatch")
     frame.tap(3, settle=3.0)

@@ -44,9 +44,12 @@
 -- flashes the banner when idle and nothing was launched yet, and keeps an
 -- 'app' module alive.
 --
--- A multi-tap can only be classified once TAP_WINDOW has expired, so single
--- and double taps are deliberately delayed by that much. Triple taps fire
--- immediately on the third tap.
+-- A multi-tap can only be classified once TAP_WINDOW has expired, so every
+-- count is deliberately delayed by that much, the arm's triple too: three
+-- taps sleep only alone, with TAP_WINDOW of stillness before the first and
+-- after the third. Walking knocks the frame about every half a second, a
+-- steady run of 'taps' that never stops at three, so it does not put the
+-- glasses to sleep. The remote's triple (its Menu button) fires at once.
 --
 -- Measured on device, firmware v25.080.0838:
 --   * resting angles are not 0 (pitch sits near -35) => the baseline is
@@ -207,7 +210,7 @@ local SPLASH_SECONDS  = 3
 -- Tap tuning
 local TAP_BOUNCE = 0.15  -- taps closer than this are sensor bounce, not input
 local TAP_WINDOW = 0.75  -- max gap between taps belonging to one multi-tap
-local TAP_TOGGLE = 3     -- taps that fire at once: sleep, or the remote's Menu
+local TAP_TOGGLE = 3     -- taps that sleep, or the remote's Menu
 
 -- Layout, from this glasses' part (glaz.frame.lua, .halo.lua): the
 -- list's rows, the first at TOP_Y, ROW_H apart, drawn at LEFT_X.
@@ -475,6 +478,7 @@ local tap_flags = nil -- status 0x03 of the first hit of the last knock, not
                       -- its rebound: which way it pushed the chip; nil on
                       -- firmware that passes no argument
 local tap_mute  = 0   -- swallow taps until this time, after a toggle
+local tap_calm  = 0   -- seconds of stillness before the multi-tap's first tap
 local remote_dir = 0  -- a tilt from the phone's remote, taken as if by roll
 local remote_ud  = 0  -- the remote's Up (-1) or Down (1): a module's
                       -- on_up_down, else the same as a tilt
@@ -1107,12 +1111,14 @@ end
 -- fits (D.taps).
 local function tap_hit(flags)
   local t = frame.time.utc()
-  if t - tap_shake > TAP_BOUNCE then tap_flags = flags end
+  local still = t - tap_shake
+  if still > TAP_BOUNCE then tap_flags = flags end
   tap_shake = t                       -- every hit shakes the glasses
   tap_hits = tap_hits + 1
   if t - tap_at < TAP_BOUNCE then return end   -- bounce, not a new tap
   if t - tap_at > TAP_WINDOW then
     tap_n = 1
+    tap_calm = still
   else
     tap_n = tap_n + 1
   end
@@ -1124,6 +1130,7 @@ local function tap_gesture(n)
   local t = frame.time.utc()
   tap_n = n
   tap_at = t - TAP_WINDOW - 0.01      -- whole: no more taps to wait for
+  tap_calm = TAP_WINDOW + 1           -- Halo counted it, stillness and all
   tap_shake = t
   tap_hits = tap_hits + n
   tap_remote = false
@@ -1479,14 +1486,20 @@ function app_loop()
         render()
       end
 
-      if tap_n >= TAP_TOGGLE then
+      -- The remote's triple fires at once; the arm's once no fourth tap
+      -- can join it, and only after stillness: three of a longer run of
+      -- knocks, walking say, mean nothing.
+      if tap_n >= TAP_TOGGLE and (tap_remote or now - tap_at > TAP_WINDOW)
+      then
+        local alone = tap_remote
+                      or (tap_n == TAP_TOGGLE and tap_calm > TAP_WINDOW)
         tap_n = 0
         notice_tap = false
         if now < tap_mute then
           -- trailing taps of a previous toggle; keep swallowing them until
           -- tapping actually stops
           tap_mute = tap_at + TAP_WINDOW
-        else
+        elseif alone then
           tap_mute = now + TAP_WINDOW
           notice = nil   -- whatever comes next replaces it
           if tap_remote then

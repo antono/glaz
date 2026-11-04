@@ -163,6 +163,18 @@ frame has stopped ringing from the tap that sent it to sleep. So waking no
 longer depends on what the Lua app remembers to do. Build
 `v26.289.1613-stable`.
 
+**That clear came too early.** From it to System OFF is about half a
+second (the 300 ms wait, the FPGA, the radio, the rails), and a knock in it
+latched a tap again: a step, taking the glasses off. Going back to sleep
+after one tap at boot (two taps to wake, below) did not clear it at all.
+While walking, steps sent the glasses to sleep and woke them over and over,
+each time a fresh chance of it; that fits glasses seen (04.11.2026) that
+now and then would not wake after walking. Not yet confirmed on the device.
+Branch `glaz/wake-latch` reads `0x03` once more in `system_off()`, after the
+PMIC and before the pins are let go, the last I2C before sleep, on both
+ways in. In the app, three steps no longer count as a triple tap: it takes
+stillness before and after (docs/PROTOCOL.md, the taps table).
+
 Rule: **every firmware of ours is built from a `glaz/` branch** in
 `antono/frame-codebase`, and a fix goes in as a branch merged into it,
 never as a branch off upstream `main` alone. `glaz/main` is `glaz/stable` with

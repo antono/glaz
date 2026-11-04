@@ -238,7 +238,7 @@ Each tap count means one thing everywhere:
 | --- | --- |
 | **1** | select — run the item under the cursor, or enter the submenu; on the blank screen, back to the last module |
 | **2** | back — one level up: inside the module while it has levels (`on_back()`), then module → its submenu → parent → … → root → blank; on the blank screen, the menu; asleep, wake into the last module (or the menu) |
-| **3** | sleep — deep sleep, from any state |
+| **3** | sleep — deep sleep, from any state; only three taps alone, with `TAP_WINDOW` (0.75 s) of stillness before the first and after the third, so the knocks of walking, a steady run of them, do not count |
 
 However they get there -- three taps, Sleep, the idle timeout -- the glasses
 show the eye closing for a second before deep sleep (`glaz/glaz_blink.frame.lua`,
