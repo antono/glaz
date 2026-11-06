@@ -26,7 +26,7 @@ The same with the view set to one scale
 ![Frame, one scale](screens/frame-dorian-single.png)
 
 The ukulele's open box, with a nut after fret 0
-(`test_a_box_past_the_last_fret_moves_an_octave_down`):
+(`test_the_ukuleles_boxes_go_down_to_the_open_one`):
 
 ![Frame, ukulele at fret 0](screens/frame-ukulele-open.png)
 
@@ -37,8 +37,9 @@ They are made by [`test_scales.py`](test_scales.py), with
 ## How it works
 
 **Two states.** It opens on the list of instruments. Taking one shows the
-fretboard: the key and the scale's name on top, `fr N` (the box's lowest
-fret) at the right, and the box, six frets wide. The module draws it all
+fretboard: the key and the scale's name on top, and the box, six frets
+wide, with each fret's number under its column (between the boards, when
+there are two). The module draws it all
 itself with `frame.display.bitmap` (`_M.quiet`: `draw()` is the screen;
 the `tick()` text only says when to redraw).
 
@@ -73,10 +74,12 @@ Without the phone there is the minor pentatonic, built in. The phone side
 is [`flutter-glaz/lib/services/scales.dart`](../../flutter-glaz/lib/services/scales.dart),
 which holds the 14 scales.
 
-**Boxes.** Five a scale, one on each note of the pentatonic (the base, for
-a mode) on the instrument's reference string, from the root up. A box that
-would run past the instrument's last fret moves an octave down, when there
-is an octave below it. Tilting goes round them.
+**Boxes.** One on each note of the pentatonic (the base, for a mode) on
+the instrument's reference string, all along the neck, from fret 0 to the
+last box that ends by the instrument's last fret. `box` is the box's lowest
+fret. Taking an instrument shows the root's box; tilting goes up or down
+the neck and round; a new scale keeps the box, or takes its nearest when
+its base has none there.
 
 **Settings.** Glaz > Menu > Scales on the phone: `key` (C to B, `A` by
 default, an unknown one is A) and `view` (`dual`, two scales, or `single`).

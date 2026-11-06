@@ -19,9 +19,9 @@ MAJOR = "g10 14 major|major|024579b|b|M pent|02479"
 
 # The boards as scales.lua lays them out: x, column width, top string's y,
 # from the top string to the bottom one
-TOP = dict(x=192, col=64, y=130, h=70)        # two at once: the pentatonic
-BOTTOM = dict(x=192, col=64, y=250, h=70)     # and the mode under it
-SINGLE = dict(x=72, col=88, y=140, h=180)
+TOP = dict(x=192, col=64, y=122, h=70)        # two at once: the pentatonic
+BOTTOM = dict(x=192, col=64, y=258, h=70)     # and the mode under it
+SINGLE = dict(x=72, col=88, y=135, h=150)
 
 
 def colour(g, board, string, column, strings=6):
@@ -45,6 +45,18 @@ def count(g, board, name, strings=6):
 
 def text_at(g, text):
     return next(t for t in g.texts() if t.text == text)
+
+
+def frets(g):
+    """The fret numbers under the columns, left to right."""
+    return [int(t.text) for t in sorted(g.texts(), key=lambda t: t.x)
+            if t.text.isdigit()]
+
+
+def first_fret(g):
+    """The box's lowest fret, the number under its first column."""
+    shown = frets(g)
+    return shown[0] if shown else None
 
 
 def scale_gets(g):
@@ -141,7 +153,7 @@ def test_a_tap_takes_the_guitar_and_asks_for_the_first_scale(frame):
     assert scale_gets(frame) == [0]
     text = frame.screen_text()
     assert "A minor pent" in text                # built in, no phone needed
-    assert "fr 5" in text                        # A on the low E string
+    assert first_fret(frame) == 5                        # A on the low E string
     assert "Guitar" not in text
     frame.screenshot("scales-minor-pent")
     frame.assert_ok()
@@ -163,7 +175,7 @@ def test_the_phone_sends_a_mode_drawn_under_its_pentatonic(frame):
     frame.call("scales", DORIAN)
     text = frame.screen_text()
     assert "A dorian" in text
-    assert "m pent" in text and "fr 5" in text
+    assert "m pent" in text and first_fret(frame) == 5
     # the Oye Como Va box of docs/SCALES.md: F#, Dorian's 6th, green
     assert colour(frame, BOTTOM, 2, 2) == "LIGHTGREEN"  # B string, fret 7
     assert colour(frame, BOTTOM, 5, 4) == "LIGHTGREEN"  # A string, fret 9
@@ -174,9 +186,11 @@ def test_the_phone_sends_a_mode_drawn_under_its_pentatonic(frame):
     assert colour(frame, TOP, 5, 4) == "GREY"
     assert colour(frame, TOP, 6, 0) == "RED"
     assert colour(frame, TOP, 6, 3) == "WHITE"          # C
-    # the top row: key and mode white, the fret grey; a label on each board
+    # the top row: key and mode white; a label on each board, the frets
+    # grey between them
     assert text_at(frame, "A dorian").color == "WHITE"
-    assert text_at(frame, "fr 5").color == "GREY"
+    assert frets(frame) == [5, 6, 7, 8, 9, 10]
+    assert text_at(frame, "5").color == "GREY"
     assert text_at(frame, "m pent").y == TOP["y"] + 8
     assert text_at(frame, "dorian").y == BOTTOM["y"] + 8
     assert count(frame, TOP, "LIGHTGREEN") == 0          # no flavour there
@@ -202,7 +216,7 @@ def test_the_key_comes_from_the_phones_settings(frame):
     fretboard(frame)
     text = frame.screen_text()
     assert "C minor pent" in text
-    assert "fr 8" in text                        # C on the low E string
+    assert first_fret(frame) == 8                        # C on the low E string
     assert colour(frame, SINGLE, 6, 0) == "RED"
     frame.assert_ok()
 
@@ -222,28 +236,57 @@ def test_an_unknown_key_falls_back_to_a(frame):
 
 # ---------------------------------------------------------------- boxes
 
-def test_tilting_moves_the_box_up_the_neck_and_wraps(frame):
+def test_tilting_moves_the_box_along_the_whole_neck_and_wraps(frame):
+    # A on the guitar: a box on each note of the pentatonic on the low E,
+    # from the open one to 17..22, which ends on the last fret
     fretboard(frame)
     seen = []
-    for _ in range(5):
-        seen.append(next(t.text for t in frame.texts()
-                         if t.text.startswith("fr ")))
+    for _ in range(8):
+        seen.append(first_fret(frame))
         frame.tilt(1)
-    assert seen == ["fr 5", "fr 8", "fr 10", "fr 12", "fr 15"]
-    assert "fr 5" in frame.screen_text()         # round to the first
+    assert seen == [5, 8, 10, 12, 15, 17, 0, 3]
+    assert first_fret(frame) == 5                # round to the root's box
     frame.tilt(-1)
-    assert "fr 15" in frame.screen_text()
-    assert colour(frame, SINGLE, 6, 0) == "WHITE"   # G at fret 15
-    assert colour(frame, SINGLE, 6, 2) == "RED"     # A at fret 17
+    frame.tilt(-1)
+    assert first_fret(frame) == 0                # down to the open box
+    assert frets(frame) == [0, 1, 2, 3, 4, 5]
+    assert colour(frame, SINGLE, 6, 0) == "WHITE"   # the open low E
+    assert colour(frame, SINGLE, 6, 5) == "RED"     # A at fret 5
+    frame.tilt(-1)
+    assert first_fret(frame) == 17               # round to the top
+    assert colour(frame, SINGLE, 6, 0) == "RED"     # A at fret 17
+    frame.assert_ok()
+
+
+def test_the_fret_numbers_stand_under_their_columns(frame):
+    for view, board in (("single", SINGLE), ("dual", TOP)):
+        set_up(frame, {"scales.view": view})
+        fretboard(frame)
+        frame.call("scales", DORIAN)
+        frame.tilt(1)
+        frame.tilt(1)                            # 10..15: two digits
+        texts = sorted((t for t in frame.texts() if t.text.isdigit()),
+                       key=lambda t: t.x)
+        assert [t.text for t in texts] == ["10", "11", "12", "13", "14", "15"]
+        for c, t in enumerate(texts):
+            left = board["x"] + c * board["col"]
+            assert left < t.x < left + board["col"] // 2
+            assert t.color == "GREY"
+        if view == "dual":                       # between the two boards
+            assert TOP["y"] + TOP["h"] < texts[0].y < BOTTOM["y"] - 40
+        else:                                    # under the one
+            assert SINGLE["y"] + SINGLE["h"] < texts[0].y
+        frame.tap(2)
+        frame.tap(2)
     frame.assert_ok()
 
 
 def test_the_remotes_left_and_right_move_the_box(frame):
     fretboard(frame)
     frame.remote(2, 1)
-    assert "fr 8" in frame.screen_text()
+    assert first_fret(frame) == 8
     frame.remote(2, 255)
-    assert "fr 5" in frame.screen_text()
+    assert first_fret(frame) == 5
     frame.assert_ok()
 
 
@@ -253,18 +296,18 @@ def test_a_major_scale_takes_the_major_pentatonics_boxes(frame):
     text = frame.screen_text()
     assert "A major" in text and "M pent" in text
     frame.tilt(1)
-    assert "fr 7" in frame.screen_text()         # B: A major pent's 2nd
+    assert first_fret(frame) == 7         # B: A major pent's 2nd
     frame.tilt(1)
-    assert "fr 9" in frame.screen_text()
+    assert first_fret(frame) == 9
     frame.assert_ok()
 
 
-def test_a_box_past_the_last_fret_moves_an_octave_down(frame):
-    # ukulele in A, boxes from G: 2, 5, 7, 9, 12 -- 12..17 runs past 15
+def test_the_ukuleles_boxes_go_down_to_the_open_one(frame):
+    # ukulele in A, boxes from G: 0, 2, 5, 7, 9 -- 12..17 runs past 15
     fretboard(frame, instrument=3)
-    assert "fr 2" in frame.screen_text()
+    assert first_fret(frame) == 2
     frame.tilt(-1)
-    assert "fr 0" in frame.screen_text()
+    assert first_fret(frame) == 0
     frame.screenshot("scales-ukulele-open")
     frame.assert_ok()
 
@@ -288,7 +331,7 @@ def test_each_instruments_first_box(frame, instrument, name, fret):
         frame.tilt(1)
     assert f"> {name}" in frame.screen_text()
     frame.tap(1)
-    assert f"fr {fret}" in frame.screen_text()
+    assert first_fret(frame) == fret
     frame.assert_ok()
 
 
@@ -296,7 +339,7 @@ def test_the_banjos_short_string_starts_at_fret_5(frame):
     # D: the banjo's boxes start at fret 0 on its D string
     set_up(frame, {"scales.key": "D"})
     fretboard(frame, instrument=2)
-    assert "fr 0" in frame.screen_text()
+    assert first_fret(frame) == 0
     # 5th string, g: open G and C at fret 5 drawn, the A at fret 2 is not
     assert colour(frame, SINGLE, 5, 0, strings=5) == "WHITE"
     assert colour(frame, SINGLE, 5, 2, strings=5) == "GREY"
@@ -361,7 +404,7 @@ def test_the_box_is_kept_for_the_next_scale(frame):
     frame.tilt(1)
     frame.tilt(1)
     frame.call("scales", DORIAN)
-    assert "fr 10" in frame.screen_text()
+    assert first_fret(frame) == 10
     frame.assert_ok()
 
 
@@ -378,7 +421,7 @@ def test_a_malformed_answer_changes_nothing(frame, arg):
     fretboard(frame)
     frame.call("scales", arg)
     text = frame.screen_text()
-    assert "A minor pent" in text and "fr 5" in text
+    assert "A minor pent" in text and first_fret(frame) == 5
     frame.assert_ok()
 
 
@@ -420,7 +463,7 @@ def test_the_remotes_back_does_the_same(frame):
     frame.remote(1, 2)
     assert "> Guitar" in frame.screen_text()
     frame.tap(1)
-    assert "fr 5" in frame.screen_text()         # the first box again
+    assert first_fret(frame) == 5         # the first box again
     frame.assert_ok()
 
 
@@ -440,11 +483,11 @@ def test_it_stays_open_ten_minutes_without_input(frame):
     fretboard(frame)
     frame.clear_sent()
     frame.advance(590)                           # far past APP_TIMEOUT
-    assert "fr 5" in frame.screen_text()
+    assert first_fret(frame) == 5
     assert not frame.sent(APP_STOP)
     frame.advance(80)                            # IDLE_MAX, then a minute
     assert frame.sent(APP_STOP)
-    assert "fr 5" not in frame.screen_text()
+    assert not frets(frame)
     frame.assert_ok()
 
 
@@ -454,7 +497,7 @@ def test_a_tilt_keeps_it_open(frame):
     frame.advance(500)
     frame.tilt(1)
     frame.advance(500)
-    assert "fr 8" in frame.screen_text()
+    assert first_fret(frame) == 8
     assert not frame.sent(APP_STOP)
     frame.assert_ok()
 
@@ -474,7 +517,7 @@ def test_a_scale_without_notes_is_refused(frame):
     frame.call("scales", "g5 14 empty|empty||||")
     frame.tilt(1)
     text = frame.screen_text()
-    assert "A minor pent" in text and "fr 8" in text
+    assert "A minor pent" in text and first_fret(frame) == 8
     frame.assert_ok()
 
 
@@ -501,14 +544,14 @@ def test_its_state_is_never_shown_as_text(frame):
     frame.assert_ok()
 
 
-def test_a_flat_key_is_named_and_its_last_box_moves_down(frame):
-    # Eb on the low E: boxes 11, 14, 16, 18 and 21, which runs past 22
+def test_a_flat_key_is_named_and_its_boxes_go_down_too(frame):
+    # Eb on the low E: boxes 2, 4, 6, 9, 11, 14 and 16; 18..23 runs past 22
     set_up(frame, {"scales.key": "Eb"})
     fretboard(frame)
     assert "Eb minor pent" in frame.screen_text()
-    assert "fr 11" in frame.screen_text()
+    assert first_fret(frame) == 11
     frame.tilt(-1)
-    assert "fr 9" in frame.screen_text()
+    assert first_fret(frame) == 9
     assert colour(frame, SINGLE, 6, 0) == "WHITE"   # C# at fret 9
     assert colour(frame, SINGLE, 6, 2) == "RED"     # Eb at fret 11
     frame.assert_ok()
@@ -518,7 +561,7 @@ def test_a_sharp_key_is_named_too(frame):
     set_up(frame, {"scales.key": "C#"})
     fretboard(frame)
     assert "C# minor pent" in frame.screen_text()
-    assert "fr 9" in frame.screen_text()
+    assert first_fret(frame) == 9
     frame.assert_ok()
 
 
@@ -582,7 +625,7 @@ def test_two_boards_have_smaller_dots_than_one(frame):
 def test_the_bass_has_four_strings(frame):
     fretboard(frame, instrument=1)
     text = frame.screen_text()
-    assert "A minor pent" in text and "fr 5" in text
+    assert "A minor pent" in text and first_fret(frame) == 5
     assert colour(frame, SINGLE, 1, 0, strings=4) == "WHITE"  # G string: C
     assert colour(frame, SINGLE, 1, 1, strings=4) == "GREY"   # C#
     assert colour(frame, SINGLE, 3, 0, strings=4) == "WHITE"  # A string: D
@@ -630,7 +673,7 @@ def test_without_bluetooth_a_tap_still_works(frame):
     frame.tilt(1)
     assert not frame.sent(SCALE_GET)
     text = frame.screen_text()
-    assert "A minor pent" in text and "fr 8" in text
+    assert "A minor pent" in text and first_fret(frame) == 8
     frame.assert_ok()
 
 
@@ -640,7 +683,7 @@ def test_up_and_down_keep_it_open(frame):
     frame.advance(500)
     frame.remote(3, 1)
     frame.advance(500)
-    assert "fr 5" in frame.screen_text()
+    assert first_fret(frame) == 5
     assert not frame.sent(APP_STOP)
     frame.assert_ok()
 
@@ -669,52 +712,56 @@ def test_the_cursor_starts_on_the_guitar_again(frame):
 def test_the_box_starts_at_the_first_for_another_instrument(frame):
     fretboard(frame)
     frame.tilt(1)
-    frame.tilt(1)                                # fr 10
+    frame.tilt(1)                                # fret 10
     frame.tap(2)
     frame.tilt(1)
     frame.tap(1)                                 # the bass
-    assert "fr 5" in frame.screen_text()
+    assert first_fret(frame) == 5
     frame.assert_ok()
 
 
 # ---------------------------------------------------------------- edges
 
-def test_a_scale_with_fewer_boxes_keeps_to_its_last(frame):
-    # a seven-note scale without a pentatonic under it has seven boxes;
-    # the next scale, with five, cannot start from the seventh
+def test_a_box_the_next_scale_lacks_moves_to_its_nearest(frame):
+    # a seven-note scale without a pentatonic under it has a box on each of
+    # its notes; the next scale, the pentatonic's, has none at fret 7
     fretboard(frame)
     frame.call("scales", "g0 2 seven|seven|0235789|||")
-    for _ in range(6):
-        frame.tilt(1)                            # its seventh box
+    frame.tilt(1)
+    assert first_fret(frame) == 7                # B, the seven's 2nd
     frame.call("scales", DORIAN)
     text = frame.screen_text()
-    assert "A dorian" in text and "fr 15" in text   # m pent's fifth box
-    assert colour(frame, BOTTOM, 6, 2) == "RED"     # A at fret 17
+    assert "A dorian" in text and first_fret(frame) == 8   # C, the nearest
+    assert colour(frame, BOTTOM, 6, 0) == "WHITE"   # C at fret 8
     frame.tilt(1)
-    assert "fr 5" in frame.screen_text()         # and round to the first
+    assert first_fret(frame) == 10
     frame.assert_ok()
 
 
-def test_a_box_ending_on_the_last_fret_stays_up_the_neck(frame):
-    # B on the low E: boxes 7, 10, 12, 14 and 17, whose 17..22 just fits
+def test_the_top_box_ends_on_the_last_fret(frame):
+    # B on the low E: boxes 0, 2, 5, 7, 10, 12, 14 and 17, whose 17..22
+    # just fits
     set_up(frame, {"scales.key": "B"})
     fretboard(frame)
-    assert "fr 7" in frame.screen_text()
-    frame.tilt(-1)
-    assert "fr 17" in frame.screen_text()
+    assert first_fret(frame) == 7
+    for _ in range(4):
+        frame.tilt(1)
+    assert frets(frame) == [17, 18, 19, 20, 21, 22]
     assert colour(frame, SINGLE, 6, 2) == "RED"     # B at fret 19
+    frame.tilt(1)
+    assert first_fret(frame) == 0
     frame.assert_ok()
 
 
-def test_in_e_the_first_box_is_open_and_the_last_at_ten(frame):
+def test_in_e_the_first_box_is_open_and_down_goes_round_to_the_top(frame):
     set_up(frame, {"scales.key": "E"})
     fretboard(frame)
     text = frame.screen_text()
-    assert "E minor pent" in text and "fr 0" in text
+    assert "E minor pent" in text and first_fret(frame) == 0
     assert colour(frame, SINGLE, 6, 0) == "RED"     # the open low E
     assert colour(frame, SINGLE, 1, 0) == "RED"     # and the high one
     frame.tilt(-1)
-    assert "fr 10" in frame.screen_text()
+    assert first_fret(frame) == 17
     frame.assert_ok()
 
 
@@ -747,6 +794,6 @@ def test_the_same_answer_twice_changes_nothing(frame):
     before = frame.image().tobytes()
     frame.call("scales", DORIAN)
     assert frame.image().tobytes() == before
-    assert "fr 8" in frame.screen_text()
+    assert first_fret(frame) == 8
     frame.assert_ok()
 

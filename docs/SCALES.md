@@ -59,14 +59,18 @@ on it below that but the open string.
 - One scale: the mode alone, bigger.
 - Colours: the root red, the mode's own note green -- Dorian's raised
   6th, the blues' flat 5th, Phrygian's flat 2nd -- the rest white.
-- The top row: key and mode, and `fr N`, the box's lowest fret.
+- The top row: key and mode.
+- The frets' numbers, one under each column: between the two boards, or
+  under the one.
 
-A box is six frets wide. There are five, one starting on each note of
-the pentatonic on the string the boxes start on, from the root up
-(guitar in A: frets 5, 8, 10, 12, 15); one that would run past the
-instrument's last fret moves an octave down, if there is an octave below
-it. A box at
-fret 0 has a nut after its first column.
+A box is six frets wide. One starts on each note of the pentatonic (a
+mode's base) on the string the boxes start on, all along the neck: from
+fret 0 to the last box that ends by the instrument's last fret (guitar in
+A: frets 0, 3, 5, 8, 10, 12, 15, 17). Taking an instrument shows the
+root's box (fret 5 there); tilting goes up or down the neck, round from
+the top box to the open one. A scale from the phone keeps the box on
+screen when its base has one there, else takes the nearest. A box at fret
+0 has a nut after its first column.
 
 ## Input
 

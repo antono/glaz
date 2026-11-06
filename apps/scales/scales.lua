@@ -65,18 +65,19 @@ local IDLE_MAX = 600      -- s without input before APP_TIMEOUT may close it
 -- eye sees is x 60..600, y down to 340 (glaz.lua).
 local LEFT_X  = 60
 local TITLE_Y = 65
-local FRET_X  = 500       -- 'fr 5', the box's lowest fret
 local LABEL_Y = 8         -- a label's text, below its board's top string
+local DIGIT_W = 21        -- a digit and the space after it, in the font
 local ROW_H   = 55        -- the instruments, one a row from TITLE_Y
 
 -- One board: x of its left edge, column width, y of the top string, from
--- the top string to the bottom one, dot size. Widths are multiples of 8:
--- 1-bit rows of whole bytes.
+-- the top string to the bottom one, dot size; the top board's frets, y of
+-- their numbers under it. Widths are multiples of 8: 1-bit rows of whole
+-- bytes.
 local DUAL = {
-  { x = 192, col = 64, y = 130, h = 70, dot = 10 },
-  { x = 192, col = 64, y = 250, h = 70, dot = 10 },
+  { x = 192, col = 64, y = 122, h = 70, dot = 10, frets = 201 },
+  { x = 192, col = 64, y = 258, h = 70, dot = 10 },
 }
-local SINGLE = { x = 72, col = 88, y = 140, h = 180, dot = 24 }
+local SINGLE = { x = 72, col = 88, y = 135, h = 150, dot = 22, frets = 295 }
 
 -- bitmap palette offsets: a set bit draws index 1 + offset
 local WHITE, GREY, RED, LIGHTGREEN = 0, 1, 2, 10
@@ -108,18 +109,48 @@ local key, dual = 9, true
 local inst, picked = 1, false  -- the instrument; false: choosing it
 local scale = MINOR_PENT   -- the one on screen
 local n, count = 0, nil    -- its number, of count; nil: the phone not heard
-local box = 1
+local box = 5             -- the box on screen: its lowest fret
 local last_input = 0
 
--- The boxes: one starting on each note of the pentatonic on the reference
--- string, from the root up, moved an octave down if it would run past the
--- instrument's last fret (and an octave remains below it)
-local function box_start(n)
+-- The boxes: one starting on each note of the pentatonic (the scale's
+-- base) on the reference string, all along the neck, from fret 0 to the
+-- last one a box fits under the instrument's last fret
+local function root_fret()
   local it = INSTRUMENTS[inst]
-  local root = (key - it.strings[it.ref or #it.strings]) % 12
-  local s = root + (scale.base or scale).notes[n]
-  if s + FRETS - 1 > it.last and s >= 12 then s = s - 12 end
-  return s
+  return (key - it.strings[it.ref or #it.strings]) % 12
+end
+
+local function top_box()
+  return INSTRUMENTS[inst].last - FRETS + 1
+end
+
+local function is_box(f)
+  if f < 0 or f > top_box() then return false end
+  local d = (f - root_fret()) % 12
+  for _, s in ipairs((scale.base or scale).notes) do
+    if s == d then return true end
+  end
+  return false
+end
+
+-- The box nearest fret f, the lower of two as near
+local function near_box(f)
+  for d = 0, top_box() do
+    if is_box(f - d) then return f - d end
+    if is_box(f + d) then return f + d end
+  end
+  return 0
+end
+
+-- The next box up (dir 1) or down (-1) from fret f, round the neck
+local function next_box(f, dir)
+  local top = top_box()
+  for _ = 0, top do
+    f = f + dir
+    if f > top then f = 0 elseif f < 0 then f = top end
+    if is_box(f) then return f end
+  end
+  return near_box(f)
 end
 
 -- semitone above the root -> 1 a scale note, 2 the root, 3 the flavour
@@ -169,6 +200,15 @@ local function draw_board(b, m, start)
   end
 end
 
+-- The top board's frets: a number under each column
+local function draw_frets(b, start)
+  for c = 0, FRETS - 1 do
+    local s = tostring(start + c)
+    frame.display.text(s, b.x + c * b.col + (b.col - #s * DIGIT_W + 4) // 2,
+                       b.frets, { color = 'GREY' })
+  end
+end
+
 local NAMES = { 'C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A',
                 'Bb', 'B' }
 
@@ -184,10 +224,9 @@ end
 function _M.draw()
   if not picked then return draw_instruments() end
   local m = scale
-  local start = box_start(box)
+  local start = box
   local text = frame.display.text
   text(NAMES[key + 1] .. ' ' .. m.name, LEFT_X, TITLE_Y, { color = 'WHITE' })
-  text('fr ' .. start, FRET_X, TITLE_Y, { color = 'GREY' })
   local base = m.base
   if dual and base then
     for i, s in ipairs({ base, m }) do
@@ -195,8 +234,10 @@ function _M.draw()
       text(s.short, LEFT_X, b.y + LABEL_Y, { color = 'GREY' })
       draw_board(b, s, start)
     end
+    draw_frets(DUAL[1], start)
   else
     draw_board(SINGLE, m, start)
+    draw_frets(SINGLE, start)
   end
 end
 
@@ -235,7 +276,7 @@ end
 
 function _M.on_roll(dir)
   if picked then
-    box = (box - 1 + dir) % #(scale.base or scale).notes + 1
+    box = next_box(box, dir)
   else
     inst = (inst - 1 + dir) % #INSTRUMENTS + 1
   end
@@ -247,7 +288,8 @@ function _M.on_tap()
   if picked then
     ask(1)
   else
-    picked, box = true, 1
+    picked = true
+    box = near_box(root_fret())   -- the root's box
     ask(0)   -- the scale on screen, fresh: the phone may have it newer
   end
   last_input = frame.time.utc()
@@ -274,8 +316,8 @@ function _M.remote(arg)
             flavour = flav ~= '' and tonumber(flav, 16) or nil,
             base = bnotes ~= '' and { short = bshort, notes = semis(bnotes) }
                    or nil }
-  -- the box on screen, if this scale has as many; else its last
-  box = math.min(box, #(scale.base or scale).notes)
+  -- the box on screen, if this scale has one there; else the nearest
+  box = near_box(box)
   last_input = frame.time.utc()
   return state()
 end

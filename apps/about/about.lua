@@ -12,7 +12,7 @@ local _M = {}
 _M.label = 'About'
 
 local NAME    = 'glaz'
-local VERSION = '0.43.4'
+local VERSION = '0.44.0'
 local AUTHOR  = 'Anton Vasiljev'
 
 function _M.run()
