@@ -82,11 +82,15 @@ class FlipperRemote extends ChangeNotifier {
   /// HANDS_OFF).
   bool get drives => connected && _wanted;
 
-  /// Off Android the Flipper is found by a scan, which would stop the
-  /// link's own: looked for only once the glasses are there.
+  /// Not while a task (Upload) has the glasses: connecting to a Flipper
+  /// not in range takes up to 10 s, and Android's Bluetooth then hardly
+  /// serves the glasses' link -- an upload packet went unanswered for
+  /// over 5 s, once a minute, and Upload failed. Off Android the Flipper
+  /// is found by a scan, which would stop the link's own: looked for only
+  /// once the glasses are there.
   bool get _mayLook =>
-      defaultTargetPlatform == TargetPlatform.android ||
-      (link.connected && !link.busy);
+      !link.busy &&
+      (defaultTargetPlatform == TargetPlatform.android || link.connected);
 
   /// [_wanted] when last looked: the Flipper is looked for as it turns
   /// true, and then once a minute, not on every change of the link.

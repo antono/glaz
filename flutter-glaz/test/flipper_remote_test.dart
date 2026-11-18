@@ -306,6 +306,21 @@ void main() {
       });
     });
 
+    test('not looked for during a task: it stalled Upload', () {
+      fakeAsync((async) {
+        flipperZero.there = false;
+        remote.attach();
+        async.flushMicrotasks();
+        expect(flipperZero.opened, 1);
+        link.task = 'Upload';
+        async.elapse(FlipperRemote.every * 3);
+        expect(flipperZero.opened, 1);
+        link.task = null;
+        async.elapse(FlipperRemote.every);
+        expect(flipperZero.opened, 2);
+      });
+    });
+
     test('off in Services: no Flipper looked for', () {
       fakeAsync((async) {
         settings.setService('flipper_remote', false);
